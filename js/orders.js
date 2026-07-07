@@ -72,13 +72,13 @@ const Orders = {
                 </div>
                 <div class="filter-row">
                     <div class="form-group">
-                        <label>${t('common', 'stock_year')}</label>
+                        <label>${t('common', 'year') || '년도'}</label>
                         <select class="form-control" onchange="Orders.setYear(this.value)">
                             ${this.yearOptions()}
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>${t('common', 'stock_month')}</label>
+                        <label>${t('common', 'month') || '월'}</label>
                         <select class="form-control" onchange="Orders.setMonth(this.value)">
                             ${this.monthOptions()}
                         </select>
@@ -105,15 +105,12 @@ const Orders = {
                     <thead>
                         <tr>
                             <th style="width:40px;"><input type="checkbox" class="select-all-cb" data-target="orders"></th>
-                            <th onclick="Orders.sort('id')" class="${this.state.sortBy === 'id' ? 'sort-active' : ''}">
-                                ${t('orders', 'order_number')}
-                                <i class="fas fa-sort-${this.state.sortOrder === 'asc' ? 'up' : 'down'}"></i>
-                            </th>
                             <th onclick="Orders.sort('order_date')" class="${this.state.sortBy === 'order_date' ? 'sort-active' : ''}">
                                 ${t('orders', 'sale_date')}
                                 <i class="fas fa-sort-${this.state.sortOrder === 'asc' ? 'up' : 'down'}"></i>
                             </th>
                             <th>${t('orders', 'customer')}</th>
+                            <th>${t('products', 'brand')}</th>
                             <th>${t('orders', 'product')}</th>
                             <th>${t('products', 'color')}/${t('products', 'size')}</th>
                             <th onclick="Orders.sort('quantity')" class="${this.state.sortBy === 'quantity' ? 'sort-active' : ''}">
@@ -124,8 +121,6 @@ const Orders = {
                                 ${t('orders', 'selling_price')}
                                 <i class="fas fa-sort-${this.state.sortOrder === 'asc' ? 'up' : 'down'}"></i>
                             </th>
-                            <th>${t('orders', 'status')}</th>
-                            <th>${t('common', 'action')}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -135,34 +130,22 @@ const Orders = {
             list.forEach(o => {
                 const product = products.find(p => p.id === o.product_id);
                 const customer = customers.find(c => c.id === o.customer_id);
-                const [statusKey, badgeClass] = statusLabels[o.status] || statusLabels.PENDING;
                 html += `
                     <tr>
                         <td><input type="checkbox" class="row-checkbox" data-id="${o.id}" data-target="orders" ${this.state.selected.has(Number(o.id)) ? 'checked' : ''}></td>
-                        <td><strong>#${o.order_number || o.id}</strong></td>
                         <td>${o.order_date || new Date(o.created_at).toISOString().slice(0, 10)}</td>
                         <td>${customer ? customer.name : '-'}</td>
+                        <td>${product ? product.brand : '-'}</td>
                         <td>${product ? product.original_title : '-'}</td>
                         <td>${o.color || '-'} / ${o.size || '-'}</td>
                         <td>${o.quantity}</td>
                         <td class="font-bold">${(o.selling_price || 0).toLocaleString()} ${t('common', 'currency')}</td>
-                        <td><span class="badge ${badgeClass}">${t('orders', statusKey)}</span></td>
-                        <td>
-                            ${o.status === 'PENDING' ? `
-                                <a href="#/orders/${o.id}/ship" class="btn btn-sm btn-success"><i class="fas fa-truck"></i></a>
-                                <button class="btn btn-sm btn-danger" onclick="Orders.cancel(${o.id})"><i class="fas fa-times"></i></button>
-                            ` : ''}
-                            ${o.status === 'SHIPPED' ? `
-                                <button class="btn btn-sm btn-info" onclick="Orders.complete(${o.id})"><i class="fas fa-check"></i></button>
-                            ` : ''}
-                        </td>
                     </tr>
                 `;
             });
             html += '</tbody></table></div>';
         }
         html += '</div>';
-        setTimeout(() => this.updateSelectAllCheckbox(), 0);
         return html;
     },
 

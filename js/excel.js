@@ -285,13 +285,9 @@ const ExcelManager = {
             const qty = parseInt(row['수량'] || row['quantity'] || 1) || 1;
             const isZiLiu = /自留|자留|지留|자류|지류|自留款/i.test(customerName);
             let sellingPrice = parseFloat(row['최종흥정가(위안)'] || row['최종흥정가'] || row['판매가'] || row['selling_price'] || row['price'] || 0) || 0;
-            // 自留(자체 보관)는 가격이 0이어도 0 그대로 보존 (스킵하지 않음)
+            // 최종판매가가 0원이어도 스킵하지 않고 그대로 저장
             if (isZiLiu) {
                 sellingPrice = sellingPrice || 0;
-            } else if (!sellingPrice) {
-                // 일반 주문은 가격이 없으면 스킵
-                skipped++;
-                return;
             }
 
             // 고객 찾기 또는 생성
