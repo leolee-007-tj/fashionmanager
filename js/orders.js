@@ -14,19 +14,23 @@ const Orders = {
         this.applyFilters();
     },
 
+    _extractYearMonth(dateStr) {
+        if (!dateStr) return null;
+        const s = String(dateStr).trim();
+        const m = s.match(/(\d{4})[\.\-\/年](\d{1,2})/);
+        if (m) return { year: Number(m[1]), month: Number(m[2]) };
+        const d = new Date(s);
+        if (!isNaN(d.getTime())) return { year: d.getFullYear(), month: d.getMonth() + 1 };
+        return null;
+    },
+
     applyFilters() {
         let list = [...this.state.orders];
         if (this.state.year && this.state.month) {
             list = list.filter(o => {
-                const d = new Date(o.order_date || o.created_at);
-                if (isNaN(d.getTime())) {
-                    const m = String(o.order_date || '').match(/(\d{4})[\.\-\/年](\d{1,2})/);
-                    if (m) {
-                        return Number(m[1]) === this.state.year && Number(m[2]) === this.state.month;
-                    }
-                    return false;
-                }
-                return d.getFullYear() === this.state.year && (d.getMonth() + 1) === this.state.month;
+                const ym = this._extractYearMonth(o.order_date || o.created_at);
+                if (!ym) return false;
+                return ym.year === this.state.year && ym.month === this.state.month;
             });
         }
         list.sort((a, b) => {

@@ -37,6 +37,16 @@ const Customers = {
         this.state.customers = updated;
     },
 
+    _extractYearMonth(dateStr) {
+        if (!dateStr) return null;
+        const s = String(dateStr).trim();
+        const m = s.match(/(\d{4})[\.\-\/年](\d{1,2})/);
+        if (m) return { year: Number(m[1]), month: Number(m[2]) };
+        const d = new Date(s);
+        if (!isNaN(d.getTime())) return { year: d.getFullYear(), month: d.getMonth() + 1 };
+        return null;
+    },
+
     applyFilters() {
         let list = [...this.state.customers];
         if (this.state.search) {
@@ -49,8 +59,10 @@ const Customers = {
         }
         if (this.state.year && this.state.month) {
             const orders = DB.getOrders().filter(o => {
-                const d = new Date(o.order_date || o.created_at);
-                return d.getFullYear() === this.state.year && (d.getMonth() + 1) === this.state.month && (o.status === 'SHIPPED' || o.status === 'COMPLETED');
+                if (o.status !== 'SHIPPED' && o.status !== 'COMPLETED') return false;
+                const ym = this._extractYearMonth(o.order_date || o.created_at);
+                if (!ym) return false;
+                return ym.year === this.state.year && ym.month === this.state.month;
             });
             list = list.filter(c => orders.some(o => o.customer_id === c.id));
             list = list.map(c => {
