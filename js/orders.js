@@ -87,7 +87,7 @@ const Orders = {
                 <div class="action-bar">
                     <div class="action-bar-left">
                         <label class="checkbox-wrapper">
-                            <input type="checkbox" id="selectAll" onclick="Orders.toggleSelectAll(this)">
+                            <input type="checkbox" class="select-all-cb" data-target="orders">
                             ${t('products', 'select_all')}
                         </label>
                         <button class="btn btn-sm btn-danger" onclick="Orders.batchDelete()">
@@ -104,7 +104,7 @@ const Orders = {
                 <table class="table">
                     <thead>
                         <tr>
-                            <th style="width:40px;"><input type="checkbox" id="selectAll2" onclick="Orders.toggleSelectAll(this)"></th>
+                            <th style="width:40px;"><input type="checkbox" class="select-all-cb" data-target="orders"></th>
                             <th onclick="Orders.sort('id')" class="${this.state.sortBy === 'id' ? 'sort-active' : ''}">
                                 ${t('orders', 'order_number')}
                                 <i class="fas fa-sort-${this.state.sortOrder === 'asc' ? 'up' : 'down'}"></i>
@@ -138,8 +138,7 @@ const Orders = {
                 const [statusKey, badgeClass] = statusLabels[o.status] || statusLabels.PENDING;
                 html += `
                     <tr>
-                        <td><input type="checkbox" class="row-checkbox" data-id="${o.id}" ${this.state.selected.has(Number(o.id)) ? 'checked' : ''}
-                            onclick="Orders.toggleSelect(${o.id})"></td>
+                        <td><input type="checkbox" class="row-checkbox" data-id="${o.id}" data-target="orders" ${this.state.selected.has(Number(o.id)) ? 'checked' : ''}></td>
                         <td><strong>#${o.order_number || o.id}</strong></td>
                         <td>${o.order_date || new Date(o.created_at).toISOString().slice(0, 10)}</td>
                         <td>${customer ? customer.name : '-'}</td>
@@ -210,36 +209,19 @@ const Orders = {
         } else {
             this.state.selected.add(numId);
         }
-        this.updateSelectAllCheckbox();
+        App.renderPage();
     },
 
-    toggleSelectAll(checkbox) {
-        if (checkbox.checked) {
-            this.state.filtered.forEach(o => this.state.selected.add(Number(o.id)));
-        } else {
-            this.state.selected.clear();
-        }
-        this.syncRowCheckboxes();
-        this.updateSelectAllCheckbox();
-    },
-
-    updateSelectAllCheckbox() {
+    toggleSelectAll() {
         const total = this.state.filtered.length;
         const selectedCount = this.state.filtered.filter(o => this.state.selected.has(Number(o.id))).length;
-        const checked = total > 0 && selectedCount === total;
-        const indeterminate = selectedCount > 0 && selectedCount < total;
-        const sa1 = document.getElementById('selectAll');
-        const sa2 = document.getElementById('selectAll2');
-        if (sa1) { sa1.checked = checked; sa1.indeterminate = indeterminate; }
-        if (sa2) { sa2.checked = checked; sa2.indeterminate = indeterminate; }
-    },
-
-    syncRowCheckboxes() {
-        const rows = document.querySelectorAll('input.row-checkbox');
-        rows.forEach(cb => {
-            const id = Number(cb.dataset.id);
-            cb.checked = this.state.selected.has(id);
-        });
+        if (selectedCount === total) {
+            this.state.selected.clear();
+        } else {
+            this.state.selected.clear();
+            this.state.filtered.forEach(o => this.state.selected.add(Number(o.id)));
+        }
+        App.renderPage();
     },
 
     batchDelete() {

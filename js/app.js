@@ -10,6 +10,7 @@ const App = {
         this.setupLangButtons();
         this.setupRouter();
         this.setupSidebar();
+        this.setupCheckboxHandlers();
         this.updateHeader();
         this.render();
     },
@@ -56,6 +57,29 @@ const App = {
     setupRouter() {
         window.addEventListener('hashchange', () => this.handleRoute());
         this.handleRoute();
+    },
+
+    setupCheckboxHandlers() {
+        document.addEventListener('click', (e) => {
+            const target = e.target;
+            if (target.tagName === 'INPUT' && target.type === 'checkbox') {
+                const dataTarget = target.dataset.target;
+                if (target.classList.contains('select-all-cb')) {
+                    if (dataTarget === 'orders') Orders.toggleSelectAll();
+                    else if (dataTarget === 'products') Products.toggleSelectAll();
+                    else if (dataTarget === 'customers') Customers.toggleSelectAll();
+                    else if (dataTarget === 'expenses') Expenses.toggleSelectAll();
+                    else if (dataTarget === 'keywords') App.toggleKeywordSelectAll();
+                } else if (target.classList.contains('row-checkbox')) {
+                    const id = Number(target.dataset.id);
+                    if (dataTarget === 'orders') Orders.toggleSelect(id);
+                    else if (dataTarget === 'products') Products.toggleSelect(id);
+                    else if (dataTarget === 'customers') Customers.toggleSelect(id);
+                    else if (dataTarget === 'expenses') Expenses.toggleSelect(id);
+                    else if (dataTarget === 'keywords') App.toggleKeywordSelect(id);
+                }
+            }
+        });
     },
 
     handleRoute() {
@@ -376,7 +400,7 @@ const App = {
                 <div class="action-bar">
                     <div class="action-bar-left">
                         <label class="checkbox-wrapper">
-                            <input type="checkbox" id="selectAll" onclick="App.toggleKeywordSelectAll(this)">
+                            <input type="checkbox" class="select-all-cb" data-target="keywords">
                             ${t('products', 'select_all')}
                         </label>
                         <button class="btn btn-sm btn-danger" onclick="App.batchDeleteKeywords()">
@@ -391,7 +415,7 @@ const App = {
         } else {
             html += `<div style="overflow-x:auto;"><table class="table">
                 <thead><tr>
-                    <th style="width:40px;"><input type="checkbox" id="selectAll2" onclick="App.toggleKeywordSelectAll(this)"></th>
+                    <th style="width:40px;"><input type="checkbox" class="select-all-cb" data-target="keywords"></th>
                     <th data-i18n="classification.type">${t('classification', 'type')}</th>
                     <th data-i18n="classification.standard">${t('classification', 'standard')}</th>
                     <th data-i18n="classification.ko_keywords">${t('classification', 'ko_keywords')}</th>
@@ -405,8 +429,7 @@ const App = {
             keywords.forEach(k => {
                 html += `
                     <tr>
-                        <td><input type="checkbox" class="row-checkbox" data-id="${k.id}" ${this.classificationSelected.has(String(k.id)) ? 'checked' : ''}
-                            onclick="App.toggleKeywordSelect('${k.id}')"></td>
+                        <td><input type="checkbox" class="row-checkbox" data-id="${k.id}" data-target="keywords" ${this.classificationSelected.has(String(k.id)) ? 'checked' : ''}></td>
                         <td>${k.type}</td>
                         <td><strong>${k.standard}</strong></td>
                         <td>${(k.ko || []).join(', ')}</td>
@@ -450,7 +473,6 @@ const App = {
                 <div id="classifyResult"></div>
             </div>
         `;
-        setTimeout(() => this.updateKeywordSelectAll(), 0);
         return html;
     },
 
@@ -565,32 +587,20 @@ const App = {
         } else {
             this.classificationSelected.add(strId);
         }
-        this.updateKeywordSelectAll();
+        App.renderPage();
     },
 
-    toggleKeywordSelectAll(checkbox) {
+    toggleKeywordSelectAll() {
         const keywords = DB.getKeywords();
-        if (checkbox.checked) {
-            keywords.forEach(k => this.classificationSelected.add(String(k.id)));
+        const total = keywords.length;
+        const selectedCount = keywords.filter(k => this.classificationSelected.has(String(k.id))).length;
+        if (selectedCount === total) {
+            this.classificationSelected.clear();
         } else {
             this.classificationSelected.clear();
+            keywords.forEach(k => this.classificationSelected.add(String(k.id)));
         }
-        const rows = document.querySelectorAll('input.row-checkbox');
-        rows.forEach(cb => {
-            cb.checked = this.classificationSelected.has(String(cb.dataset.id));
-        });
-        this.updateKeywordSelectAll();
-    },
-
-    updateKeywordSelectAll() {
-        const total = document.querySelectorAll('input.row-checkbox').length;
-        const selectedCount = this.classificationSelected.size;
-        const checked = total > 0 && selectedCount === total;
-        const indeterminate = selectedCount > 0 && selectedCount < total;
-        const sa1 = document.getElementById('selectAll');
-        const sa2 = document.getElementById('selectAll2');
-        if (sa1) { sa1.checked = checked; sa1.indeterminate = indeterminate; }
-        if (sa2) { sa2.checked = checked; sa2.indeterminate = indeterminate; }
+        App.renderPage();
     },
 
     batchDeleteKeywords() {
