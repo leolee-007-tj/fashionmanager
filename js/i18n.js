@@ -390,6 +390,12 @@ const TRANSLATIONS = {
         guide_customers: { ko: '고객 내보내기: 전체 고객 데이터를 Excel 파일로 다운로드', zh: '导出客户：将全部客户数据下载为Excel文件', en: 'Export Customers: Download all customer data as Excel', ja: '顧客エクスポート：全顧客データをExcelファイルにダウンロード' },
         guide_backup: { ko: '전체 백업: 모든 데이터를 하나의 Excel 파일로 백업', zh: '全部备份：将所有数据备份为一个Excel文件', en: 'Full Backup: Backup all data as one Excel file', ja: '全バックアップ：すべてのデータを1つのExcelファイルにバックアップ' },
         confirm_import_count: { ko: '개 항목을 가져오시겠습니까?', zh: '条数据将被导入。是否继续？', en: 'items will be imported. Continue?', ja: '件の項目をインポートしますか？' },
+        template_download: { ko: '업로드용 엑셀 템플릿 다운로드', zh: '上传用Excel模板下载', en: 'Download Excel Templates for Upload', ja: 'アップロード用Excelテンプレートダウンロード' },
+        template_desc: { ko: '아래 버튼을 눌러 원하는 데이터 유형의 템플릿을 받은 후, 예시처럼 데이터를 채워 업로드하세요.', zh: '点击下方按钮获取所需数据类型的模板，按照示例填写数据后上传。', en: 'Click the button below to get the template for the data type you need, fill in the data like the example, and upload.', ja: '下のボタンをクリックして必要なデータタイプのテンプレートを取得し、例のようにデータを記入してアップロードしてください。' },
+        template_products: { ko: '상품 템플릿', zh: '商品模板', en: 'Product Template', ja: '商品テンプレート' },
+        template_orders: { ko: '주문 템플릿', zh: '订单模板', en: 'Order Template', ja: '注文テンプレート' },
+        template_customers: { ko: '고객 템플릿', zh: '客户模板', en: 'Customer Template', ja: '顧客テンプレート' },
+        template_keywords: { ko: '키워드 템플릿', zh: '关键词模板', en: 'Keyword Template', ja: 'キーワードテンプレート' },
     },
     settings: {
         title: { ko: '설정', zh: '设置', en: 'Settings', ja: '設定' },

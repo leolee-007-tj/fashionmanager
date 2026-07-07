@@ -6,20 +6,20 @@ const ExcelManager = {
 
                 <!-- 템플릿 다운로드 -->
                 <div class="card mb-4" style="background: #f8f9fa;">
-                    <h3><i class="fas fa-download"></i> ${t('excel', 'template_download') || '업로드용 엑셀 템플릿 다운로드'}</h3>
-                    <p class="text-muted mb-4">${t('excel', 'template_desc') || '아래 버튼을 눌러 원하는 데이터 유형의 템플릿을 받은 후, 예시처럼 데이터를 채워 업로드하세요.'}</p>
+                    <h3><i class="fas fa-download"></i> <span data-i18n="excel.template_download">${t('excel', 'template_download')}</span></h3>
+                    <p class="text-muted mb-4" data-i18n="excel.template_desc">${t('excel', 'template_desc')}</p>
                     <div class="d-flex flex-wrap gap-2">
                         <button class="btn btn-success" onclick="ExcelManager.downloadProductTemplate()">
-                            <i class="fas fa-tshirt"></i> ${t('excel', 'template_products') || '상품 템플릿'}
+                            <i class="fas fa-tshirt"></i> <span data-i18n="excel.template_products">${t('excel', 'template_products')}</span>
                         </button>
                         <button class="btn btn-success" onclick="ExcelManager.downloadOrderTemplate()">
-                            <i class="fas fa-shopping-cart"></i> ${t('excel', 'template_orders') || '주문 템플릿'}
+                            <i class="fas fa-shopping-cart"></i> <span data-i18n="excel.template_orders">${t('excel', 'template_orders')}</span>
                         </button>
                         <button class="btn btn-success" onclick="ExcelManager.downloadCustomerTemplate()">
-                            <i class="fas fa-users"></i> ${t('excel', 'template_customers') || '고객 템플릿'}
+                            <i class="fas fa-users"></i> <span data-i18n="excel.template_customers">${t('excel', 'template_customers')}</span>
                         </button>
                         <button class="btn btn-success" onclick="ExcelManager.downloadKeywordTemplate()">
-                            <i class="fas fa-tags"></i> ${t('excel', 'template_keywords') || '키워드 템플릿'}
+                            <i class="fas fa-tags"></i> <span data-i18n="excel.template_keywords">${t('excel', 'template_keywords')}</span>
                         </button>
                     </div>
                 </div>
