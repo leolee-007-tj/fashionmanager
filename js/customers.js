@@ -224,7 +224,7 @@ const Customers = {
                 <div class="action-bar">
                     <div class="action-bar-left">
                         <label class="checkbox-wrapper">
-                            <input type="checkbox" id="selectAll" onchange="Customers.toggleSelectAll(this)">
+                            <input type="checkbox" id="selectAll" onclick="Customers.toggleSelectAll(this)">
                             ${t('products', 'select_all')}
                         </label>
                         <button class="btn btn-sm btn-danger" onclick="Customers.batchDelete()">
@@ -241,7 +241,7 @@ const Customers = {
                 <table class="table">
                     <thead>
                         <tr>
-                            <th style="width:40px;"><input type="checkbox" id="selectAll2" onchange="Customers.toggleSelectAll(this)"></th>
+                            <th style="width:40px;"><input type="checkbox" id="selectAll2" onclick="Customers.toggleSelectAll(this)"></th>
                             <th>${t('customers', 'avatar') || ''}</th>
                             <th onclick="Customers.sort('name')" class="${this.state.sortBy === 'name' ? 'sort-active' : ''}">
                                 ${t('customers', 'name')}
@@ -265,8 +265,8 @@ const Customers = {
             list.forEach(c => {
                 html += `
                     <tr>
-                        <td><input type="checkbox" ${this.state.selected.has(c.id) ? 'checked' : ''}
-                            onchange="Customers.toggleSelect(${c.id})"></td>
+                        <td><input type="checkbox" class="row-checkbox" data-id="${c.id}" ${this.state.selected.has(Number(c.id)) ? 'checked' : ''}
+                            onclick="Customers.toggleSelect(${c.id})"></td>
                         <td>
                             <div style="width:36px; height:36px; border-radius:50%; background:#667eea; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:bold; overflow:hidden;">
                                 ${c.avatar_url ? `<img src="${c.avatar_url}" style="width:100%; height:100%; object-fit:cover;">` : (c.name || '?').charAt(0)}
@@ -288,6 +288,7 @@ const Customers = {
             html += '</tbody></table></div>';
         }
         html += '</div>';
+        setTimeout(() => this.updateSelectAllCheckbox(), 0);
         return html;
     },
 
@@ -361,21 +362,42 @@ const Customers = {
     },
 
     toggleSelect(id) {
-        if (this.state.selected.has(id)) {
-            this.state.selected.delete(id);
+        const numId = Number(id);
+        if (this.state.selected.has(numId)) {
+            this.state.selected.delete(numId);
         } else {
-            this.state.selected.add(id);
+            this.state.selected.add(numId);
         }
-        App.renderPage();
+        this.updateSelectAllCheckbox();
     },
 
     toggleSelectAll(checkbox) {
         if (checkbox.checked) {
-            this.state.filtered.forEach(c => this.state.selected.add(c.id));
+            this.state.filtered.forEach(c => this.state.selected.add(Number(c.id)));
         } else {
             this.state.selected.clear();
         }
-        App.renderPage();
+        this.syncRowCheckboxes();
+        this.updateSelectAllCheckbox();
+    },
+
+    updateSelectAllCheckbox() {
+        const total = this.state.filtered.length;
+        const selectedCount = this.state.filtered.filter(c => this.state.selected.has(Number(c.id))).length;
+        const checked = total > 0 && selectedCount === total;
+        const indeterminate = selectedCount > 0 && selectedCount < total;
+        const sa1 = document.getElementById('selectAll');
+        const sa2 = document.getElementById('selectAll2');
+        if (sa1) { sa1.checked = checked; sa1.indeterminate = indeterminate; }
+        if (sa2) { sa2.checked = checked; sa2.indeterminate = indeterminate; }
+    },
+
+    syncRowCheckboxes() {
+        const rows = document.querySelectorAll('input.row-checkbox');
+        rows.forEach(cb => {
+            const id = Number(cb.dataset.id);
+            cb.checked = this.state.selected.has(id);
+        });
     },
 
     batchDelete() {

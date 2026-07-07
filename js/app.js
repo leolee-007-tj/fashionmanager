@@ -376,7 +376,7 @@ const App = {
                 <div class="action-bar">
                     <div class="action-bar-left">
                         <label class="checkbox-wrapper">
-                            <input type="checkbox" id="selectAll" onchange="App.toggleKeywordSelectAll(this)">
+                            <input type="checkbox" id="selectAll" onclick="App.toggleKeywordSelectAll(this)">
                             ${t('products', 'select_all')}
                         </label>
                         <button class="btn btn-sm btn-danger" onclick="App.batchDeleteKeywords()">
@@ -391,7 +391,7 @@ const App = {
         } else {
             html += `<div style="overflow-x:auto;"><table class="table">
                 <thead><tr>
-                    <th style="width:40px;"><input type="checkbox" id="selectAll2" onchange="App.toggleKeywordSelectAll(this)"></th>
+                    <th style="width:40px;"><input type="checkbox" id="selectAll2" onclick="App.toggleKeywordSelectAll(this)"></th>
                     <th data-i18n="classification.type">${t('classification', 'type')}</th>
                     <th data-i18n="classification.standard">${t('classification', 'standard')}</th>
                     <th data-i18n="classification.ko_keywords">${t('classification', 'ko_keywords')}</th>
@@ -405,8 +405,8 @@ const App = {
             keywords.forEach(k => {
                 html += `
                     <tr>
-                        <td><input type="checkbox" ${this.classificationSelected.has(k.id) ? 'checked' : ''}
-                            onchange="App.toggleKeywordSelect('${k.id}')"></td>
+                        <td><input type="checkbox" class="row-checkbox" data-id="${k.id}" ${this.classificationSelected.has(String(k.id)) ? 'checked' : ''}
+                            onclick="App.toggleKeywordSelect('${k.id}')"></td>
                         <td>${k.type}</td>
                         <td><strong>${k.standard}</strong></td>
                         <td>${(k.ko || []).join(', ')}</td>
@@ -450,6 +450,7 @@ const App = {
                 <div id="classifyResult"></div>
             </div>
         `;
+        setTimeout(() => this.updateKeywordSelectAll(), 0);
         return html;
     },
 
@@ -564,7 +565,7 @@ const App = {
         } else {
             this.classificationSelected.add(strId);
         }
-        this.renderPage();
+        this.updateKeywordSelectAll();
     },
 
     toggleKeywordSelectAll(checkbox) {
@@ -574,7 +575,22 @@ const App = {
         } else {
             this.classificationSelected.clear();
         }
-        this.renderPage();
+        const rows = document.querySelectorAll('input.row-checkbox');
+        rows.forEach(cb => {
+            cb.checked = this.classificationSelected.has(String(cb.dataset.id));
+        });
+        this.updateKeywordSelectAll();
+    },
+
+    updateKeywordSelectAll() {
+        const total = document.querySelectorAll('input.row-checkbox').length;
+        const selectedCount = this.classificationSelected.size;
+        const checked = total > 0 && selectedCount === total;
+        const indeterminate = selectedCount > 0 && selectedCount < total;
+        const sa1 = document.getElementById('selectAll');
+        const sa2 = document.getElementById('selectAll2');
+        if (sa1) { sa1.checked = checked; sa1.indeterminate = indeterminate; }
+        if (sa2) { sa2.checked = checked; sa2.indeterminate = indeterminate; }
     },
 
     batchDeleteKeywords() {

@@ -86,7 +86,7 @@ const Expenses = {
                 <div class="action-bar">
                     <div class="action-bar-left">
                         <label class="checkbox-wrapper">
-                            <input type="checkbox" id="selectAll" onchange="Expenses.toggleSelectAll(this)">
+                            <input type="checkbox" id="selectAll" onclick="Expenses.toggleSelectAll(this)">
                             ${t('products', 'select_all')}
                         </label>
                         <button class="btn btn-sm btn-danger" onclick="Expenses.batchDelete()">
@@ -103,7 +103,7 @@ const Expenses = {
                 <table class="table">
                     <thead>
                         <tr>
-                            <th style="width:40px;"><input type="checkbox" id="selectAll2" onchange="Expenses.toggleSelectAll(this)"></th>
+                            <th style="width:40px;"><input type="checkbox" id="selectAll2" onclick="Expenses.toggleSelectAll(this)"></th>
                             <th onclick="Expenses.sort('expense_date')" class="${this.state.sortBy === 'expense_date' ? 'sort-active' : ''}">
                                 ${t('expenses', 'date')}
                                 <i class="fas fa-sort-${this.state.sortOrder === 'asc' ? 'up' : 'down'}"></i>
@@ -122,8 +122,8 @@ const Expenses = {
             list.forEach(e => {
                 html += `
                     <tr>
-                        <td><input type="checkbox" ${this.state.selected.has(e.id) ? 'checked' : ''}
-                            onchange="Expenses.toggleSelect(${e.id})"></td>
+                        <td><input type="checkbox" class="row-checkbox" data-id="${e.id}" ${this.state.selected.has(Number(e.id)) ? 'checked' : ''}
+                            onclick="Expenses.toggleSelect(${e.id})"></td>
                         <td>${e.expense_date || '-'}</td>
                         <td><span class="badge badge-shipped">${e.category || '-'}</span></td>
                         <td>${e.description || '-'}</td>
@@ -138,6 +138,7 @@ const Expenses = {
             html += '</tbody></table></div>';
         }
         html += '</div>';
+        setTimeout(() => this.updateSelectAllCheckbox(), 0);
         return html;
     },
 
@@ -178,21 +179,42 @@ const Expenses = {
     },
 
     toggleSelect(id) {
-        if (this.state.selected.has(id)) {
-            this.state.selected.delete(id);
+        const numId = Number(id);
+        if (this.state.selected.has(numId)) {
+            this.state.selected.delete(numId);
         } else {
-            this.state.selected.add(id);
+            this.state.selected.add(numId);
         }
-        App.renderPage();
+        this.updateSelectAllCheckbox();
     },
 
     toggleSelectAll(checkbox) {
         if (checkbox.checked) {
-            this.state.filtered.forEach(e => this.state.selected.add(e.id));
+            this.state.filtered.forEach(e => this.state.selected.add(Number(e.id)));
         } else {
             this.state.selected.clear();
         }
-        App.renderPage();
+        this.syncRowCheckboxes();
+        this.updateSelectAllCheckbox();
+    },
+
+    updateSelectAllCheckbox() {
+        const total = this.state.filtered.length;
+        const selectedCount = this.state.filtered.filter(e => this.state.selected.has(Number(e.id))).length;
+        const checked = total > 0 && selectedCount === total;
+        const indeterminate = selectedCount > 0 && selectedCount < total;
+        const sa1 = document.getElementById('selectAll');
+        const sa2 = document.getElementById('selectAll2');
+        if (sa1) { sa1.checked = checked; sa1.indeterminate = indeterminate; }
+        if (sa2) { sa2.checked = checked; sa2.indeterminate = indeterminate; }
+    },
+
+    syncRowCheckboxes() {
+        const rows = document.querySelectorAll('input.row-checkbox');
+        rows.forEach(cb => {
+            const id = Number(cb.dataset.id);
+            cb.checked = this.state.selected.has(id);
+        });
     },
 
     batchDelete() {
