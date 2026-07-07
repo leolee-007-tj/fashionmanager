@@ -105,12 +105,12 @@ const ExcelManager = {
 
     downloadKeywordTemplate() {
         const data = [
-            ['타입', '표준명', '키워드(쉼표구분)', '우선순위'],
-            ['brand', 'SYSTEM', 'SYSTEM,시스템,SYS', '5'],
-            ['category', '니트', '니트,KNIT,针织衫', '5'],
-            ['color', 'BLACK', 'BLACK,블랙,검정,黑色', '5'],
-            ['size', 'FREE', 'FREE,프리,均码', '5'],
-            ['material', 'WOOL', 'WOOL,울,羊毛', '5'],
+            ['타입', '표준명', '한국어키워드', '중국어키워드', '영어키워드', '일본어키워드', '대체어', '우선순위'],
+            ['brand', 'SYSTEM', 'SYSTEM,시스템', 'SYSTEM,系统', 'SYSTEM,SYS', 'SYSTEM,システム', '', '5'],
+            ['category', '니트', '니트,스웨터', '针织衫,毛衣', 'KNIT,SWEATER', 'ニット,セーター', '', '5'],
+            ['color', 'BLACK', 'BLACK,블랙,검정', 'BLACK,黑色,黑', 'BLACK,BLK', 'BLACK,ブラック,黒', '', '5'],
+            ['size', 'FREE', 'FREE,프리', 'FREE,均码', 'FREE,ONE SIZE', 'FREE,フリー', '', '5'],
+            ['material', 'WOOL', 'WOOL,울', 'WOOL,羊毛', 'WOOL', 'WOOL,ウール', '', '5'],
         ];
         this._downloadSheet(data, '키워드목록', 'template_keywords.xlsx');
     },
@@ -357,18 +357,29 @@ const ExcelManager = {
             const standard = row['표준명'] || row['standard'] || row['키워드'] || row['keyword'] || '';
             if (!standard) return;
 
-            const keywordList = (row['키워드'] || row['keyword'] || standard)
-                .split(/[,，]/).map(s => s.trim()).filter(Boolean);
+            // 언어별 키워드 읽기 (여러 컬럼명 지원)
+            const koStr = row['한국어키워드'] || row['한국어'] || row['ko'] || row['ko_keywords'] || '';
+            const zhStr = row['중국어키워드'] || row['중국어'] || row['zh'] || row['zh_keywords'] || '';
+            const enStr = row['영어키워드'] || row['영어'] || row['en'] || row['en_keywords'] || '';
+            const jaStr = row['일본어키워드'] || row['일본어'] || row['ja'] || row['ja_keywords'] || '';
+
+            // 구버전 호환: '키워드' 단일 컬럼만 있으면 모든 언어에 적용
+            const legacyStr = row['키워드'] || row['keyword'] || '';
+            const koList = koStr ? koStr.split(/[,，]/).map(s => s.trim()).filter(Boolean)
+                        : (legacyStr ? legacyStr.split(/[,，]/).map(s => s.trim()).filter(Boolean) : []);
+            const zhList = zhStr ? zhStr.split(/[,，]/).map(s => s.trim()).filter(Boolean) : [...koList];
+            const enList = enStr ? enStr.split(/[,，]/).map(s => s.trim()).filter(Boolean) : [...koList];
+            const jaList = jaStr ? jaStr.split(/[,，]/).map(s => s.trim()).filter(Boolean) : [...koList];
 
             keywords.push({
                 id: Date.now() + Math.random(),
                 type: type,
                 standard: standard,
                 keyword: standard,
-                ko: keywordList,
-                zh: keywordList,
-                en: keywordList,
-                ja: keywordList,
+                ko: koList.length > 0 ? koList : [standard],
+                zh: zhList.length > 0 ? zhList : [standard],
+                en: enList.length > 0 ? enList : [standard],
+                ja: jaList.length > 0 ? jaList : [standard],
                 replacement: row['대체어'] || row['replacement'] || '',
                 priority: parseInt(row['우선순위'] || row['priority'] || 5) || 5,
                 active: true,
