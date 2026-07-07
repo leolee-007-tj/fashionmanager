@@ -18,10 +18,10 @@ const Settings = {
                 <h3 class="mb-3"><i class="fas fa-globe"></i> ${t('settings', 'language')}</h3>
                 <p class="text-muted">${t('settings', 'language_desc')}</p>
                 <div class="d-flex flex-wrap gap-2 mb-4">
-                    <button class="lang-btn btn ${currentLang === 'ko' ? 'btn-primary' : 'btn-secondary'}" data-lang="ko" onclick="setLanguage('ko'); App.render();">${t('settings', 'language_ko')}</button>
-                    <button class="lang-btn btn ${currentLang === 'zh' ? 'btn-primary' : 'btn-secondary'}" data-lang="zh" onclick="setLanguage('zh'); App.render();">${t('settings', 'language_zh')}</button>
-                    <button class="lang-btn btn ${currentLang === 'en' ? 'btn-primary' : 'btn-secondary'}" data-lang="en" onclick="setLanguage('en'); App.render();">${t('settings', 'language_en')}</button>
-                    <button class="lang-btn btn ${currentLang === 'ja' ? 'btn-primary' : 'btn-secondary'}" data-lang="ja" onclick="setLanguage('ja'); App.render();">${t('settings', 'language_ja')}</button>
+                    <button class="lang-btn btn ${currentLang === 'ko' ? 'btn-primary' : 'btn-secondary'}" data-lang="ko" onclick="setLanguage('ko'); App.render();" title="한국어" style="font-size:20px;">🇰🇷</button>
+                    <button class="lang-btn btn ${currentLang === 'zh' ? 'btn-primary' : 'btn-secondary'}" data-lang="zh" onclick="setLanguage('zh'); App.render();" title="中文" style="font-size:20px;">🇨🇳</button>
+                    <button class="lang-btn btn ${currentLang === 'en' ? 'btn-primary' : 'btn-secondary'}" data-lang="en" onclick="setLanguage('en'); App.render();" title="English" style="font-size:20px;">🇺🇸</button>
+                    <button class="lang-btn btn ${currentLang === 'ja' ? 'btn-primary' : 'btn-secondary'}" data-lang="ja" onclick="setLanguage('ja'); App.render();" title="日本語" style="font-size:20px;">🇯🇵</button>
                 </div>
                 <hr>
                 <h3 class="mb-3"><i class="fas fa-store"></i> ${t('settings', 'store_settings')}</h3>

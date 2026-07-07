@@ -528,7 +528,7 @@ const App = {
     },
 
     editKeyword(id) {
-        const k = DB.getKeywords().find(x => x.id === id);
+        const k = DB.getKeywords().find(x => String(x.id) === String(id));
         if (k) this.showKeywordForm(k);
     },
 

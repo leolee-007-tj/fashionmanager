@@ -140,34 +140,35 @@ const ExcelManager = {
         if (!confirm(data.length + ' ' + t('excel', 'confirm_import_count') + '?')) return;
         const products = DB.getProducts();
         let added = 0;
+        let skipped = 0;
         data.forEach(row => {
-            let koreaCost = row.korea_cost || row['한국원가'] || 0;
+            let koreaCost = row.korea_cost || row['한국원가'] || row['한국매입원가'] || row['원가'] || row['cost'] || row['매입가'] || 0;
             if (typeof koreaCost === 'string') koreaCost = parseInt(koreaCost.replace(/,/g, '')) || 0;
-            if (!koreaCost) return;
+            if (!koreaCost) { skipped++; return; }
             const priceResult = PriceCalculator.calculate(koreaCost);
-            const brand = row.brand || row['브랜드'] || '';
-            const title = row.original_title || row['원래이름'] || row.title || '';
-            const stockYear = row.stock_year || row['재고년'] || new Date().getFullYear();
-            const stockMonth = row.stock_month || row['재고월'] || new Date().getMonth() + 1;
+            const brand = row.brand || row['브랜드'] || row['브랜드명'] || '';
+            const title = row.original_title || row['원래이름'] || row['상품명'] || row.title || row['product_name'] || row['제목'] || '';
+            const stockYear = row.stock_year || row['입고년도'] || row['재고년'] || row['년도'] || new Date().getFullYear();
+            const stockMonth = row.stock_month || row['입고월'] || row['재고월'] || row['월'] || new Date().getMonth() + 1;
             const productCode = row.product_code || DB.generateProductCode(brand, stockYear, stockMonth);
             products.push({
                 id: Date.now() + Math.random(),
                 product_code: productCode,
                 original_title: title,
                 brand: brand,
-                category: row.category || row['종류'] || '',
-                color: row.color || row['색상'] || '',
-                size: row.size || row['사이즈'] || '',
-                material: row.material || '',
+                category: row.category || row['종류'] || row['카테고리'] || '',
+                color: row.color || row['색상'] || row['컬러'] || '',
+                size: row.size || row['사이즈'] || row['칫수'] || '',
+                material: row.material || row['소재'] || row['재질'] || '',
                 korea_cost: koreaCost,
                 actual_converted_cost: priceResult.actual_converted_cost,
                 china_base_price: priceResult.china_base_price,
-                current_stock: parseInt(row.current_stock || row['현재재고'] || 0),
+                current_stock: parseInt(row.current_stock || row['현재재고'] || row['재고'] || row['수량'] || row['stock'] || row['quantity'] || 0),
                 reserved_stock: 0,
                 stock_year: parseInt(stockYear),
                 stock_month: parseInt(stockMonth),
                 image: null,
-                notes: row.notes || '',
+                notes: row.notes || row['메모'] || row['비고'] || '',
                 title_language: ClassificationService.detectLanguage(title),
                 normalized_title: title,
                 created_at: new Date().toISOString(),
@@ -176,7 +177,11 @@ const ExcelManager = {
             added++;
         });
         DB.setProducts(products);
-        App.flash(added + ' ' + t('common', 'register') + '!', 'success');
+        if (added === 0) {
+            App.flash('0 ' + t('common', 'register') + ' (원가/한국원가/한국매입원가 컬럼 확인 필요)', 'warning');
+        } else {
+            App.flash(added + ' ' + t('common', 'register') + '!', 'success');
+        }
     },
 
     importOrders(data) {

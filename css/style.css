@@ -101,13 +101,22 @@ body {
     width: 36px;
     height: 36px;
     cursor: pointer;
-    font-size: 16px;
+    font-size: 18px;
     transition: var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-.lang-btn:hover, .lang-btn.active {
+.lang-btn:hover {
     background: rgba(255,255,255,0.3);
     transform: scale(1.1);
+}
+
+.lang-btn.active {
+    background: rgba(255,255,255,0.5);
+    box-shadow: inset 0 2px 6px rgba(0,0,0,0.3);
+    transform: scale(0.95);
 }
 
 .sidebar {
