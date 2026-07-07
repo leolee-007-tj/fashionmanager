@@ -3,7 +3,7 @@ const Products = {
         products: [],
         filtered: [],
         search: '',
-        sortBy: 'product_code',
+        sortBy: 'brand',
         sortOrder: 'asc',
         stockYear: new Date().getFullYear(),
         stockMonth: new Date().getMonth() + 1,
@@ -32,7 +32,7 @@ const Products = {
                 (p.category || '').toLowerCase().includes(s) ||
                 (p.color || '').toLowerCase().includes(s) ||
                 (p.size || '').toLowerCase().includes(s) ||
-                (p.product_code || '').toLowerCase().includes(s)
+                (p.brand || '').toLowerCase().includes(s)
             );
         }
         list.sort((a, b) => {
@@ -126,10 +126,6 @@ const Products = {
                     <thead>
                         <tr>
                             <th style="width:40px;"><input type="checkbox" id="selectAll2" onchange="Products.toggleSelectAll(this)"></th>
-                            <th onclick="Products.sort('product_code')" class="${this.state.sortBy === 'product_code' ? 'sort-active' : ''}">
-                                ${t('products', 'product_code')}
-                                <i class="fas fa-sort-${this.state.sortOrder === 'asc' ? 'up' : 'down'}"></i>
-                            </th>
                             <th>${t('common', 'image')}</th>
                             <th onclick="Products.sort('brand')" class="${this.state.sortBy === 'brand' ? 'sort-active' : ''}">
                                 ${t('products', 'brand')}
@@ -160,7 +156,6 @@ const Products = {
                     <tr>
                         <td><input type="checkbox" ${this.state.selected.has(p.id) ? 'checked' : ''}
                             onchange="Products.toggleSelect(${p.id})"></td>
-                        <td><strong>${p.product_code || '-'}</strong></td>
                         <td>${p.image ? `<img src="${p.image}" class="product-thumb">` : '-'}</td>
                         <td><strong>${p.brand || '-'}</strong></td>
                         <td>${p.original_title || '-'}</td>
