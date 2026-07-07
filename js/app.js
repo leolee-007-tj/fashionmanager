@@ -9,7 +9,22 @@ const App = {
         this.setupLangButtons();
         this.setupRouter();
         this.setupSidebar();
+        this.updateHeader();
         this.render();
+    },
+
+    updateHeader() {
+        const s = DB.getSettings();
+        const storeName = s.store_name || 'LES SOUL';
+        let storeSubtitle = s.store_subtitle || 'Store Management';
+        if (typeof storeSubtitle === 'object') {
+            storeSubtitle = storeSubtitle[currentLang] || storeSubtitle.ko || storeSubtitle.en || 'Store Management';
+        }
+        document.title = storeName + (storeSubtitle ? ' - ' + storeSubtitle : '');
+        const nameEl = document.querySelector('.store-name');
+        const subEl = document.querySelector('.store-subtitle');
+        if (nameEl) nameEl.textContent = storeName;
+        if (subEl) subEl.textContent = storeSubtitle;
     },
 
     setupLangButtons() {

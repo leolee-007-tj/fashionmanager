@@ -71,7 +71,8 @@ const DB = {
     },
 
     deleteKeyword(id) {
-        const keywords = this.getKeywords().filter(k => k.id !== id);
+        const strId = String(id);
+        const keywords = this.getKeywords().filter(k => String(k.id) !== strId);
         this.setKeywords(keywords);
     },
 

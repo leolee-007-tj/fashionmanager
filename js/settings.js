@@ -139,6 +139,7 @@ const Settings = {
         settings.store_name = storeName;
         settings.store_subtitle = storeSubtitle;
         DB.setSettings(settings);
+        App.updateHeader();
         App.flash(t('settings', 'save_success'), 'success');
         setTimeout(() => location.reload(), 500);
         return false;
