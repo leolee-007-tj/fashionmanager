@@ -1,0 +1,433 @@
+const Customers = {
+    state: {
+        customers: [],
+        filtered: [],
+        search: '',
+        sortBy: 'total_amount',
+        sortOrder: 'desc',
+        year: new Date().getFullYear(),
+        month: null
+    },
+
+    load() {
+        this.state.customers = DB.getCustomers();
+        this.recalculateAll();
+        this.applyFilters();
+    },
+
+    recalculateAll() {
+        const orders = DB.getOrders().filter(o => o.status === 'SHIPPED' || o.status === 'COMPLETED');
+        const customers = DB.getCustomers();
+        const updated = customers.map(c => {
+            const cOrders = orders.filter(o => o.customer_id === c.id);
+            const totalAmount = cOrders.reduce((s, o) => s + (o.selling_price || 0) * (o.quantity || 0), 0);
+            const totalProfit = cOrders.reduce((s, o) => s + (o.actual_profit || 0), 0);
+            const orderCount = cOrders.length;
+            const totalQuantity = cOrders.reduce((s, o) => s + (o.quantity || 0), 0);
+            let lastOrderDate = null;
+            if (cOrders.length > 0) {
+                cOrders.sort((a, b) => new Date(b.order_date || b.created_at) - new Date(a.order_date || a.created_at));
+                lastOrderDate = cOrders[0].order_date || cOrders[0].created_at;
+            }
+            return { ...c, total_amount: totalAmount, total_profit: totalProfit, order_count: orderCount, total_quantity: totalQuantity, last_order_date: lastOrderDate };
+        });
+        DB.setCustomers(updated);
+        this.state.customers = updated;
+    },
+
+    applyFilters() {
+        let list = [...this.state.customers];
+        if (this.state.search) {
+            const s = this.state.search.toLowerCase();
+            list = list.filter(c =>
+                (c.name || '').toLowerCase().includes(s) ||
+                (c.wechat_nickname || '').toLowerCase().includes(s) ||
+                (c.phone || '').includes(s)
+            );
+        }
+        if (this.state.year && this.state.month) {
+            const orders = DB.getOrders().filter(o => {
+                const d = new Date(o.order_date || o.created_at);
+                return d.getFullYear() === this.state.year && (d.getMonth() + 1) === this.state.month && (o.status === 'SHIPPED' || o.status === 'COMPLETED');
+            });
+            list = list.filter(c => orders.some(o => o.customer_id === c.id));
+            list = list.map(c => {
+                const mOrders = orders.filter(o => o.customer_id === c.id);
+                return {
+                    ...c,
+                    month_amount: mOrders.reduce((s, o) => s + (o.selling_price || 0) * (o.quantity || 0), 0),
+                    month_profit: mOrders.reduce((s, o) => s + (o.actual_profit || 0), 0),
+                    month_count: mOrders.length
+                };
+            });
+        }
+        list.sort((a, b) => {
+            let av = a[this.state.sortBy];
+            let bv = b[this.state.sortBy];
+            if (typeof av === 'string') {
+                av = av.toLowerCase();
+                bv = bv.toLowerCase();
+            }
+            if (this.state.sortOrder === 'asc') {
+                return av > bv ? 1 : -1;
+            }
+            return av < bv ? 1 : -1;
+        });
+        this.state.filtered = list;
+    },
+
+    renderList() {
+        this.load();
+        const list = this.state.filtered;
+        const totalAmount = list.reduce((s, c) => s + (c.total_amount || 0), 0);
+        const totalProfit = list.reduce((s, c) => s + (c.total_profit || 0), 0);
+        const vipCount = list.filter(c => (c.total_amount || 0) >= 1000).length;
+        let html = `
+            <div class="card">
+                <div class="action-bar">
+                    <div class="action-bar-left">
+                        <h2><i class="fas fa-users"></i> ${t('customers', 'title')}</h2>
+                    </div>
+                    <div class="action-bar-right">
+                        <a href="#/customers/add" class="btn btn-primary"><i class="fas fa-plus"></i> ${t('customers', 'add')}</a>
+                    </div>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">${t('customers', 'total_count')}</div>
+                        <div class="stat-value">${list.length}</div>
+                        <i class="fas fa-users stat-icon"></i>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">${t('customers', 'vip_count')}</div>
+                        <div class="stat-value">${vipCount}</div>
+                        <i class="fas fa-crown stat-icon"></i>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">${t('analytics', 'total_sales')}</div>
+                        <div class="stat-value">${totalAmount.toLocaleString()}</div>
+                        <i class="fas fa-won-sign stat-icon"></i>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">${t('analytics', 'total_profit')}</div>
+                        <div class="stat-value" style="color: #28a745;">${totalProfit.toLocaleString()}</div>
+                        <i class="fas fa-chart-line stat-icon"></i>
+                    </div>
+                </div>
+                <div class="filter-row">
+                    <div class="form-group">
+                        <label>${t('common', 'stock_year')}</label>
+                        <select class="form-control" onchange="Customers.setYear(this.value)">
+                            ${this.yearOptions()}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                    <label>${t('common', 'stock_month')}</label>
+                    <select class="form-control" onchange="Customers.setMonth(this.value)">
+                        <option value="">${t('customers', 'all')}</option>
+                        ${this.monthOptions()}
+                    </select>
+                </div>
+                    <div class="form-group search-box">
+                        <label>${t('customers', 'search')}</label>
+                        <input type="text" class="form-control" placeholder="${t('common', 'search')}..."
+                            value="${this.state.search}" oninput="Customers.setSearch(this.value)">
+                    </div>
+                </div>
+        `;
+        if (list.length === 0) {
+            html += `<div class="empty-state"><i class="fas fa-users"></i><p>${t('common', 'no_data')}</p></div>`;
+        } else {
+            html += `
+                <div style="overflow-x:auto;">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th onclick="Customers.sort('name')" class="${this.state.sortBy === 'name' ? 'sort-active' : ''}">
+                                ${t('customers', 'name')}
+                                <i class="fas fa-sort-${this.state.sortOrder === 'asc' ? 'up' : 'down'}"></i>
+                            </th>
+                            <th>${t('customers', 'wechat')}</th>
+                            <th>${t('customers', 'phone')}</th>
+                            <th onclick="Customers.sort('order_count')" class="${this.state.sortBy === 'order_count' ? 'sort-active' : ''}">
+                                ${t('customers', 'order_count')}
+                                <i class="fas fa-sort-${this.state.sortOrder === 'asc' ? 'up' : 'down'}"></i>
+                            </th>
+                            <th onclick="Customers.sort('total_amount')" class="${this.state.sortBy === 'total_amount' ? 'sort-active' : ''}">
+                                ${t('customers', 'total_amount')}
+                                <i class="fas fa-sort-${this.state.sortOrder === 'asc' ? 'up' : 'down'}"></i>
+                            </th>
+                            <th>${t('customers', 'level')}</th>
+                            <th>${t('common', 'action')}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            list.forEach(c => {
+                const level = this.getLevel(c.total_amount || 0);
+                html += `
+                    <tr>
+                        <td><strong>${c.name || '-'}</strong></td>
+                        <td>${c.wechat_nickname || '-'}</td>
+                        <td>${c.phone || '-'}</td>
+                        <td>${c.order_count || 0}${t('customers', 'count_suffix')}</td>
+                        <td class="font-bold">${(c.total_amount || 0).toLocaleString()} ${t('common', 'currency')}</td>
+                        <td><span class="badge badge-${level.class}">${level.name}</span></td>
+                        <td>
+                            <a href="#/customers/${c.id}" class="btn btn-sm btn-info"><i class="fas fa-eye"></i></a>
+                            <a href="#/customers/${c.id}/edit" class="btn btn-sm btn-secondary"><i class="fas fa-edit"></i></a>
+                            <button class="btn btn-sm btn-danger" onclick="Customers.delete(${c.id})"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `;
+            });
+            html += '</tbody></table></div>';
+        }
+        html += '</div>';
+        return html;
+    },
+
+    yearOptions() {
+        let html = '';
+        for (let y = 2025; y <= 2030; y++) {
+            html += `<option value="${y}" ${this.state.year === y ? 'selected' : ''}>${y}${t('common', 'year_suffix')}</option>`;
+        }
+        return html;
+    },
+
+    monthOptions() {
+        let html = '';
+        for (let m = 1; m <= 12; m++) {
+            html += `<option value="${m}" ${this.state.month === m ? 'selected' : ''}>${m}${t('common', 'month_suffix')}</option>`;
+        }
+        return html;
+    },
+
+    setYear(val) {
+        this.state.year = parseInt(val);
+        this.recalculateAll();
+        this.applyFilters();
+        App.render();
+    },
+
+    setMonth(val) {
+        this.state.month = val ? parseInt(val) : null;
+        this.recalculateAll();
+        this.applyFilters();
+        App.render();
+    },
+
+    setSearch(val) {
+        this.state.search = val;
+        this.applyFilters();
+        App.renderPage();
+    },
+
+    sort(field) {
+        if (this.state.sortBy === field) {
+            this.state.sortOrder = this.state.sortOrder === 'asc' ? 'desc' : 'asc';
+        } else {
+            this.state.sortBy = field;
+            this.state.sortOrder = 'asc';
+        }
+        App.render();
+    },
+
+    getLevel(amount) {
+        if (amount >= 5000) return { name: t('customers', 'level_vip'), class: 'vip' };
+        if (amount >= 3000) return { name: t('customers', 'level_gold'), class: 'gold' };
+        if (amount >= 1000) return { name: t('customers', 'level_silver'), class: 'silver' };
+        if (amount >= 500) return { name: t('customers', 'level_bronze'), class: 'bronze' };
+        return { name: t('customers', 'level_normal'), class: 'pending' };
+    },
+
+    delete(id) {
+        if (!confirm(t('common', 'confirm_delete') + '?')) return;
+        DB.deleteCustomer(id);
+        App.flash(t('common', 'delete') + '!', 'success');
+        App.render();
+    },
+
+    renderDetail(id) {
+        const customer = DB.getCustomers().find(c => c.id === parseInt(id));
+        if (!customer) {
+            App.flash(t('customers', 'not_found'), 'error');
+            location.hash = '#/customers';
+            return '';
+        }
+        const orders = DB.getOrders()
+            .filter(o => o.customer_id === customer.id)
+            .sort((a, b) => new Date(b.order_date || b.created_at) - new Date(a.order_date || a.created_at));
+        const products = DB.getProducts();
+        const totalAmount = orders.filter(o => o.status === 'SHIPPED' || o.status === 'COMPLETED')
+            .reduce((s, o) => s + (o.selling_price || 0) * (o.quantity || 0), 0);
+        const totalProfit = orders.filter(o => o.status === 'SHIPPED' || o.status === 'COMPLETED')
+            .reduce((s, o) => s + (o.actual_profit || 0), 0);
+        const level = this.getLevel(totalAmount);
+        let html = `
+            <div class="card mb-4">
+                <div class="action-bar">
+                    <div class="action-bar-left">
+                        <h2><i class="fas fa-user"></i> ${customer.name || '-'}
+                            <span class="badge badge-${level.class} ml-2">${level.name}</span>
+                        </h2>
+                    </div>
+                    <div class="action-bar-right">
+                        <a href="#/customers/${customer.id}/edit" class="btn btn-secondary"><i class="fas fa-edit"></i> ${t('common', 'edit')}</a>
+                        <a href="#/customers" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> ${t('common', 'back')}</a>
+                    </div>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">${t('customers', 'total_amount')}</div>
+                        <div class="stat-value">${totalAmount.toLocaleString()}</div>
+                        <i class="fas fa-won-sign stat-icon"></i>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">${t('analytics', 'total_profit')}</div>
+                        <div class="stat-value" style="color: #28a745;">${totalProfit.toLocaleString()}</div>
+                        <i class="fas fa-chart-line stat-icon"></i>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">${t('customers', 'order_count')}</div>
+                        <div class="stat-value">${orders.length}</div>
+                        <i class="fas fa-shopping-bag stat-icon"></i>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>${t('customers', 'wechat')}</label>
+                        <p><strong>${customer.wechat_nickname || '-'}</strong></p>
+                    </div>
+                    <div class="form-group">
+                        <label>${t('customers', 'phone')}</label>
+                        <p><strong>${customer.phone || '-'}</strong></p>
+                    </div>
+                    <div class="form-group">
+                        <label>${t('customers', 'address')}</label>
+                        <p><strong>${customer.address || '-'}</strong></p>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>${t('common', 'memo')}</label>
+                    <p>${customer.notes || '-'}</p>
+                </div>
+            </div>
+            <div class="card">
+                <h3><i class="fas fa-history"></i> ${t('orders', 'title')} ${t('common', 'history')}</h3>
+        `;
+        if (orders.length === 0) {
+            html += `<div class="empty-state"><i class="fas fa-shopping-cart"></i><p>${t('common', 'no_data')}</p></div>`;
+        } else {
+            const statusLabels = { PENDING: 'badge-pending', SHIPPED: 'badge-shipped', COMPLETED: 'badge-completed', CANCELLED: 'badge-cancelled' };
+            html += `
+                <div style="overflow-x:auto;">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>${t('orders', 'order_number')}</th>
+                            <th>${t('orders', 'sale_date')}</th>
+                            <th>${t('orders', 'product')}</th>
+                            <th>${t('orders', 'quantity')}</th>
+                            <th>${t('orders', 'selling_price')}</th>
+                            <th>${t('common', 'status')}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            orders.forEach(o => {
+                const product = products.find(p => p.id === o.product_id);
+                html += `
+                    <tr>
+                        <td><strong>#${o.order_number || o.id}</strong></td>
+                        <td>${o.order_date || new Date(o.created_at).toISOString().slice(0, 10)}</td>
+                        <td>${product ? product.original_title : '-'}</td>
+                        <td>${o.quantity}</td>
+                        <td class="font-bold">${(o.selling_price || 0).toLocaleString()} ${t('common', 'currency')}</td>
+                        <td><span class="badge ${statusLabels[o.status] || 'badge-pending'}">${t('orders', o.status?.toLowerCase() || 'pending')}</span></td>
+                    </tr>
+                `;
+            });
+            html += '</tbody></table></div>';
+        }
+        html += '</div>';
+        return html;
+    },
+
+    renderAdd() {
+        return this.renderForm(null);
+    },
+
+    renderEdit(id) {
+        const customer = DB.getCustomers().find(c => c.id === parseInt(id));
+        if (!customer) {
+            App.flash(t('customers', 'not_found'), 'error');
+            location.hash = '#/customers';
+            return '';
+        }
+        return this.renderForm(customer);
+    },
+
+    renderForm(customer) {
+        const isEdit = !!customer;
+        const c = customer || { name: '', wechat_nickname: '', phone: '', address: '', notes: '' };
+        return `
+            <div class="card">
+                <h2><i class="fas fa-plus"></i> ${isEdit ? t('common', 'edit') : t('customers', 'add')}</h2>
+                <form id="customerForm" onsubmit="return Customers.submitForm(${isEdit ? customer.id : 'null'})">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>${t('customers', 'name')} *</label>
+                            <input type="text" name="name" required class="form-control" value="${c.name || ''}">
+                        </div>
+                        <div class="form-group">
+                            <label>${t('customers', 'wechat')}</label>
+                            <input type="text" name="wechat_nickname" class="form-control" value="${c.wechat_nickname || ''}">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>${t('customers', 'phone')}</label>
+                            <input type="text" name="phone" class="form-control" value="${c.phone || ''}">
+                        </div>
+                        <div class="form-group">
+                            <label>${t('customers', 'address')}</label>
+                            <input type="text" name="address" class="form-control" value="${c.address || ''}">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>${t('common', 'memo')}</label>
+                        <textarea name="notes" class="form-control" rows="3">${c.notes || ''}</textarea>
+                    </div>
+                    <div class="d-flex gap-2 mt-4">
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> ${t('common', 'save')}</button>
+                        <a href="#/customers" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> ${t('common', 'cancel')}</a>
+                    </div>
+                </form>
+            </div>
+        `;
+    },
+
+    submitForm(editId) {
+        const fd = new FormData(document.getElementById('customerForm'));
+        const data = {
+            name: (fd.get('name') || '').trim(),
+            wechat_nickname: fd.get('wechat_nickname') || '',
+            phone: fd.get('phone') || '',
+            address: fd.get('address') || '',
+            notes: fd.get('notes') || ''
+        };
+        if (!data.name) {
+            App.flash(t('customers', 'enter_name'), 'error');
+            return false;
+        }
+        if (editId) {
+            DB.updateCustomer(parseInt(editId), data);
+        } else {
+            DB.addCustomer(data);
+        }
+        App.flash(t('common', 'save') + '!', 'success');
+        location.hash = '#/customers';
+        return false;
+    }
+};
