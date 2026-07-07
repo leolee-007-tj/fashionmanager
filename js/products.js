@@ -5,7 +5,7 @@ const Products = {
         search: '',
         sortBy: 'brand',
         sortOrder: 'asc',
-        stockYear: new Date().getFullYear(),
+        stockYear: 2025,
         stockMonth: new Date().getMonth() + 1,
         selected: new Set(),
         editingId: null

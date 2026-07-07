@@ -2,7 +2,7 @@ const Expenses = {
     state: {
         expenses: [],
         filtered: [],
-        year: new Date().getFullYear(),
+        year: 2025,
         month: new Date().getMonth() + 1,
         sortBy: 'expense_date',
         sortOrder: 'desc',
