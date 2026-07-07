@@ -3,106 +3,119 @@ const ExcelManager = {
         return `
             <div class="card">
                 <h2><i class="fas fa-file-excel"></i> ${t('excel', 'title')}</h2>
-                <div class="form-row mb-4">
-                    <div class="card" style="flex:1;">
-                        <h3><i class="fas fa-download"></i> ${t('excel', 'export')}</h3>
-                        <p class="text-muted mb-4">${t('excel', 'export_desc')}</p>
-                        <div class="d-flex flex-column gap-2">
-                            <button class="btn btn-success" onclick="ExcelManager.exportAll()">
-                                <i class="fas fa-file-excel"></i> ${t('excel', 'export_all')}
-                            </button>
-                            <button class="btn btn-secondary" onclick="ExcelManager.exportProducts()">
-                                <i class="fas fa-tshirt"></i> ${t('excel', 'export_products')}
-                            </button>
-                            <button class="btn btn-secondary" onclick="ExcelManager.exportOrders()">
-                                <i class="fas fa-shopping-cart"></i> ${t('excel', 'export_orders')}
-                            </button>
-                            <button class="btn btn-secondary" onclick="ExcelManager.exportCustomers()">
-                                <i class="fas fa-users"></i> ${t('excel', 'export_customers')}
-                            </button>
-                        </div>
-                    </div>
-                    <div class="card" style="flex:1;">
-                        <h3><i class="fas fa-upload"></i> ${t('excel', 'import')}</h3>
-                        <p class="text-muted mb-4">${t('excel', 'import_desc')}</p>
-                        <div class="form-group">
-                            <label>${t('excel', 'import_file')}</label>
-                            <input type="file" id="excelFile" accept=".xlsx,.xls" class="form-control">
-                        </div>
-                        <div class="form-group">
-                            <label>${t('excel', 'import_mode')}</label>
-                            <select id="importMode" class="form-control">
-                                <option value="products">${t('excel', 'import_products')}</option>
-                                <option value="orders">${t('excel', 'import_orders')}</option>
-                                <option value="customers">${t('excel', 'import_customers')}</option>
-                                <option value="keywords">${t('excel', 'import_keywords')}</option>
-                            </select>
-                        </div>
-                        <button class="btn btn-primary" onclick="ExcelManager.importData()">
-                            <i class="fas fa-upload"></i> ${t('excel', 'start_import')}
+
+                <!-- 템플릿 다운로드 -->
+                <div class="card mb-4" style="background: #f8f9fa;">
+                    <h3><i class="fas fa-download"></i> ${t('excel', 'template_download') || '업로드용 엑셀 템플릿 다운로드'}</h3>
+                    <p class="text-muted mb-4">${t('excel', 'template_desc') || '아래 버튼을 눌러 원하는 데이터 유형의 템플릿을 받은 후, 예시처럼 데이터를 채워 업로드하세요.'}</p>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button class="btn btn-success" onclick="ExcelManager.downloadProductTemplate()">
+                            <i class="fas fa-tshirt"></i> ${t('excel', 'template_products') || '상품 템플릿'}
+                        </button>
+                        <button class="btn btn-success" onclick="ExcelManager.downloadOrderTemplate()">
+                            <i class="fas fa-shopping-cart"></i> ${t('excel', 'template_orders') || '주문 템플릿'}
+                        </button>
+                        <button class="btn btn-success" onclick="ExcelManager.downloadCustomerTemplate()">
+                            <i class="fas fa-users"></i> ${t('excel', 'template_customers') || '고객 템플릿'}
+                        </button>
+                        <button class="btn btn-success" onclick="ExcelManager.downloadKeywordTemplate()">
+                            <i class="fas fa-tags"></i> ${t('excel', 'template_keywords') || '키워드 템플릿'}
                         </button>
                     </div>
                 </div>
-                <div class="info-box">
+
+                <!-- 업로드 -->
+                <div class="card" style="border: 2px dashed #667eea;">
+                    <h3><i class="fas fa-upload"></i> ${t('excel', 'import')}</h3>
+                    <p class="text-muted mb-4">${t('excel', 'import_desc')}</p>
+                    <div class="form-group">
+                        <label>${t('excel', 'import_file')}</label>
+                        <input type="file" id="excelFile" accept=".xlsx,.xls" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label>${t('excel', 'import_mode')}</label>
+                        <select id="importMode" class="form-control">
+                            <option value="products">${t('excel', 'import_products')}</option>
+                            <option value="orders">${t('excel', 'import_orders')}</option>
+                            <option value="customers">${t('excel', 'import_customers')}</option>
+                            <option value="keywords">${t('excel', 'import_keywords')}</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary" onclick="ExcelManager.importData()">
+                        <i class="fas fa-upload"></i> ${t('excel', 'start_import')}
+                    </button>
+                </div>
+
+                <!-- 안내 -->
+                <div class="info-box mt-4">
                     <h4><i class="fas fa-info-circle"></i> ${t('excel', 'guide')}</h4>
                     <p>${t('excel', 'guide_text')}</p>
                     <ul>
-                        <li>${t('excel', 'guide_products')}</li>
-                        <li>${t('excel', 'guide_orders')}</li>
-                        <li>${t('excel', 'guide_customers')}</li>
-                        <li>${t('excel', 'guide_backup')}</li>
+                        <li><strong>${t('excel', 'import_products')}</strong>: 브랜드, 상품명, 한국원가(또는 한국매입원가/원가), 입고월(선택), 현재재고(선택), 색상(선택), 사이즈(선택)</li>
+                        <li><strong>${t('excel', 'import_orders')}</strong>: 고객명, 상품명, 브랜드, 수량, 판매가, 판매일(선택), 택배사(선택), 운송장번호(선택)</li>
+                        <li><strong>${t('excel', 'import_customers')}</strong>: 이름, 전화번호(선택), 주소(선택), 메모(선택)</li>
+                        <li><strong>${t('excel', 'import_keywords')}</strong>: 타입(brand/category/color/size/material), 키워드, 대체어(선택)</li>
                     </ul>
                 </div>
             </div>
         `;
     },
 
-    exportAll() {
-        const data = DB.exportAllData();
+    // ========== 템플릿 다운로드 ==========
+
+    _downloadSheet(data, sheetName, fileName) {
         const wb = XLSX.utils.book_new();
-        const wsProducts = XLSX.utils.json_to_sheet(data.products || []);
-        XLSX.utils.book_append_sheet(wb, wsProducts, t('products', 'title'));
-        const wsOrders = XLSX.utils.json_to_sheet(data.orders || []);
-        XLSX.utils.book_append_sheet(wb, wsOrders, t('orders', 'title'));
-        const wsCustomers = XLSX.utils.json_to_sheet(data.customers || []);
-        XLSX.utils.book_append_sheet(wb, wsCustomers, t('customers', 'title'));
-        const wsExpenses = XLSX.utils.json_to_sheet(data.expenses || []);
-        XLSX.utils.book_append_sheet(wb, wsExpenses, t('expenses', 'title'));
-        const wsKeywords = XLSX.utils.json_to_sheet(data.keywords || []);
-        XLSX.utils.book_append_sheet(wb, wsKeywords, t('classification', 'keywords'));
-        const wsSettings = XLSX.utils.json_to_sheet([data.settings || {}]);
-        XLSX.utils.book_append_sheet(wb, wsSettings, t('settings', 'title'));
-        const filename = `LES_OULET_backup_${new Date().toISOString().slice(0, 10)}.xlsx`;
-        XLSX.writeFile(wb, filename);
-        App.flash(t('common', 'download') + '!', 'success');
+        const ws = XLSX.utils.aoa_to_sheet(data);
+        // 헤더 행 스타일 (굵게)
+        if (!ws['!cols']) ws['!cols'] = [];
+        for (let i = 0; i < data[0].length; i++) {
+            ws['!cols'][i] = { wch: 18 };
+        }
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+        XLSX.writeFile(wb, fileName);
     },
 
-    exportProducts() {
-        const products = DB.getProducts();
-        const ws = XLSX.utils.json_to_sheet(products);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, t('products', 'title'));
-        XLSX.writeFile(wb, `products_${new Date().toISOString().slice(0, 10)}.xlsx`);
-        App.flash(t('common', 'download') + '!', 'success');
+    downloadProductTemplate() {
+        const data = [
+            ['브랜드', '상품명', '한국원가', '입고월', '현재재고', '색상', '사이즈', '소재', '메모'],
+            ['SYSTEM', '울 니트', '15000', '6', '5', 'CREAM', 'FREE', 'WOOL', ''],
+            ['MIXXO', '자켓', '25000', '6', '3', 'BLACK', 'M', '', ''],
+            ['ZARA', '코튼 셔츠', '18000', '7', '10', 'WHITE', 'L', 'COTTON', ''],
+        ];
+        this._downloadSheet(data, '상품목록', 'template_products.xlsx');
     },
 
-    exportOrders() {
-        const orders = DB.getOrders();
-        const ws = XLSX.utils.json_to_sheet(orders);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, t('orders', 'title'));
-        XLSX.writeFile(wb, `orders_${new Date().toISOString().slice(0, 10)}.xlsx`);
-        App.flash(t('common', 'download') + '!', 'success');
+    downloadOrderTemplate() {
+        const data = [
+            ['고객명', '상품명', '브랜드', '수량', '판매가', '판매일', '택배사', '운송장번호', '색상', '사이즈'],
+            ['김미영', '울 니트', 'SYSTEM', '2', '35000', '2025-07-01', 'CJ대한통운', '1234567890', 'CREAM', 'FREE'],
+            ['이수진', '자켓', 'MIXXO', '1', '45000', '2025-07-02', '롯데택배', '', 'BLACK', 'M'],
+        ];
+        this._downloadSheet(data, '주문목록', 'template_orders.xlsx');
     },
 
-    exportCustomers() {
-        const customers = DB.getCustomers();
-        const ws = XLSX.utils.json_to_sheet(customers);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, t('customers', 'title'));
-        XLSX.writeFile(wb, `customers_${new Date().toISOString().slice(0, 10)}.xlsx`);
-        App.flash(t('common', 'download') + '!', 'success');
+    downloadCustomerTemplate() {
+        const data = [
+            ['이름', '전화번호', '주소', '메모'],
+            ['김미영', '010-1234-5678', '서울시 강남구', 'VIP 고객'],
+            ['이수진', '010-8765-4321', '부산시 해운대구', ''],
+        ];
+        this._downloadSheet(data, '고객목록', 'template_customers.xlsx');
     },
+
+    downloadKeywordTemplate() {
+        const data = [
+            ['타입', '표준명', '키워드(쉼표구분)', '우선순위'],
+            ['brand', 'SYSTEM', 'SYSTEM,시스템,SYS', '5'],
+            ['category', '니트', '니트,KNIT,针织衫', '5'],
+            ['color', 'BLACK', 'BLACK,블랙,검정,黑色', '5'],
+            ['size', 'FREE', 'FREE,프리,均码', '5'],
+            ['material', 'WOOL', 'WOOL,울,羊毛', '5'],
+        ];
+        this._downloadSheet(data, '키워드목록', 'template_keywords.xlsx');
+    },
+
+    // ========== 업로드 ==========
 
     importData() {
         const fileInput = document.getElementById('excelFile');
@@ -119,15 +132,29 @@ const ExcelManager = {
                 const wb = XLSX.read(data, { type: 'array' });
                 const sheetName = wb.SheetNames[0];
                 const ws = wb.Sheets[sheetName];
-                const json = XLSX.utils.sheet_to_json(ws);
+                const json = XLSX.utils.sheet_to_json(ws, { header: 1 });
+                if (json.length < 2) {
+                    App.flash('데이터가 없습니다. (헤더 행 + 데이터 행 필요)', 'warning');
+                    return;
+                }
+                // 첫 행을 키로 사용하여 객체 배열 변환
+                const headers = json[0].map(h => String(h).trim());
+                const rows = json.slice(1).map(row => {
+                    const obj = {};
+                    headers.forEach((h, i) => {
+                        obj[h] = row[i] !== undefined ? row[i] : '';
+                    });
+                    return obj;
+                }).filter(row => Object.values(row).some(v => v !== '' && v !== null && v !== undefined));
+
                 if (mode === 'products') {
-                    ExcelManager.importProducts(json);
+                    ExcelManager.importProducts(rows);
                 } else if (mode === 'orders') {
-                    ExcelManager.importOrders(json);
+                    ExcelManager.importOrders(rows);
                 } else if (mode === 'customers') {
-                    ExcelManager.importCustomers(json);
+                    ExcelManager.importCustomers(rows);
                 } else if (mode === 'keywords') {
-                    ExcelManager.importKeywords(json);
+                    ExcelManager.importKeywords(rows);
                 }
             } catch (err) {
                 App.flash(t('common', 'error') + ': ' + err.message, 'error');
@@ -137,38 +164,51 @@ const ExcelManager = {
     },
 
     importProducts(data) {
+        if (data.length === 0) {
+            App.flash('업로드할 데이터가 없습니다.', 'warning');
+            return;
+        }
         if (!confirm(data.length + ' ' + t('excel', 'confirm_import_count') + '?')) return;
+
         const products = DB.getProducts();
         let added = 0;
         let skipped = 0;
-        data.forEach(row => {
-            let koreaCost = row.korea_cost || row['한국원가'] || row['한국매입원가'] || row['원가'] || row['cost'] || row['매입가'] || 0;
-            if (typeof koreaCost === 'string') koreaCost = parseInt(koreaCost.replace(/,/g, '')) || 0;
-            if (!koreaCost) { skipped++; return; }
+        const skippedReasons = [];
+
+        data.forEach((row, idx) => {
+            // 원가 찾기 (여러 컬럼명 지원)
+            let koreaCost = row['한국원가'] || row['한국매입원가'] || row['원가'] || row['cost'] || row['매입가'] || row['korea_cost'] || 0;
+            if (typeof koreaCost === 'string') koreaCost = parseInt(String(koreaCost).replace(/,/g, '')) || 0;
+            if (!koreaCost) { skipped++; skippedReasons.push(`행 ${idx + 2}: 원가 없음`); return; }
+
             const priceResult = PriceCalculator.calculate(koreaCost);
-            const brand = row.brand || row['브랜드'] || row['브랜드명'] || '';
-            const title = row.original_title || row['원래이름'] || row['상품명'] || row.title || row['product_name'] || row['제목'] || '';
-            const stockYear = row.stock_year || row['입고년도'] || row['재고년'] || row['년도'] || new Date().getFullYear();
-            const stockMonth = row.stock_month || row['입고월'] || row['재고월'] || row['월'] || new Date().getMonth() + 1;
-            const productCode = row.product_code || DB.generateProductCode(brand, stockYear, stockMonth);
+            const brand = row['브랜드'] || row['brand'] || row['브랜드명'] || '';
+            const title = row['상품명'] || row['original_title'] || row['원래이름'] || row['title'] || row['product_name'] || row['제목'] || '';
+            if (!title) { skipped++; skippedReasons.push(`행 ${idx + 2}: 상품명 없음`); return; }
+
+            const stockYear = row['입고년도'] || row['재고년'] || row['년도'] || row['stock_year'] || new Date().getFullYear();
+            const stockMonth = row['입고월'] || row['재고월'] || row['월'] || row['stock_month'] || new Date().getMonth() + 1;
+            const productCode = row['product_code'] || DB.generateProductCode(brand, stockYear, stockMonth);
+            const currentStock = parseInt(row['현재재고'] || row['재고'] || row['수량'] || row['stock'] || row['quantity'] || 0) || 0;
+
             products.push({
                 id: Date.now() + Math.random(),
                 product_code: productCode,
                 original_title: title,
                 brand: brand,
-                category: row.category || row['종류'] || row['카테고리'] || '',
-                color: row.color || row['색상'] || row['컬러'] || '',
-                size: row.size || row['사이즈'] || row['칫수'] || '',
-                material: row.material || row['소재'] || row['재질'] || '',
+                category: row['종류'] || row['카테고리'] || row['category'] || '',
+                color: row['색상'] || row['컬러'] || row['color'] || '',
+                size: row['사이즈'] || row['칫수'] || row['size'] || '',
+                material: row['소재'] || row['재질'] || row['material'] || '',
                 korea_cost: koreaCost,
                 actual_converted_cost: priceResult.actual_converted_cost,
                 china_base_price: priceResult.china_base_price,
-                current_stock: parseInt(row.current_stock || row['현재재고'] || row['재고'] || row['수량'] || row['stock'] || row['quantity'] || 0),
+                current_stock: currentStock,
                 reserved_stock: 0,
-                stock_year: parseInt(stockYear),
-                stock_month: parseInt(stockMonth),
+                stock_year: parseInt(stockYear) || new Date().getFullYear(),
+                stock_month: parseInt(stockMonth) || new Date().getMonth() + 1,
                 image: null,
-                notes: row.notes || row['메모'] || row['비고'] || '',
+                notes: row['메모'] || row['비고'] || row['notes'] || '',
                 title_language: ClassificationService.detectLanguage(title),
                 normalized_title: title,
                 created_at: new Date().toISOString(),
@@ -178,57 +218,117 @@ const ExcelManager = {
         });
         DB.setProducts(products);
         if (added === 0) {
-            App.flash('0 ' + t('common', 'register') + ' (원가/한국원가/한국매입원가 컬럼 확인 필요)', 'warning');
+            App.flash('0건 등록 (원가/한국원가/한국매입원가 컬럼 확인 필요)', 'warning');
         } else {
-            App.flash(added + ' ' + t('common', 'register') + '!', 'success');
+            let msg = `${added}건 등록 완료!`;
+            if (skipped > 0) msg += ` (${skipped}건 스킵)`;
+            App.flash(msg, 'success');
         }
     },
 
     importOrders(data) {
+        if (data.length === 0) {
+            App.flash('업로드할 데이터가 없습니다.', 'warning');
+            return;
+        }
         if (!confirm(data.length + ' ' + t('excel', 'confirm_import_count') + '?')) return;
+
         const orders = DB.getOrders();
+        const customers = DB.getCustomers();
+        const products = DB.getProducts();
         let added = 0;
-        data.forEach(row => {
+        let skipped = 0;
+
+        data.forEach((row, idx) => {
+            const customerName = row['고객명'] || row['customer_name'] || row['name'] || '';
+            const productName = row['상품명'] || row['product_name'] || row['original_title'] || '';
+            const brand = row['브랜드'] || row['brand'] || '';
+            const qty = parseInt(row['수량'] || row['quantity'] || 1) || 1;
+            const sellingPrice = parseFloat(row['판매가'] || row['selling_price'] || row['price'] || 0) || 0;
+
+            if (!customerName || !productName || !sellingPrice) {
+                skipped++;
+                return;
+            }
+
+            // 고객 찾기 또는 생성
+            let customer = customers.find(c => c.name === customerName);
+            if (!customer) {
+                customer = {
+                    id: Date.now() + Math.random(),
+                    name: customerName,
+                    wechat_nickname: '',
+                    phone: row['전화번호'] || row['phone'] || '',
+                    address: row['주소'] || row['address'] || '',
+                    notes: '',
+                    total_amount: 0,
+                    total_profit: 0,
+                    order_count: 0,
+                    level: 'normal',
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                };
+                customers.push(customer);
+            }
+
+            // 상품 찾기
+            let product = products.find(p => p.original_title === productName && (brand === '' || p.brand === brand));
+            if (!product) {
+                product = products.find(p => p.original_title === productName);
+            }
+            const productId = product ? product.id : 0;
+            const cost = product ? product.korea_cost : 0;
+            const profit = sellingPrice - cost;
+
             orders.push({
                 id: Date.now() + Math.random(),
-                order_number: row.order_number || 'ORD-' + String(added + 1).padStart(4, '0'),
-                customer_id: row.customer_id || 0,
-                product_id: row.product_id || 0,
-                color: row.color || '',
-                size: row.size || '',
-                quantity: parseInt(row.quantity || 0),
-                selling_price: parseFloat(row.selling_price || 0),
-                order_date: row.order_date || new Date().toISOString().slice(0, 10),
-                ship_date: row.ship_date || null,
-                shipping_company: row.shipping_company || '',
-                tracking_number: row.tracking_number || '',
-                status: row.status || 'COMPLETED',
-                actual_profit: parseFloat(row.actual_profit || 0),
-                actual_profit_margin: parseFloat(row.actual_profit_margin || 0),
-                actual_cost_ratio: parseFloat(row.actual_cost_ratio || 0),
-                created_at: row.created_at || new Date().toISOString(),
+                order_number: row['주문번호'] || row['order_number'] || 'ORD-' + String(added + 1).padStart(4, '0'),
+                customer_id: customer.id,
+                product_id: productId,
+                color: row['색상'] || row['color'] || '',
+                size: row['사이즈'] || row['size'] || '',
+                quantity: qty,
+                selling_price: sellingPrice,
+                order_date: row['판매일'] || row['order_date'] || row['date'] || new Date().toISOString().slice(0, 10),
+                ship_date: row['출고일'] || row['ship_date'] || null,
+                shipping_company: row['택배사'] || row['shipping_company'] || '',
+                tracking_number: row['운송장번호'] || row['tracking_number'] || '',
+                status: 'COMPLETED',
+                actual_profit: profit * qty,
+                actual_profit_margin: sellingPrice > 0 ? Math.round((profit / sellingPrice) * 100) : 0,
+                actual_cost_ratio: sellingPrice > 0 ? Math.round((cost / sellingPrice) * 100) : 0,
+                created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString()
             });
             added++;
         });
+        DB.setCustomers(customers);
         DB.setOrders(orders);
-        App.flash(added + ' ' + t('common', 'register') + '!', 'success');
+        let msg = `${added}건 등록 완료!`;
+        if (skipped > 0) msg += ` (${skipped}건 스킵)`;
+        App.flash(msg, 'success');
     },
 
     importCustomers(data) {
+        if (data.length === 0) {
+            App.flash('업로드할 데이터가 없습니다.', 'warning');
+            return;
+        }
         if (!confirm(data.length + ' ' + t('excel', 'confirm_import_count') + '?')) return;
+
         const customers = DB.getCustomers();
         let added = 0;
+
         data.forEach(row => {
-            const name = row.name || row['이름'] || '';
+            const name = row['이름'] || row['name'] || row['고객명'] || row['customer_name'] || '';
             if (!name) return;
             customers.push({
                 id: Date.now() + Math.random(),
                 name: name,
-                wechat_nickname: row.wechat_nickname || row['위챗닉네임'] || '',
-                phone: row.phone || row['전화번호'] || '',
-                address: row.address || row['주소'] || '',
-                notes: row.notes || row['메모'] || '',
+                wechat_nickname: row['위챗닉네임'] || row['wechat_nickname'] || '',
+                phone: row['전화번호'] || row['phone'] || row['연락처'] || '',
+                address: row['주소'] || row['address'] || '',
+                notes: row['메모'] || row['notes'] || row['비고'] || '',
                 total_amount: 0,
                 total_profit: 0,
                 order_count: 0,
@@ -239,27 +339,44 @@ const ExcelManager = {
             added++;
         });
         DB.setCustomers(customers);
-        App.flash(added + ' ' + t('common', 'register') + '!', 'success');
+        App.flash(`${added}건 등록 완료!`, 'success');
     },
 
     importKeywords(data) {
+        if (data.length === 0) {
+            App.flash('업로드할 데이터가 없습니다.', 'warning');
+            return;
+        }
         if (!confirm(data.length + ' ' + t('excel', 'confirm_import_count') + '?')) return;
+
         const keywords = DB.getKeywords();
         let added = 0;
+
         data.forEach(row => {
-            const word = row.keyword || row.keyword || row['키워드'] || '';
-            const type = row.type || row['타입'] || 'brand';
-            if (!word) return;
+            const type = row['타입'] || row['type'] || 'brand';
+            const standard = row['표준명'] || row['standard'] || row['키워드'] || row['keyword'] || '';
+            if (!standard) return;
+
+            const keywordList = (row['키워드'] || row['keyword'] || standard)
+                .split(/[,，]/).map(s => s.trim()).filter(Boolean);
+
             keywords.push({
                 id: Date.now() + Math.random(),
-                keyword: word,
                 type: type,
-                replacement: row.replacement || '',
+                standard: standard,
+                keyword: standard,
+                ko: keywordList,
+                zh: keywordList,
+                en: keywordList,
+                ja: keywordList,
+                replacement: row['대체어'] || row['replacement'] || '',
+                priority: parseInt(row['우선순위'] || row['priority'] || 5) || 5,
+                active: true,
                 created_at: new Date().toISOString()
             });
             added++;
         });
         DB.setKeywords(keywords);
-        App.flash(added + ' ' + t('common', 'register') + '!', 'success');
+        App.flash(`${added}건 등록 완료!`, 'success');
     }
 };

@@ -93,11 +93,6 @@ const App = {
                     else if (args[1] === 'edit') content = Products.renderEdit(args[0]);
                     else content = Products.renderList();
                     break;
-                case 'inventory':
-                    if (['in', 'out', 'return', 'discard'].includes(args[0])) content = Inventory.renderForm(args[0]);
-                    else if (args[0] === 'history') content = Inventory.renderHistory();
-                    else content = Inventory.renderList();
-                    break;
                 case 'orders':
                     if (args[0] === 'add') content = Orders.renderAdd();
                     else if (args[1] === 'ship') content = Orders.renderShip(args[0]);
@@ -164,14 +159,6 @@ const App = {
             expenseForm.onsubmit = (e) => {
                 e.preventDefault();
                 Expenses.submitForm(editId);
-            };
-        }
-        const inventoryForm = document.getElementById('inventoryForm');
-        if (inventoryForm) {
-            const type = this.pageArgs[0];
-            inventoryForm.onsubmit = (e) => {
-                e.preventDefault();
-                Inventory.submitForm(type);
             };
         }
         const orderForm = document.getElementById('orderForm');
@@ -286,7 +273,7 @@ const App = {
                             <h3><i class="fas fa-exclamation-triangle text-warning"></i> <span data-i18n="dashboard.low_stock">${t('dashboard', 'low_stock')}</span></h3>
                         </div>
                         <div class="action-bar-right">
-                            <a href="#/inventory" class="btn btn-sm btn-secondary"><span data-i18n="dashboard.view_all">${t('dashboard', 'view_all')}</span> <i class="fas fa-arrow-right"></i></a>
+                            <a href="#/products" class="btn btn-sm btn-secondary"><span data-i18n="dashboard.view_all">${t('dashboard', 'view_all')}</span> <i class="fas fa-arrow-right"></i></a>
                         </div>
                     </div>
                     <p class="text-warning"><span data-i18n="dashboard.low_stock">${t('dashboard', 'low_stock')}</span>: <strong>${lowStock.length}</strong></p>
