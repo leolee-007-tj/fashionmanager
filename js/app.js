@@ -3,6 +3,7 @@ const App = {
     currentParams: {},
     pageArgs: [],
     sidebarCollapsed: false,
+    classificationSelected: new Set(),
 
     init() {
         DB.init();
@@ -372,6 +373,17 @@ const App = {
                 </div>
                 <p class="text-muted" data-i18n="classification.keyword_help">${t('classification', 'keyword_help')}</p>
                 <div id="keywordFormArea"></div>
+                <div class="action-bar">
+                    <div class="action-bar-left">
+                        <label class="checkbox-wrapper">
+                            <input type="checkbox" id="selectAll" onchange="App.toggleKeywordSelectAll(this)">
+                            ${t('products', 'select_all')}
+                        </label>
+                        <button class="btn btn-sm btn-danger" onclick="App.batchDeleteKeywords()">
+                            <i class="fas fa-trash"></i> ${t('products', 'delete')}
+                        </button>
+                    </div>
+                </div>
                 <h3 class="mt-4"><i class="fas fa-list"></i> <span data-i18n="classification.keyword_manage">${t('classification', 'keyword_manage')}</span> (${keywords.length})</h3>
         `;
         if (keywords.length === 0) {
@@ -379,6 +391,7 @@ const App = {
         } else {
             html += `<div style="overflow-x:auto;"><table class="table">
                 <thead><tr>
+                    <th style="width:40px;"><input type="checkbox" id="selectAll2" onchange="App.toggleKeywordSelectAll(this)"></th>
                     <th data-i18n="classification.type">${t('classification', 'type')}</th>
                     <th data-i18n="classification.standard">${t('classification', 'standard')}</th>
                     <th data-i18n="classification.ko_keywords">${t('classification', 'ko_keywords')}</th>
@@ -392,6 +405,8 @@ const App = {
             keywords.forEach(k => {
                 html += `
                     <tr>
+                        <td><input type="checkbox" ${this.classificationSelected.has(k.id) ? 'checked' : ''}
+                            onchange="App.toggleKeywordSelect('${k.id}')"></td>
                         <td>${k.type}</td>
                         <td><strong>${k.standard}</strong></td>
                         <td>${(k.ko || []).join(', ')}</td>
@@ -540,6 +555,39 @@ const App = {
             this.flash(t('settings', 'save_success'), 'success');
             this.render();
         }
+    },
+
+    toggleKeywordSelect(id) {
+        const strId = String(id);
+        if (this.classificationSelected.has(strId)) {
+            this.classificationSelected.delete(strId);
+        } else {
+            this.classificationSelected.add(strId);
+        }
+        this.renderPage();
+    },
+
+    toggleKeywordSelectAll(checkbox) {
+        const keywords = DB.getKeywords();
+        if (checkbox.checked) {
+            keywords.forEach(k => this.classificationSelected.add(String(k.id)));
+        } else {
+            this.classificationSelected.clear();
+        }
+        this.renderPage();
+    },
+
+    batchDeleteKeywords() {
+        if (this.classificationSelected.size === 0) {
+            this.flash(t('common', 'please_select'), 'warning');
+            return;
+        }
+        if (!confirm(this.classificationSelected.size + t('common', 'confirm_delete_items'))) return;
+        const selectedIds = Array.from(this.classificationSelected);
+        selectedIds.forEach(id => DB.deleteKeyword(id));
+        this.classificationSelected.clear();
+        this.flash(t('common', 'delete') + '!', 'success');
+        this.render();
     },
 
     initDefaultKeywords() {

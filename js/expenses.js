@@ -5,7 +5,8 @@ const Expenses = {
         year: new Date().getFullYear(),
         month: new Date().getMonth() + 1,
         sortBy: 'expense_date',
-        sortOrder: 'desc'
+        sortOrder: 'desc',
+        selected: new Set()
     },
 
     load() {
@@ -82,6 +83,17 @@ const Expenses = {
                         </select>
                     </div>
                 </div>
+                <div class="action-bar">
+                    <div class="action-bar-left">
+                        <label class="checkbox-wrapper">
+                            <input type="checkbox" id="selectAll" onchange="Expenses.toggleSelectAll(this)">
+                            ${t('products', 'select_all')}
+                        </label>
+                        <button class="btn btn-sm btn-danger" onclick="Expenses.batchDelete()">
+                            <i class="fas fa-trash"></i> ${t('products', 'delete')}
+                        </button>
+                    </div>
+                </div>
         `;
         if (list.length === 0) {
             html += `<div class="empty-state"><i class="fas fa-money-bill-wave"></i><p>${t('common', 'no_data')}</p></div>`;
@@ -91,6 +103,7 @@ const Expenses = {
                 <table class="table">
                     <thead>
                         <tr>
+                            <th style="width:40px;"><input type="checkbox" id="selectAll2" onchange="Expenses.toggleSelectAll(this)"></th>
                             <th onclick="Expenses.sort('expense_date')" class="${this.state.sortBy === 'expense_date' ? 'sort-active' : ''}">
                                 ${t('expenses', 'date')}
                                 <i class="fas fa-sort-${this.state.sortOrder === 'asc' ? 'up' : 'down'}"></i>
@@ -109,6 +122,8 @@ const Expenses = {
             list.forEach(e => {
                 html += `
                     <tr>
+                        <td><input type="checkbox" ${this.state.selected.has(e.id) ? 'checked' : ''}
+                            onchange="Expenses.toggleSelect(${e.id})"></td>
                         <td>${e.expense_date || '-'}</td>
                         <td><span class="badge badge-shipped">${e.category || '-'}</span></td>
                         <td>${e.description || '-'}</td>
@@ -159,6 +174,37 @@ const Expenses = {
             this.state.sortBy = field;
             this.state.sortOrder = 'asc';
         }
+        App.render();
+    },
+
+    toggleSelect(id) {
+        if (this.state.selected.has(id)) {
+            this.state.selected.delete(id);
+        } else {
+            this.state.selected.add(id);
+        }
+        App.renderPage();
+    },
+
+    toggleSelectAll(checkbox) {
+        if (checkbox.checked) {
+            this.state.filtered.forEach(e => this.state.selected.add(e.id));
+        } else {
+            this.state.selected.clear();
+        }
+        App.renderPage();
+    },
+
+    batchDelete() {
+        if (this.state.selected.size === 0) {
+            App.flash(t('common', 'please_select'), 'warning');
+            return;
+        }
+        if (!confirm(this.state.selected.size + t('common', 'confirm_delete_items'))) return;
+        const expenses = DB.getExpenses().filter(e => !this.state.selected.has(e.id));
+        DB.setExpenses(expenses);
+        this.state.selected.clear();
+        App.flash(t('common', 'delete') + '!', 'success');
         App.render();
     },
 

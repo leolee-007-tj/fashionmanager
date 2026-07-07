@@ -6,7 +6,8 @@ const Customers = {
         sortBy: 'total_amount',
         sortOrder: 'desc',
         year: new Date().getFullYear(),
-        month: null
+        month: null,
+        selected: new Set()
     },
 
     load() {
@@ -220,6 +221,17 @@ const Customers = {
 
             <!-- 고객 목록 테이블 -->
             <div class="card">
+                <div class="action-bar">
+                    <div class="action-bar-left">
+                        <label class="checkbox-wrapper">
+                            <input type="checkbox" id="selectAll" onchange="Customers.toggleSelectAll(this)">
+                            ${t('products', 'select_all')}
+                        </label>
+                        <button class="btn btn-sm btn-danger" onclick="Customers.batchDelete()">
+                            <i class="fas fa-trash"></i> ${t('products', 'delete')}
+                        </button>
+                    </div>
+                </div>
         `;
         if (list.length === 0) {
             html += `<div class="empty-state"><i class="fas fa-users"></i><p>${t('common', 'no_data')}</p></div>`;
@@ -229,6 +241,7 @@ const Customers = {
                 <table class="table">
                     <thead>
                         <tr>
+                            <th style="width:40px;"><input type="checkbox" id="selectAll2" onchange="Customers.toggleSelectAll(this)"></th>
                             <th>${t('customers', 'avatar') || ''}</th>
                             <th onclick="Customers.sort('name')" class="${this.state.sortBy === 'name' ? 'sort-active' : ''}">
                                 ${t('customers', 'name')}
@@ -252,6 +265,8 @@ const Customers = {
             list.forEach(c => {
                 html += `
                     <tr>
+                        <td><input type="checkbox" ${this.state.selected.has(c.id) ? 'checked' : ''}
+                            onchange="Customers.toggleSelect(${c.id})"></td>
                         <td>
                             <div style="width:36px; height:36px; border-radius:50%; background:#667eea; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:bold; overflow:hidden;">
                                 ${c.avatar_url ? `<img src="${c.avatar_url}" style="width:100%; height:100%; object-fit:cover;">` : (c.name || '?').charAt(0)}
@@ -342,6 +357,37 @@ const Customers = {
             this.state.sortBy = field;
             this.state.sortOrder = 'asc';
         }
+        App.render();
+    },
+
+    toggleSelect(id) {
+        if (this.state.selected.has(id)) {
+            this.state.selected.delete(id);
+        } else {
+            this.state.selected.add(id);
+        }
+        App.renderPage();
+    },
+
+    toggleSelectAll(checkbox) {
+        if (checkbox.checked) {
+            this.state.filtered.forEach(c => this.state.selected.add(c.id));
+        } else {
+            this.state.selected.clear();
+        }
+        App.renderPage();
+    },
+
+    batchDelete() {
+        if (this.state.selected.size === 0) {
+            App.flash(t('common', 'please_select'), 'warning');
+            return;
+        }
+        if (!confirm(this.state.selected.size + t('common', 'confirm_delete_items'))) return;
+        const customers = DB.getCustomers().filter(c => !this.state.selected.has(c.id));
+        DB.setCustomers(customers);
+        this.state.selected.clear();
+        App.flash(t('common', 'delete') + '!', 'success');
         App.render();
     },
 
