@@ -117,6 +117,36 @@ const ExcelManager = {
 
     // ========== 업로드 ==========
 
+    _parseExcelDate(val) {
+        if (val === null || val === undefined || val === '') return null;
+        if (val instanceof Date) return val;
+        if (typeof val === 'number') {
+            const utcDays = Math.floor(val - 25569);
+            const utcValue = utcDays * 86400;
+            const d = new Date(utcValue * 1000);
+            const fractional = val - Math.floor(val) + 0.0000001;
+            let totalSeconds = Math.floor(86400 * fractional);
+            const seconds = totalSeconds % 60;
+            totalSeconds -= seconds;
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor(totalSeconds / 60) % 60;
+            return new Date(d.getFullYear(), d.getMonth(), d.getDate(), hours, minutes, seconds);
+        }
+        const str = String(val).trim();
+        const d = new Date(str);
+        if (!isNaN(d.getTime())) return d;
+        const m = str.match(/(\d{4})[\.\-\/年](\d{1,2})[\.\-\/月](\d{1,2})/);
+        if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+        return null;
+    },
+
+    _formatDate(date) {
+        if (!date) return '';
+        const d = date instanceof Date ? date : new Date(date);
+        if (isNaN(d.getTime())) return '';
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    },
+
     importData() {
         const fileInput = document.getElementById('excelFile');
         const mode = document.getElementById('importMode').value;
@@ -247,18 +277,19 @@ const ExcelManager = {
             const customerName = String(row['고객명'] || row['customer_name'] || row['name'] || '').trim();
             const productName = String(row['상품명'] || row['product_name'] || row['original_title'] || '').trim();
             const brand = String(row['브랜드'] || row['brand'] || '').trim();
-            const dateStr = String(row['판매일'] || row['order_date'] || row['date'] || '').trim();
+            const rawDate = row['판매일'] || row['order_date'] || row['date'] || '';
+            const dateObj = this._parseExcelDate(rawDate) || new Date();
+            if (!isNaN(dateObj.getTime())) {
+                uploadMonths.add(dateObj.getFullYear() + '-' + (dateObj.getMonth() + 1));
+            }
+            const orderDateStr = this._formatDate(dateObj);
             if (!customerName || !productName) {
                 skipped++;
                 return;
             }
-            const dateObj = dateStr ? new Date(dateStr) : new Date();
-            if (!isNaN(dateObj.getTime())) {
-                uploadMonths.add(dateObj.getFullYear() + '-' + (dateObj.getMonth() + 1));
-            }
             const key = (customerName.toLowerCase()) + '|' + (brand.toLowerCase()) + '|' + (productName.toLowerCase());
             uploadedKeys.add(key);
-            normalizedRows.push({ idx, row, customerName, productName, brand, key });
+            normalizedRows.push({ idx, row, customerName, productName, brand, key, orderDateStr });
         });
 
         // 2단계: 같은 월의 기존 주문 중 업로드된 (고객+브랜드+상품명)과 일치하는 것은 제거
@@ -281,7 +312,7 @@ const ExcelManager = {
         }
 
         // 3단계: 새 주문 추가
-        normalizedRows.forEach(({ idx, row, customerName, productName, brand }) => {
+        normalizedRows.forEach(({ idx, row, customerName, productName, brand, orderDateStr }) => {
             const isZiLiu = /自留|자留|지留|자류|지류|自留款/i.test(customerName);
             let sellingPrice = parseFloat(row['최종흥정가(위안)'] || row['최종흥정가'] || row['판매가'] || row['selling_price'] || row['price'] || 0) || 0;
             // 최종판매가가 0원이어도 스킵하지 않고 그대로 저장
@@ -328,7 +359,7 @@ const ExcelManager = {
                 size: '',
                 quantity: 1,
                 selling_price: sellingPrice,
-                order_date: row['판매일'] || row['order_date'] || row['date'] || new Date().toISOString().slice(0, 10),
+                order_date: orderDateStr || new Date().toISOString().slice(0, 10),
                 ship_date: row['출고일'] || row['ship_date'] || null,
                 shipping_company: row['택배사'] || row['shipping_company'] || '',
                 tracking_number: row['운송장번호'] || row['tracking_number'] || '',

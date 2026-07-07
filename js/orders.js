@@ -19,6 +19,13 @@ const Orders = {
         if (this.state.year && this.state.month) {
             list = list.filter(o => {
                 const d = new Date(o.order_date || o.created_at);
+                if (isNaN(d.getTime())) {
+                    const m = String(o.order_date || '').match(/(\d{4})[\.\-\/年](\d{1,2})/);
+                    if (m) {
+                        return Number(m[1]) === this.state.year && Number(m[2]) === this.state.month;
+                    }
+                    return false;
+                }
                 return d.getFullYear() === this.state.year && (d.getMonth() + 1) === this.state.month;
             });
         }

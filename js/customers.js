@@ -7,7 +7,8 @@ const Customers = {
         sortOrder: 'desc',
         year: new Date().getFullYear(),
         month: null,
-        selected: new Set()
+        selected: new Set(),
+        editingCustomerId: null
     },
 
     load() {
@@ -169,13 +170,13 @@ const Customers = {
                 </div>
                 <div class="filter-row">
                     <div class="form-group">
-                        <label>${t('common', 'stock_year')}</label>
+                        <label>${t('common', 'year')}</label>
                         <select class="form-control" onchange="Customers.setYear(this.value)">
                             ${this.yearOptions()}
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>${t('common', 'stock_month')}</label>
+                        <label>${t('common', 'month')}</label>
                         <select class="form-control" onchange="Customers.setMonth(this.value)">
                             <option value="">${t('customers', 'all')}</option>
                             ${this.monthOptions()}
@@ -263,8 +264,9 @@ const Customers = {
                     <tbody>
             `;
             list.forEach(c => {
+                const isEditing = String(this.state.editingCustomerId) === String(c.id);
                 html += `
-                    <tr>
+                    <tr ${isEditing ? 'style="background:#eef3ff;"' : ''}>
                         <td><input type="checkbox" class="row-checkbox" data-id="${c.id}" data-target="customers" ${this.state.selected.has(Number(c.id)) ? 'checked' : ''}></td>
                         <td>
                             <div style="width:36px; height:36px; border-radius:50%; background:#667eea; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:bold; overflow:hidden;">
@@ -278,11 +280,49 @@ const Customers = {
                         <td class="font-bold">${(c.total_amount || 0).toLocaleString()} ${t('common', 'currency')}</td>
                         <td>
                             <a href="#/customers/${c.id}" class="btn btn-sm btn-info"><i class="fas fa-eye"></i></a>
-                            <a href="#/customers/${c.id}/edit" class="btn btn-sm btn-secondary"><i class="fas fa-edit"></i></a>
+                            <button class="btn btn-sm ${isEditing ? 'btn-warning' : 'btn-secondary'}" onclick="Customers.toggleEditCustomer('${c.id}')"><i class="fas fa-edit"></i></button>
                             <button class="btn btn-sm btn-danger" onclick="Customers.delete(${c.id})"><i class="fas fa-trash"></i></button>
                         </td>
                     </tr>
                 `;
+                if (isEditing) {
+                    html += `
+                        <tr style="background:#f8f9fa;">
+                            <td colspan="8">
+                                <form id="custEditForm_${c.id}" onsubmit="return Customers.submitInlineEdit(event, '${c.id}')" style="padding:12px 8px;">
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>${t('customers', 'name')} *</label>
+                                            <input type="text" name="name" required class="form-control" value="${c.name || ''}">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>${t('customers', 'wechat')}</label>
+                                            <input type="text" name="wechat_nickname" class="form-control" value="${c.wechat_nickname || ''}">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>${t('customers', 'phone')}</label>
+                                            <input type="text" name="phone" class="form-control" value="${c.phone || ''}">
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group" style="flex:2;">
+                                            <label>${t('customers', 'address')}</label>
+                                            <input type="text" name="address" class="form-control" value="${c.address || ''}">
+                                        </div>
+                                        <div class="form-group" style="flex:3;">
+                                            <label>${t('common', 'memo')}</label>
+                                            <input type="text" name="notes" class="form-control" value="${c.notes || ''}">
+                                        </div>
+                                    </div>
+                                    <div class="d-flex gap-2">
+                                        <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-save"></i> ${t('common', 'save')}</button>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="Customers.cancelEditCustomer()">${t('common', 'cancel')}</button>
+                                    </div>
+                                </form>
+                            </td>
+                        </tr>
+                    `;
+                }
             });
             html += '</tbody></table></div>';
         }
@@ -407,6 +447,42 @@ const Customers = {
         DB.deleteCustomer(id);
         App.flash(t('common', 'delete') + '!', 'success');
         App.render();
+    },
+
+    toggleEditCustomer(id) {
+        if (String(this.state.editingCustomerId) === String(id)) {
+            this.state.editingCustomerId = null;
+        } else {
+            this.state.editingCustomerId = Number(id);
+        }
+        App.renderPage();
+    },
+
+    cancelEditCustomer() {
+        this.state.editingCustomerId = null;
+        App.renderPage();
+    },
+
+    submitInlineEdit(e, id) {
+        e.preventDefault();
+        const form = e.target;
+        const fd = new FormData(form);
+        const data = {
+            name: (fd.get('name') || '').trim(),
+            wechat_nickname: fd.get('wechat_nickname') || '',
+            phone: fd.get('phone') || '',
+            address: fd.get('address') || '',
+            notes: fd.get('notes') || ''
+        };
+        if (!data.name) {
+            App.flash(t('customers', 'enter_name'), 'error');
+            return false;
+        }
+        DB.updateCustomer(Number(id), data);
+        this.state.editingCustomerId = null;
+        App.flash(t('common', 'save') + '!', 'success');
+        App.render();
+        return false;
     },
 
     renderDetail(id) {
