@@ -259,11 +259,32 @@ const Customers = {
             .filter(o => o.customer_id === customer.id)
             .sort((a, b) => new Date(b.order_date || b.created_at) - new Date(a.order_date || a.created_at));
         const products = DB.getProducts();
-        const totalAmount = orders.filter(o => o.status === 'SHIPPED' || o.status === 'COMPLETED')
-            .reduce((s, o) => s + (o.selling_price || 0) * (o.quantity || 0), 0);
-        const totalProfit = orders.filter(o => o.status === 'SHIPPED' || o.status === 'COMPLETED')
-            .reduce((s, o) => s + (o.actual_profit || 0), 0);
+        const completedOrders = orders.filter(o => o.status === 'SHIPPED' || o.status === 'COMPLETED');
+        const totalAmount = completedOrders.reduce((s, o) => s + (o.selling_price || 0) * (o.quantity || 0), 0);
+        const totalProfit = completedOrders.reduce((s, o) => s + (o.actual_profit || 0), 0);
+        const totalQuantity = completedOrders.reduce((s, o) => s + (o.quantity || 0), 0);
         const level = this.getLevel(totalAmount);
+
+        // 분석 데이터 계산
+        const brandCounts = {};
+        const categoryCounts = {};
+        const monthGroups = {};
+        completedOrders.forEach(o => {
+            const p = products.find(pr => pr.id === o.product_id);
+            const brand = p ? p.brand : (o.brand || '-');
+            const category = p ? p.category : '-';
+            const qty = o.quantity || 1;
+            brandCounts[brand] = (brandCounts[brand] || 0) + qty;
+            if (category) categoryCounts[category] = (categoryCounts[category] || 0) + qty;
+            const d = new Date(o.order_date || o.created_at);
+            const monthKey = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}`;
+            if (!monthGroups[monthKey]) monthGroups[monthKey] = [];
+            monthGroups[monthKey].push({ product: p ? p.original_title : '-', brand: brand, category: category, qty: qty });
+        });
+        const topBrands = Object.entries(brandCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+        const topCategories = Object.entries(categoryCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+        const sortedMonths = Object.keys(monthGroups).sort();
+
         let html = `
             <div class="card mb-4">
                 <div class="action-bar">
@@ -293,6 +314,11 @@ const Customers = {
                         <div class="stat-value">${orders.length}</div>
                         <i class="fas fa-shopping-bag stat-icon"></i>
                     </div>
+                    <div class="stat-card">
+                        <div class="stat-label">${t('customers', 'total_purchases')}</div>
+                        <div class="stat-value">${totalQuantity}${t('dashboard', 'items')}</div>
+                        <i class="fas fa-tshirt stat-icon"></i>
+                    </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
@@ -313,7 +339,49 @@ const Customers = {
                     <p>${customer.notes || '-'}</p>
                 </div>
             </div>
-            <div class="card">
+
+            <!-- 구매 분석 -->
+            <div class="form-row" style="gap:1rem; flex-wrap:wrap;">
+                <div class="card" style="flex:1; min-width:280px;">
+                    <h3><i class="fas fa-heart text-danger"></i> ${t('customers', 'preferred_brand')}</h3>
+                    ${topBrands.length === 0 ? `<p class="text-muted">${t('common', 'no_data')}</p>` :
+                        topBrands.map(([brand, qty], i) => `
+                            <div class="d-flex justify-between align-items-center" style="padding:0.5rem 0; border-bottom:1px solid #eee;">
+                                <span><strong>${i + 1}.</strong> ${brand}</span>
+                                <span class="badge badge-info">${qty}${t('dashboard', 'items')}</span>
+                            </div>
+                        `).join('')}
+                </div>
+                <div class="card" style="flex:1; min-width:280px;">
+                    <h3><i class="fas fa-heart text-danger"></i> ${t('customers', 'preferred_category')}</h3>
+                    ${topCategories.length === 0 ? `<p class="text-muted">${t('common', 'no_data')}</p>` :
+                        topCategories.map(([cat, qty], i) => `
+                            <div class="d-flex justify-between align-items-center" style="padding:0.5rem 0; border-bottom:1px solid #eee;">
+                                <span><strong>${i + 1}.</strong> ${cat}</span>
+                                <span class="badge badge-info">${qty}${t('dashboard', 'items')}</span>
+                            </div>
+                        `).join('')}
+                </div>
+            </div>
+
+            <div class="card mt-4">
+                <h3><i class="fas fa-calendar-alt"></i> ${t('customers', 'monthly_purchase_history') || '월별 구매 내역'}</h3>
+                ${sortedMonths.length === 0 ? `<p class="text-muted">${t('common', 'no_data')}</p>` :
+                    sortedMonths.map(m => `
+                        <div style="margin-bottom:1rem;">
+                            <h4 style="color:#667eea; margin-bottom:0.5rem;">${m}</h4>
+                            <div class="d-flex flex-wrap gap-2">
+                                ${monthGroups[m].map(item => `
+                                    <span class="badge badge-secondary" style="font-size:0.85rem; padding:0.4rem 0.7rem;">
+                                        ${item.brand} ${item.product} ${item.qty}${t('dashboard', 'items')}
+                                    </span>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `).join('')}
+            </div>
+
+            <div class="card mt-4">
                 <h3><i class="fas fa-history"></i> ${t('orders', 'title')} ${t('common', 'history')}</h3>
         `;
         if (orders.length === 0) {

@@ -77,19 +77,19 @@ const ExcelManager = {
 
     downloadProductTemplate() {
         const data = [
-            ['브랜드', '상품명', '한국원가', '입고월', '현재재고', '색상', '사이즈', '소재', '메모'],
-            ['SYSTEM', '울 니트', '15000', '6', '5', 'CREAM', 'FREE', 'WOOL', ''],
-            ['MIXXO', '자켓', '25000', '6', '3', 'BLACK', 'M', '', ''],
-            ['ZARA', '코튼 셔츠', '18000', '7', '10', 'WHITE', 'L', 'COTTON', ''],
+            ['브랜드', '상품명', '한국매입원가(KRW)', '초기재고', '입고년도', '입고월'],
+            ['SYSTEM', '울 니트', '15000', '5', '2025', '6'],
+            ['MIXXO', '자켓', '25000', '3', '2025', '6'],
+            ['ZARA', '코튼 셔츠', '18000', '10', '2025', '7'],
         ];
         this._downloadSheet(data, '상품목록', 'template_products.xlsx');
     },
 
     downloadOrderTemplate() {
         const data = [
-            ['고객명', '상품명', '브랜드', '수량', '판매가', '판매일', '택배사', '운송장번호', '색상', '사이즈'],
-            ['김미영', '울 니트', 'SYSTEM', '2', '35000', '2025-07-01', 'CJ대한통운', '1234567890', 'CREAM', 'FREE'],
-            ['이수진', '자켓', 'MIXXO', '1', '45000', '2025-07-02', '롯데택배', '', 'BLACK', 'M'],
+            ['고객명', '브랜드', '상품명', '색상', '사이즈', '수량', '최종흥정가(위안)', '판매일'],
+            ['김미영', 'SYSTEM', '울 니트', 'CREAM', 'FREE', '2', '35000', '2025-07-01'],
+            ['이수진', 'MIXXO', '자켓', 'BLACK', 'M', '1', '45000', '2025-07-02'],
         ];
         this._downloadSheet(data, '주문목록', 'template_orders.xlsx');
     },
@@ -173,23 +173,22 @@ const ExcelManager = {
         const products = DB.getProducts();
         let added = 0;
         let skipped = 0;
-        const skippedReasons = [];
 
         data.forEach((row, idx) => {
-            // 원가 찾기 (여러 컬럼명 지원)
-            let koreaCost = row['한국원가'] || row['한국매입원가'] || row['원가'] || row['cost'] || row['매입가'] || row['korea_cost'] || 0;
+            // 한국매입원가(KRW) 찾기
+            let koreaCost = row['한국매입원가(KRW)'] || row['한국매입원가'] || row['한국원가'] || row['원가'] || row['cost'] || row['매입가'] || row['korea_cost'] || 0;
             if (typeof koreaCost === 'string') koreaCost = parseInt(String(koreaCost).replace(/,/g, '')) || 0;
-            if (!koreaCost) { skipped++; skippedReasons.push(`행 ${idx + 2}: 원가 없음`); return; }
+            if (!koreaCost) { skipped++; return; }
 
             const priceResult = PriceCalculator.calculate(koreaCost);
-            const brand = row['브랜드'] || row['brand'] || row['브랜드명'] || '';
-            const title = row['상품명'] || row['original_title'] || row['원래이름'] || row['title'] || row['product_name'] || row['제목'] || '';
-            if (!title) { skipped++; skippedReasons.push(`행 ${idx + 2}: 상품명 없음`); return; }
+            const brand = row['브랜드'] || row['brand'] || '';
+            const title = row['상품명'] || row['original_title'] || row['title'] || row['product_name'] || '';
+            if (!title) { skipped++; return; }
 
-            const stockYear = row['입고년도'] || row['재고년'] || row['년도'] || row['stock_year'] || new Date().getFullYear();
-            const stockMonth = row['입고월'] || row['재고월'] || row['월'] || row['stock_month'] || new Date().getMonth() + 1;
+            const stockYear = row['입고년도'] || row['년도'] || row['stock_year'] || new Date().getFullYear();
+            const stockMonth = row['입고월'] || row['월'] || row['stock_month'] || new Date().getMonth() + 1;
             const productCode = row['product_code'] || DB.generateProductCode(brand, stockYear, stockMonth);
-            const currentStock = parseInt(row['현재재고'] || row['재고'] || row['수량'] || row['stock'] || row['quantity'] || 0) || 0;
+            const currentStock = parseInt(row['초기재고'] || row['현재재고'] || row['재고'] || row['수량'] || row['stock'] || row['quantity'] || 0) || 0;
 
             products.push({
                 id: Date.now() + Math.random(),
@@ -218,7 +217,7 @@ const ExcelManager = {
         });
         DB.setProducts(products);
         if (added === 0) {
-            App.flash('0건 등록 (원가/한국원가/한국매입원가 컬럼 확인 필요)', 'warning');
+            App.flash('0건 등록 (한국매입원가(KRW) 컬럼 확인 필요)', 'warning');
         } else {
             let msg = `${added}건 등록 완료!`;
             if (skipped > 0) msg += ` (${skipped}건 스킵)`;
@@ -244,7 +243,7 @@ const ExcelManager = {
             const productName = row['상품명'] || row['product_name'] || row['original_title'] || '';
             const brand = row['브랜드'] || row['brand'] || '';
             const qty = parseInt(row['수량'] || row['quantity'] || 1) || 1;
-            const sellingPrice = parseFloat(row['판매가'] || row['selling_price'] || row['price'] || 0) || 0;
+            const sellingPrice = parseFloat(row['최종흥정가(위안)'] || row['최종흥정가'] || row['판매가'] || row['selling_price'] || row['price'] || 0) || 0;
 
             if (!customerName || !productName || !sellingPrice) {
                 skipped++;
