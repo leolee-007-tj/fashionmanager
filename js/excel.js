@@ -237,21 +237,65 @@ const ExcelManager = {
         const products = DB.getProducts();
         let added = 0;
         let skipped = 0;
+        let replaced = 0;
 
+        // 1단계: 업로드 데이터에서 (고객 + 브랜드 + 상품명) 키와 판매월 추출
+        const uploadedKeys = new Set();
+        const uploadMonths = new Set();
+        const normalizedRows = [];
         data.forEach((row, idx) => {
-            const customerName = row['고객명'] || row['customer_name'] || row['name'] || '';
-            const productName = row['상품명'] || row['product_name'] || row['original_title'] || '';
-            const brand = row['브랜드'] || row['brand'] || '';
-            const qty = parseInt(row['수량'] || row['quantity'] || 1) || 1;
-            const sellingPrice = parseFloat(row['최종흥정가(위안)'] || row['최종흥정가'] || row['판매가'] || row['selling_price'] || row['price'] || 0) || 0;
+            const customerName = String(row['고객명'] || row['customer_name'] || row['name'] || '').trim();
+            const productName = String(row['상품명'] || row['product_name'] || row['original_title'] || '').trim();
+            const brand = String(row['브랜드'] || row['brand'] || '').trim();
+            const dateStr = String(row['판매일'] || row['order_date'] || row['date'] || '').trim();
+            if (!customerName || !productName) {
+                skipped++;
+                return;
+            }
+            const dateObj = dateStr ? new Date(dateStr) : new Date();
+            if (!isNaN(dateObj.getTime())) {
+                uploadMonths.add(dateObj.getFullYear() + '-' + (dateObj.getMonth() + 1));
+            }
+            const key = (customerName.toLowerCase()) + '|' + (brand.toLowerCase()) + '|' + (productName.toLowerCase());
+            uploadedKeys.add(key);
+            normalizedRows.push({ idx, row, customerName, productName, brand, key });
+        });
 
-            if (!customerName || !productName || !sellingPrice) {
+        // 2단계: 같은 월의 기존 주문 중 업로드된 (고객+브랜드+상품명)과 일치하는 것은 제거
+        if (uploadMonths.size > 0 && uploadedKeys.size > 0) {
+            const beforeCount = orders.length;
+            const remaining = orders.filter(o => {
+                if (!o.order_date) return true;
+                const d = new Date(o.order_date);
+                if (isNaN(d.getTime())) return true;
+                const oMonth = d.getFullYear() + '-' + (d.getMonth() + 1);
+                if (!uploadMonths.has(oMonth)) return true;
+                const cust = customers.find(c => c.id === o.customer_id);
+                const prod = products.find(p => p.id === o.product_id);
+                const oKey = ((cust?.name || '').toLowerCase()) + '|' + ((prod?.brand || o.brand || '').toLowerCase()) + '|' + ((prod?.original_title || '').toLowerCase());
+                return !uploadedKeys.has(oKey);
+            });
+            replaced = beforeCount - remaining.length;
+            orders.length = 0;
+            orders.push(...remaining);
+        }
+
+        // 3단계: 새 주문 추가
+        normalizedRows.forEach(({ idx, row, customerName, productName, brand }) => {
+            const qty = parseInt(row['수량'] || row['quantity'] || 1) || 1;
+            const isZiLiu = /自留|자留|지留|자류|지류|自留款/i.test(customerName);
+            let sellingPrice = parseFloat(row['최종흥정가(위안)'] || row['최종흥정가'] || row['판매가'] || row['selling_price'] || row['price'] || 0) || 0;
+            // 自留(자체 보관)는 가격이 0이어도 0 그대로 보존 (스킵하지 않음)
+            if (isZiLiu) {
+                sellingPrice = sellingPrice || 0;
+            } else if (!sellingPrice) {
+                // 일반 주문은 가격이 없으면 스킵
                 skipped++;
                 return;
             }
 
             // 고객 찾기 또는 생성
-            let customer = customers.find(c => c.name === customerName);
+            let customer = customers.find(c => c.name && c.name.toLowerCase() === customerName.toLowerCase());
             if (!customer) {
                 customer = {
                     id: Date.now() + Math.random(),
@@ -280,8 +324,8 @@ const ExcelManager = {
             const profit = sellingPrice - cost;
 
             orders.push({
-                id: Date.now() + Math.random(),
-                order_number: row['주문번호'] || row['order_number'] || 'ORD-' + String(added + 1).padStart(4, '0'),
+                id: Date.now() + Math.random() + idx,
+                order_number: row['주문번호'] || row['order_number'] || 'ORD-' + String(orders.length + 1).padStart(4, '0'),
                 customer_id: customer.id,
                 product_id: productId,
                 color: row['색상'] || row['color'] || '',
@@ -296,6 +340,7 @@ const ExcelManager = {
                 actual_profit: profit * qty,
                 actual_profit_margin: sellingPrice > 0 ? Math.round((profit / sellingPrice) * 100) : 0,
                 actual_cost_ratio: sellingPrice > 0 ? Math.round((cost / sellingPrice) * 100) : 0,
+                is_zi_liu: isZiLiu,
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString()
             });
@@ -304,6 +349,7 @@ const ExcelManager = {
         DB.setCustomers(customers);
         DB.setOrders(orders);
         let msg = `${added}건 등록 완료!`;
+        if (replaced > 0) msg += ` (기존 ${replaced}건 덮어쓰기)`;
         if (skipped > 0) msg += ` (${skipped}건 스킵)`;
         App.flash(msg, 'success');
     },
