@@ -64,9 +64,9 @@ const Customers = {
                 if (!ym) return false;
                 return ym.year === this.state.year && ym.month === this.state.month;
             });
-            list = list.filter(c => orders.some(o => o.customer_id === c.id));
+            list = list.filter(c => orders.some(o => Number(o.customer_id) === Number(c.id)));
             list = list.map(c => {
-                const mOrders = orders.filter(o => o.customer_id === c.id);
+                const mOrders = orders.filter(o => Number(o.customer_id) === Number(c.id));
                 return {
                     ...c,
                     month_amount: mOrders.reduce((s, o) => s + (o.selling_price || 0) * (o.quantity || 0), 0),

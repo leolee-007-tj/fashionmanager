@@ -91,7 +91,7 @@ const ExcelManager = {
             ['김미영', 'SYSTEM', '울 니트', '35000', '2025-07-01'],
             ['이수진', 'MIXXO', '자켓', '45000', '2025-07-02'],
         ];
-        this._downloadSheet(data, '구매목록', 'template_purchases.xlsx');
+        this._downloadSheet(data, '판매목록', 'template_sales.xlsx');
     },
 
     downloadCustomerTemplate() {
@@ -351,7 +351,7 @@ const ExcelManager = {
 
             orders.push({
                 id: Date.now() + Math.random() + idx,
-                order_number: row['주문번호'] || row['order_number'] || 'PUR-' + String(orders.length + 1).padStart(4, '0'),
+                order_number: row['주문번호'] || row['order_number'] || 'SAL-' + String(orders.length + 1).padStart(4, '0'),
                 customer_id: customer.id,
                 product_id: productId,
                 brand: brand,
