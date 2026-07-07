@@ -4,6 +4,7 @@ const App = {
     pageArgs: [],
     sidebarCollapsed: false,
     classificationSelected: new Set(),
+    editingKeywordId: null,
 
     init() {
         DB.init();
@@ -427,23 +428,89 @@ const App = {
                     <th data-i18n="common.action">${t('common', 'action')}</th>
                 </tr></thead><tbody>`;
             keywords.forEach(k => {
+                const kType = k.type || k.classification_type || '';
+                const kStandard = k.standard || k.standard_value || '';
+                const isEditing = String(this.editingKeywordId) === String(k.id);
                 html += `
-                    <tr>
+                    <tr ${isEditing ? 'style="background:#eef3ff;"' : ''}>
                         <td><input type="checkbox" class="row-checkbox" data-id="${k.id}" data-target="keywords" ${this.classificationSelected.has(String(k.id)) ? 'checked' : ''}></td>
-                        <td>${k.type}</td>
-                        <td><strong>${k.standard}</strong></td>
+                        <td>${kType}</td>
+                        <td><strong>${kStandard}</strong></td>
                         <td>${(k.ko || []).join(', ')}</td>
                         <td>${(k.zh || []).join(', ')}</td>
                         <td>${(k.en || []).join(', ')}</td>
                         <td>${(k.ja || []).join(', ')}</td>
                         <td>${k.priority || 5}</td>
-                        <td><span class="badge ${k.active !== false ? 'badge-completed' : 'badge-cancelled'}">${k.active !== false ? t('classification', 'active') : t('classification', 'inactive')}</span></td>
+                        <td><span class="badge ${k.is_active !== false ? 'badge-completed' : 'badge-cancelled'}">${k.is_active !== false ? t('classification', 'active') : t('classification', 'inactive')}</span></td>
                         <td>
-                            <button class="btn btn-sm btn-secondary" onclick="App.editKeyword('${k.id}')"><i class="fas fa-edit"></i></button>
+                            <button class="btn btn-sm ${isEditing ? 'btn-warning' : 'btn-secondary'}" onclick="App.toggleEditKeyword('${k.id}')"><i class="fas fa-edit"></i></button>
                             <button class="btn btn-sm btn-danger" onclick="App.deleteKeyword('${k.id}')"><i class="fas fa-trash"></i></button>
                         </td>
                     </tr>
                 `;
+                if (isEditing) {
+                    html += `
+                        <tr style="background:#f8f9fa;">
+                            <td colspan="10">
+                                <form id="keywordEditForm_${k.id}" onsubmit="App.submitKeywordForm(event, '${k.id}')" style="padding:12px 8px;">
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>${t('classification', 'type')}</label>
+                                            <select class="form-control" name="type" required>
+                                                <option value="brand" ${kType === 'brand' ? 'selected' : ''}>Brand</option>
+                                                <option value="category" ${kType === 'category' ? 'selected' : ''}>Category</option>
+                                                <option value="color" ${kType === 'color' ? 'selected' : ''}>Color</option>
+                                                <option value="size" ${kType === 'size' ? 'selected' : ''}>Size</option>
+                                                <option value="material" ${kType === 'material' ? 'selected' : ''}>Material</option>
+                                                <option value="style" ${kType === 'style' ? 'selected' : ''}>Style</option>
+                                                <option value="pattern" ${kType === 'pattern' ? 'selected' : ''}>Pattern</option>
+                                                <option value="fit" ${kType === 'fit' ? 'selected' : ''}>Fit</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>${t('classification', 'standard')}</label>
+                                            <input type="text" class="form-control" name="standard" value="${kStandard}" required>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>${t('classification', 'priority')}</label>
+                                            <input type="number" class="form-control" name="priority" value="${k.priority || 5}" min="1" max="10">
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>${t('classification', 'ko_keywords')}</label>
+                                            <input type="text" class="form-control" name="ko" value="${(k.ko || []).join(', ')}">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>${t('classification', 'zh_keywords')}</label>
+                                            <input type="text" class="form-control" name="zh" value="${(k.zh || []).join(', ')}">
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>${t('classification', 'en_keywords')}</label>
+                                            <input type="text" class="form-control" name="en" value="${(k.en || []).join(', ')}">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>${t('classification', 'ja_keywords')}</label>
+                                            <input type="text" class="form-control" name="ja" value="${(k.ja || []).join(', ')}">
+                                        </div>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <label class="checkbox-wrapper" style="margin:0;">
+                                            <input type="checkbox" name="active" ${k.is_active !== false ? 'checked' : ''}>
+                                            <span>${t('classification', 'active')}</span>
+                                        </label>
+                                        <div class="d-flex gap-2 ml-auto">
+                                            <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-save"></i> ${t('classification', 'save_keyword')}</button>
+                                            <button type="button" class="btn btn-secondary btn-sm" onclick="App.cancelEditKeyword()">${t('common', 'cancel')}</button>
+                                        </div>
+                                    </div>
+                                </form>
+                            </td>
+                        </tr>
+                    `;
+                }
             });
             html += '</tbody></table></div>';
         }
@@ -478,7 +545,9 @@ const App = {
 
     showKeywordForm(keyword = null) {
         const isEdit = !!keyword;
-        const k = keyword || { type: 'brand', standard: '', ko: [], zh: [], en: [], ja: [], priority: 5, active: true };
+        const k = keyword || { type: 'brand', classification_type: 'brand', standard: '', standard_value: '', ko: [], zh: [], en: [], ja: [], priority: 5, is_active: true };
+        const kType = k.type || k.classification_type || 'brand';
+        const kStandard = k.standard || k.standard_value || '';
         const html = `
             <div class="card mt-3" style="background: #f8f9fa;">
                 <h4>${isEdit ? t('classification', 'edit') : t('classification', 'add_keyword')}</h4>
@@ -487,19 +556,19 @@ const App = {
                         <div class="form-group">
                             <label data-i18n="classification.type">${t('classification', 'type')}</label>
                             <select class="form-control" name="type" required>
-                                <option value="brand" ${k.type === 'brand' ? 'selected' : ''}>Brand</option>
-                                <option value="category" ${k.type === 'category' ? 'selected' : ''}>Category</option>
-                                <option value="color" ${k.type === 'color' ? 'selected' : ''}>Color</option>
-                                <option value="size" ${k.type === 'size' ? 'selected' : ''}>Size</option>
-                                <option value="material" ${k.type === 'material' ? 'selected' : ''}>Material</option>
-                                <option value="style" ${k.type === 'style' ? 'selected' : ''}>Style</option>
-                                <option value="pattern" ${k.type === 'pattern' ? 'selected' : ''}>Pattern</option>
-                                <option value="fit" ${k.type === 'fit' ? 'selected' : ''}>Fit</option>
+                                <option value="brand" ${kType === 'brand' ? 'selected' : ''}>Brand</option>
+                                <option value="category" ${kType === 'category' ? 'selected' : ''}>Category</option>
+                                <option value="color" ${kType === 'color' ? 'selected' : ''}>Color</option>
+                                <option value="size" ${kType === 'size' ? 'selected' : ''}>Size</option>
+                                <option value="material" ${kType === 'material' ? 'selected' : ''}>Material</option>
+                                <option value="style" ${kType === 'style' ? 'selected' : ''}>Style</option>
+                                <option value="pattern" ${kType === 'pattern' ? 'selected' : ''}>Pattern</option>
+                                <option value="fit" ${kType === 'fit' ? 'selected' : ''}>Fit</option>
                             </select>
                         </div>
                         <div class="form-group">
                             <label data-i18n="classification.standard">${t('classification', 'standard')}</label>
-                            <input type="text" class="form-control" name="standard" value="${k.standard || ''}" required placeholder="${t('classification', 'enter_standard')}">
+                            <input type="text" class="form-control" name="standard" value="${kStandard}" required placeholder="${t('classification', 'enter_standard')}">
                         </div>
                         <div class="form-group">
                             <label data-i18n="classification.priority">${t('classification', 'priority')}</label>
@@ -528,7 +597,7 @@ const App = {
                     </div>
                     <div class="form-group">
                         <label>
-                            <input type="checkbox" name="active" ${k.active !== false ? 'checked' : ''}>
+                            <input type="checkbox" name="active" ${k.is_active !== false ? 'checked' : ''}>
                             <span data-i18n="classification.active">${t('classification', 'active')}</span>
                         </label>
                     </div>
@@ -550,16 +619,19 @@ const App = {
         const formData = new FormData(form);
         const data = {
             type: formData.get('type'),
+            classification_type: formData.get('type'),
             standard: formData.get('standard'),
+            standard_value: formData.get('standard'),
             priority: parseInt(formData.get('priority')) || 5,
-            active: form.querySelector('[name="active"]').checked,
+            is_active: form.querySelector('[name="active"]').checked,
             ko: (formData.get('ko') || '').split(',').map(s => s.trim()).filter(Boolean),
             zh: (formData.get('zh') || '').split(',').map(s => s.trim()).filter(Boolean),
             en: (formData.get('en') || '').split(',').map(s => s.trim()).filter(Boolean),
             ja: (formData.get('ja') || '').split(',').map(s => s.trim()).filter(Boolean),
         };
         if (editId) {
-            DB.updateKeyword(editId, data);
+            DB.updateKeyword(Number(editId), data);
+            this.editingKeywordId = null;
         } else {
             DB.addKeyword(data);
         }
@@ -567,9 +639,18 @@ const App = {
         this.render();
     },
 
-    editKeyword(id) {
-        const k = DB.getKeywords().find(x => String(x.id) === String(id));
-        if (k) this.showKeywordForm(k);
+    toggleEditKeyword(id) {
+        if (String(this.editingKeywordId) === String(id)) {
+            this.editingKeywordId = null;
+        } else {
+            this.editingKeywordId = Number(id);
+        }
+        App.renderPage();
+    },
+
+    cancelEditKeyword() {
+        this.editingKeywordId = null;
+        App.renderPage();
     },
 
     deleteKeyword(id) {

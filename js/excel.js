@@ -52,7 +52,7 @@ const ExcelManager = {
                     <p>${t('excel', 'guide_text')}</p>
                     <ul>
                         <li><strong>${t('excel', 'import_products')}</strong>: 브랜드, 상품명, 한국원가(또는 한국매입원가/원가), 입고월(선택), 현재재고(선택), 색상(선택), 사이즈(선택)</li>
-                        <li><strong>${t('excel', 'import_orders')}</strong>: 고객명, 상품명, 브랜드, 수량, 판매가, 판매일(선택), 택배사(선택), 운송장번호(선택)</li>
+                        <li><strong>${t('excel', 'import_orders')}</strong>: 고객명, 브랜드, 상품명, 최종흥정가(위안), 판매일</li>
                         <li><strong>${t('excel', 'import_customers')}</strong>: 이름, 전화번호(선택), 주소(선택), 메모(선택)</li>
                         <li><strong>${t('excel', 'import_keywords')}</strong>: 타입(brand/category/color/size/material), 키워드, 대체어(선택)</li>
                     </ul>
@@ -87,11 +87,11 @@ const ExcelManager = {
 
     downloadOrderTemplate() {
         const data = [
-            ['고객명', '브랜드', '상품명', '색상', '사이즈', '수량', '최종흥정가(위안)', '판매일'],
-            ['김미영', 'SYSTEM', '울 니트', 'CREAM', 'FREE', '2', '35000', '2025-07-01'],
-            ['이수진', 'MIXXO', '자켓', 'BLACK', 'M', '1', '45000', '2025-07-02'],
+            ['고객명', '브랜드', '상품명', '최종흥정가(위안)', '판매일'],
+            ['김미영', 'SYSTEM', '울 니트', '35000', '2025-07-01'],
+            ['이수진', 'MIXXO', '자켓', '45000', '2025-07-02'],
         ];
-        this._downloadSheet(data, '주문목록', 'template_orders.xlsx');
+        this._downloadSheet(data, '구매목록', 'template_purchases.xlsx');
     },
 
     downloadCustomerTemplate() {
@@ -282,7 +282,6 @@ const ExcelManager = {
 
         // 3단계: 새 주문 추가
         normalizedRows.forEach(({ idx, row, customerName, productName, brand }) => {
-            const qty = parseInt(row['수량'] || row['quantity'] || 1) || 1;
             const isZiLiu = /自留|자留|지留|자류|지류|自留款/i.test(customerName);
             let sellingPrice = parseFloat(row['최종흥정가(위안)'] || row['최종흥정가'] || row['판매가'] || row['selling_price'] || row['price'] || 0) || 0;
             // 최종판매가가 0원이어도 스킵하지 않고 그대로 저장
@@ -321,19 +320,20 @@ const ExcelManager = {
 
             orders.push({
                 id: Date.now() + Math.random() + idx,
-                order_number: row['주문번호'] || row['order_number'] || 'ORD-' + String(orders.length + 1).padStart(4, '0'),
+                order_number: row['주문번호'] || row['order_number'] || 'PUR-' + String(orders.length + 1).padStart(4, '0'),
                 customer_id: customer.id,
                 product_id: productId,
-                color: row['색상'] || row['color'] || '',
-                size: row['사이즈'] || row['size'] || '',
-                quantity: qty,
+                brand: brand,
+                color: '',
+                size: '',
+                quantity: 1,
                 selling_price: sellingPrice,
                 order_date: row['판매일'] || row['order_date'] || row['date'] || new Date().toISOString().slice(0, 10),
                 ship_date: row['출고일'] || row['ship_date'] || null,
                 shipping_company: row['택배사'] || row['shipping_company'] || '',
                 tracking_number: row['운송장번호'] || row['tracking_number'] || '',
                 status: 'COMPLETED',
-                actual_profit: profit * qty,
+                actual_profit: profit,
                 actual_profit_margin: sellingPrice > 0 ? Math.round((profit / sellingPrice) * 100) : 0,
                 actual_cost_ratio: sellingPrice > 0 ? Math.round((cost / sellingPrice) * 100) : 0,
                 is_zi_liu: isZiLiu,

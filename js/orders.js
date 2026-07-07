@@ -112,11 +112,6 @@ const Orders = {
                             <th>${t('orders', 'customer')}</th>
                             <th>${t('products', 'brand')}</th>
                             <th>${t('orders', 'product')}</th>
-                            <th>${t('products', 'color')}/${t('products', 'size')}</th>
-                            <th onclick="Orders.sort('quantity')" class="${this.state.sortBy === 'quantity' ? 'sort-active' : ''}">
-                                ${t('orders', 'quantity')}
-                                <i class="fas fa-sort-${this.state.sortOrder === 'asc' ? 'up' : 'down'}"></i>
-                            </th>
                             <th onclick="Orders.sort('selling_price')" class="${this.state.sortBy === 'selling_price' ? 'sort-active' : ''}">
                                 ${t('orders', 'selling_price')}
                                 <i class="fas fa-sort-${this.state.sortOrder === 'asc' ? 'up' : 'down'}"></i>
@@ -137,8 +132,6 @@ const Orders = {
                         <td>${customer ? customer.name : '-'}</td>
                         <td>${product ? product.brand : '-'}</td>
                         <td>${product ? product.original_title : '-'}</td>
-                        <td>${o.color || '-'} / ${o.size || '-'}</td>
-                        <td>${o.quantity}</td>
                         <td class="font-bold">${(o.selling_price || 0).toLocaleString()} ${t('common', 'currency')}</td>
                     </tr>
                 `;
