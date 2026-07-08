@@ -216,7 +216,8 @@ const Analytics = {
 
                 <h3 class="mb-3"><i class="fas fa-calendar-alt"></i> ${year}${t('common', 'year_suffix')} ${t('analytics', 'annual')}</h3>
 
-                <!-- 연간 요약 카드 (5개) -->
+                <!-- 연간 요약 카드 (2줄 배치) -->
+                <!-- 첫째 줄: 매출액 / 매출이익 / 순이익 -->
                 <div class="form-row" style="gap:0.75rem;">
                     <div class="form-group" style="flex:1;">
                         <div class="info-box" style="background:#e3f2fd; text-align:center; padding:1rem; border-radius:8px;">
@@ -227,17 +228,6 @@ const Analytics = {
                                 <strong>${fmtKR(annualStats.total_revenue)} ${currencyKR}</strong>
                             </p>
                             <p style="color:#666; margin:0.25rem 0 0; font-size:12px;">${annualStats.order_count}${t('common', 'count_suffix')} / ${annualStats.total_quantity}개</p>
-                        </div>
-                    </div>
-                    <div class="form-group" style="flex:1;">
-                        <div class="info-box" style="background:#fff3e0; text-align:center; padding:1rem; border-radius:8px;">
-                            <h4 style="color:#e65100; margin-bottom:0.5rem;">${t('analytics', 'cost')}</h4>
-                            <h2 style="color:#e65100; margin:0;">${fmtCN(annualStats.total_cost)} ${currency}</h2>
-                            <p style="color:#666; margin:0.5rem 0 0; font-size:13px;">
-                                <span style="color:#888;">${t('analytics', 'korea_price')}: </span>
-                                <strong>${fmtKR(annualStats.total_cost)} ${currencyKR}</strong>
-                            </p>
-                            <p style="color:#666; margin:0.25rem 0 0; font-size:12px;">${t('analytics', 'cost_ratio')}: ${fmtPct(annualStats.cost_ratio)}%</p>
                         </div>
                     </div>
                     <div class="form-group" style="flex:1;">
@@ -252,6 +242,31 @@ const Analytics = {
                         </div>
                     </div>
                     <div class="form-group" style="flex:1;">
+                        <div class="info-box" style="background:#f3e5f5; text-align:center; padding:1rem; border-radius:8px;">
+                            <h4 style="color:#6a1b9a; margin-bottom:0.5rem;">${t('analytics', 'net_profit')}</h4>
+                            <h2 style="color:${annualStats.net_profit >= 0 ? '#2e7d32' : '#c62828'}; margin:0;">${fmtCN(annualStats.net_profit)} ${currency}</h2>
+                            <p style="color:#666; margin:0.5rem 0 0; font-size:13px;">
+                                <span style="color:#888;">${t('analytics', 'korea_price')}: </span>
+                                <strong style="color:${annualStats.net_profit >= 0 ? '#2e7d32' : '#c62828'};">${fmtKR(annualStats.net_profit)} ${currencyKR}</strong>
+                            </p>
+                            <p style="color:#666; margin:0.25rem 0 0; font-size:12px;">${t('analytics', 'profit')} - ${t('analytics', 'expense')}</p>
+                        </div>
+                    </div>
+                </div>
+                <!-- 둘째 줄: 원가 / 경비 -->
+                <div class="form-row" style="gap:0.75rem; margin-top:0.75rem;">
+                    <div class="form-group" style="flex:1;">
+                        <div class="info-box" style="background:#fff3e0; text-align:center; padding:1rem; border-radius:8px;">
+                            <h4 style="color:#e65100; margin-bottom:0.5rem;">${t('analytics', 'cost')}</h4>
+                            <h2 style="color:#e65100; margin:0;">${fmtCN(annualStats.total_cost)} ${currency}</h2>
+                            <p style="color:#666; margin:0.5rem 0 0; font-size:13px;">
+                                <span style="color:#888;">${t('analytics', 'korea_price')}: </span>
+                                <strong>${fmtKR(annualStats.total_cost)} ${currencyKR}</strong>
+                            </p>
+                            <p style="color:#666; margin:0.25rem 0 0; font-size:12px;">${t('analytics', 'cost_ratio')}: ${fmtPct(annualStats.cost_ratio)}%</p>
+                        </div>
+                    </div>
+                    <div class="form-group" style="flex:1;">
                         <div class="info-box" style="background:#fce4ec; text-align:center; padding:1rem; border-radius:8px;">
                             <h4 style="color:#c2185b; margin-bottom:0.5rem;">${t('analytics', 'expense')}</h4>
                             <h2 style="color:#c2185b; margin:0;">${fmtCN(annualStats.total_expense)} ${currency}</h2>
@@ -263,14 +278,11 @@ const Analytics = {
                         </div>
                     </div>
                     <div class="form-group" style="flex:1;">
-                        <div class="info-box" style="background:#f3e5f5; text-align:center; padding:1rem; border-radius:8px;">
-                            <h4 style="color:#6a1b9a; margin-bottom:0.5rem;">${t('analytics', 'net_profit')}</h4>
-                            <h2 style="color:${annualStats.net_profit >= 0 ? '#2e7d32' : '#c62828'}; margin:0;">${fmtCN(annualStats.net_profit)} ${currency}</h2>
-                            <p style="color:#666; margin:0.5rem 0 0; font-size:13px;">
-                                <span style="color:#888;">${t('analytics', 'korea_price')}: </span>
-                                <strong style="color:${annualStats.net_profit >= 0 ? '#2e7d32' : '#c62828'};">${fmtKR(annualStats.net_profit)} ${currencyKR}</strong>
-                            </p>
-                            <p style="color:#666; margin:0.25rem 0 0; font-size:12px;">${t('analytics', 'profit')} - ${t('analytics', 'expense')}</p>
+                        <!-- 빈 카드(레이아웃 균형용) -->
+                        <div class="info-box" style="background:#f8f9fa; text-align:center; padding:1rem; border-radius:8px; color:#999;">
+                            <h4 style="color:#999; margin-bottom:0.5rem;">${t('analytics', 'expense')}</h4>
+                            <h2 style="color:#999; margin:0;">-</h2>
+                            <p style="margin:0.5rem 0 0; font-size:12px;">&nbsp;</p>
                         </div>
                     </div>
                 </div>
