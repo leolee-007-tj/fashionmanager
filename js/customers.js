@@ -8,7 +8,8 @@ const Customers = {
         year: 2025,
         month: null,
         selected: new Set(),
-        editingCustomerId: null
+        editingCustomerId: null,
+        detailSortOrder: 'desc' // desc: 최신순, asc: 오름차순
     },
 
     load() {
@@ -278,9 +279,10 @@ const Customers = {
                 </div>
             </div>
 
-            <!-- 월별 TOP 3 고객 -->
+            <!-- 월별 TOP 3 고객 (월 필터 선택 시만 표시) -->
+            ${this.state.month ? `
             <div class="card mb-4" style="background: linear-gradient(135deg, rgba(102,126,234,0.05), rgba(118,75,162,0.05));">
-                <h3><i class="fas fa-trophy" style="color:#FFD700;"></i> ${this.state.year}${t('common', 'year_suffix')} ${currentMonth}${t('common', 'month_suffix')} ${t('customers', 'monthly_top3')} <span class="badge badge-info" style="margin-left:8px;">TOP 3</span></h3>
+                <h3><i class="fas fa-trophy" style="color:#FFD700;"></i> ${this.state.year}${t('common', 'year_suffix')} ${this.state.month}${t('common', 'month_suffix')} ${t('customers', 'monthly_top3')} <span class="badge badge-info" style="margin-left:8px;">TOP 3</span></h3>
                 <div style="display:flex; gap:1rem; flex-wrap:wrap; margin-top:1rem;">
                     ${monthTop.length === 0 ? `<p class="text-muted">${t('common', 'no_data')}</p>` :
                         monthTop.map((item, i) => `
@@ -290,21 +292,23 @@ const Customers = {
                                 </div>
                                 <div style="flex:1;">
                                     <div style="font-weight:bold; font-size:1.05rem;">${item.customer.name}</div>
-                                    <div style="color:#667eea; font-weight:bold;">${item.amount.toLocaleString()} ${t('common', 'currency')}</div>
+                                    <div style="color:#667eea; font-weight:bold;">${fmtCN(item.amount)} ${currency}</div>
+                                    <div style="color:#999; font-size:0.75rem;">≈ ${fmtKR(item.amount)} ${currencyKR}</div>
                                 </div>
                             </div>
                         `).join('')}
                 </div>
             </div>
+            ` : ''}
 
-            <!-- 분기별 TOP 2 고객 -->
+            <!-- 분기별 TOP 2 고객 (데이터 있는 분기만 표시) -->
             <div class="card mb-4" style="background: linear-gradient(135deg, rgba(118,75,162,0.05), rgba(237,30,121,0.05));">
                 <h3><i class="fas fa-medal" style="color:#ED1E79;"></i> ${this.state.year}${t('common', 'year_suffix')} ${t('customers', 'quarterly_top2')} <span class="badge badge-warning" style="margin-left:8px;">TOP 2</span></h3>
                 <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:1rem; margin-top:1rem;">
-                    ${this._renderQuarterCard(1, 3, q3, rankBadge)}
-                    ${this._renderQuarterCard(4, 6, q6, rankBadge)}
-                    ${this._renderQuarterCard(7, 9, q9, rankBadge)}
-                    ${this._renderQuarterCard(10, 12, q12, rankBadge)}
+                    ${this._renderQuarterCard(1, 3, q3, rankBadge, fmtCN, fmtKR, currency, currencyKR)}
+                    ${this._renderQuarterCard(4, 6, q6, rankBadge, fmtCN, fmtKR, currency, currencyKR)}
+                    ${this._renderQuarterCard(7, 9, q9, rankBadge, fmtCN, fmtKR, currency, currencyKR)}
+                    ${this._renderQuarterCard(10, 12, q12, rankBadge, fmtCN, fmtKR, currency, currencyKR)}
                 </div>
             </div>
 
@@ -419,7 +423,7 @@ const Customers = {
         return html;
     },
 
-    _renderQuarterCard(startMonth, endMonth, topList, rankBadge) {
+    _renderQuarterCard(startMonth, endMonth, topList, rankBadge, fmtCN, fmtKR, currency, currencyKR) {
         const quarterNum = Math.ceil(endMonth / 3);
         return `
             <div style="background:#fff; border-radius:12px; padding:1rem; box-shadow:0 2px 8px rgba(0,0,0,0.06);">
@@ -434,7 +438,8 @@ const Customers = {
                             </div>
                             <div style="flex:1; min-width:0;">
                                 <div style="font-weight:600; font-size:0.95rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${item.customer.name}</div>
-                                <div style="color:#666; font-size:0.85rem;">${item.amount.toLocaleString()} ${t('common', 'currency')}</div>
+                                <div style="color:#667eea; font-size:0.85rem;">${fmtCN(item.amount)} ${currency}</div>
+                                <div style="color:#999; font-size:0.75rem;">≈ ${fmtKR(item.amount)} ${currencyKR}</div>
                             </div>
                         </div>
                     `).join('')}
@@ -617,36 +622,33 @@ const Customers = {
 
         const brandCounts = {};
         const categoryCounts = {};
-        const monthGroups = {};
         completedOrders.forEach(o => {
             const p = products.find(pr => pr.id === o.product_id);
             const brand = p ? p.brand : (o.brand || '-');
-            const category = p ? p.category : '-';
             const qty = o.quantity || 1;
             brandCounts[brand] = (brandCounts[brand] || 0) + qty;
-            if (category) categoryCounts[category] = (categoryCounts[category] || 0) + qty;
             
-            let monthKey = '';
-            if (o.order_date) {
-                const d = new Date(o.order_date);
-                if (!isNaN(d.getTime())) {
-                    monthKey = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}`;
+            // 카테고리 추출: 상품 category가 있으면 사용, 없으면 분류키워드로 검색
+            let category = '-';
+            if (p && p.category) {
+                category = p.category;
+            } else if (p && p.original_title) {
+                const classifyResult = ClassificationService.classify(p.original_title);
+                if (classifyResult && classifyResult.category) {
+                    category = classifyResult.category;
+                }
+            } else if (o.product_name) {
+                const classifyResult = ClassificationService.classify(o.product_name);
+                if (classifyResult && classifyResult.category) {
+                    category = classifyResult.category;
                 }
             }
-            if (!monthKey && o.created_at) {
-                const d = new Date(o.created_at);
-                if (!isNaN(d.getTime())) {
-                    monthKey = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}`;
-                }
-            }
-            if (monthKey && monthKey !== '1970.01') {
-                if (!monthGroups[monthKey]) monthGroups[monthKey] = [];
-                monthGroups[monthKey].push({ product: p ? p.original_title : '-', brand: brand, category: category, qty: qty });
+            if (category && category !== '-') {
+                categoryCounts[category] = (categoryCounts[category] || 0) + qty;
             }
         });
         const topBrands = Object.entries(brandCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
         const topCategories = Object.entries(categoryCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
-        const sortedMonths = Object.keys(monthGroups).sort();
 
         const avatar = customer.avatar_url || '';
         const liveRate = Analytics.state.liveExchangeRate || 195;
@@ -660,8 +662,14 @@ const Customers = {
                 <div class="action-bar">
                     <div class="action-bar-left">
                         <div style="display:flex; align-items:center; gap:1rem;">
-                            <div style="width:60px; height:60px; border-radius:50%; background:linear-gradient(135deg,#667eea,#764ba2); display:flex; align-items:center; justify-content:center; color:#fff; font-size:1.5rem; font-weight:bold; overflow:hidden; box-shadow:0 4px 12px rgba(102,126,234,0.4);">
-                                ${avatar ? `<img src="${avatar}" style="width:100%; height:100%; object-fit:cover;">` : (customer.name || '?').charAt(0)}
+                            <div style="position:relative; width:60px; height:60px;">
+                                <div style="width:60px; height:60px; border-radius:50%; background:linear-gradient(135deg,#667eea,#764ba2); display:flex; align-items:center; justify-content:center; color:#fff; font-size:1.5rem; font-weight:bold; overflow:hidden; box-shadow:0 4px 12px rgba(102,126,234,0.4);">
+                                    ${avatar ? `<img src="${avatar}" style="width:100%; height:100%; object-fit:cover;" id="customerAvatarImg">` : `<span id="customerAvatarImg">${(customer.name || '?').charAt(0)}</span>`}
+                                </div>
+                                <button onclick="Customers.showAvatarUpload('${customer.id}')" style="position:absolute; bottom:-5px; right:-5px; width:24px; height:24px; border-radius:50%; background:#667eea; border:2px solid #fff; color:#fff; font-size:0.7rem; cursor:pointer; display:flex; align-items:center; justify-content:center;">
+                                    <i class="fas fa-camera"></i>
+                                </button>
+                                <input type="file" id="avatarUpload_${customer.id}" accept="image/*" style="display:none;" onchange="Customers.handleDetailAvatarChange(event, '${customer.id}')">
                             </div>
                             <div>
                                 <h2 style="margin:0;">${customer.name || '-'}</h2>
@@ -743,23 +751,6 @@ const Customers = {
             </div>
 
             <div class="card mt-4">
-                <h3><i class="fas fa-calendar-alt"></i> ${t('customers', 'monthly_purchase_history') || '월별 구매 내역'}</h3>
-                ${sortedMonths.length === 0 ? `<p class="text-muted">${t('common', 'no_data')}</p>` :
-                    sortedMonths.map(m => `
-                        <div style="margin-bottom:1rem;">
-                            <h4 style="color:#667eea; margin-bottom:0.5rem;">${m}</h4>
-                            <div class="d-flex flex-wrap gap-2">
-                                ${monthGroups[m].map(item => `
-                                    <span class="badge badge-secondary" style="font-size:0.85rem; padding:0.4rem 0.7rem;">
-                                        ${item.brand} ${item.product} ${item.qty}${t('dashboard', 'items')}
-                                    </span>
-                                `).join('')}
-                            </div>
-                        </div>
-                    `).join('')}
-            </div>
-
-            <div class="card mt-4">
                 <h3><i class="fas fa-history"></i> ${t('orders', 'title')} ${t('common', 'history')}</h3>
         `;
         if (orders.length === 0) {
@@ -771,7 +762,10 @@ const Customers = {
                 <table class="table">
                     <thead>
                         <tr>
-                            <th>${t('orders', 'sale_date')}</th>
+                            <th onclick="Customers.toggleDetailSort()" style="cursor:pointer;">
+                                ${t('orders', 'sale_date')}
+                                <i class="fas fa-sort-${this.state.detailSortOrder === 'desc' ? 'down' : 'up'}" style="margin-left:4px;"></i>
+                            </th>
                             <th>${t('orders', 'brand')}</th>
                             <th>${t('orders', 'product')}</th>
                             <th>${t('orders', 'quantity')}</th>
@@ -781,7 +775,18 @@ const Customers = {
                     </thead>
                     <tbody>
             `;
-            orders.forEach(o => {
+            // 정렬 방향에 따라 orders 정렬
+            const sortedOrders = [...orders].sort((a, b) => {
+                const aDate = new Date(a.order_date || a.created_at);
+                const bDate = new Date(b.order_date || b.created_at);
+                if (isNaN(aDate.getTime())) return 1;
+                if (isNaN(bDate.getTime())) return -1;
+                if (this.state.detailSortOrder === 'desc') {
+                    return bDate - aDate;
+                }
+                return aDate - bDate;
+            });
+            sortedOrders.forEach(o => {
                 const product = products.find(p => p.id === o.product_id);
                 const brand = product ? product.brand : (o.brand || '-');
                 const orderDate = o.order_date ? o.order_date : (o.created_at ? new Date(o.created_at).toISOString().slice(0, 10) : '-');
@@ -800,6 +805,31 @@ const Customers = {
         }
         html += '</div>';
         return html;
+    },
+
+    toggleDetailSort() {
+        this.state.detailSortOrder = this.state.detailSortOrder === 'desc' ? 'asc' : 'desc';
+        App.renderPage();
+    },
+
+    showAvatarUpload(id) {
+        document.getElementById('avatarUpload_' + id).click();
+    },
+
+    handleDetailAvatarChange(event, id) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const dataUrl = e.target.result;
+            DB.updateCustomer(Number(id), { avatar_url: dataUrl });
+            const img = document.getElementById('customerAvatarImg');
+            if (img) {
+                img.innerHTML = `<img src="${dataUrl}" style="width:100%; height:100%; object-fit:cover;">`;
+            }
+            App.flash(t('common', 'save') + '!', 'success');
+        };
+        reader.readAsDataURL(file);
     },
 
     renderAdd() {
