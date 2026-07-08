@@ -5,7 +5,7 @@ const Customers = {
         search: '',
         sortBy: 'total_amount',
         sortOrder: 'desc',
-        year: 2025,
+        year: 2026,
         month: null,
         selected: new Set(),
         editingCustomerId: null,
