@@ -157,7 +157,12 @@ const Customers = {
         
         const amountByName = {};
         orders.forEach(o => {
-            const name = (o.customer_name || '').toLowerCase().trim();
+            let name = (o.customer_name || '').toLowerCase().trim();
+            // customer_name이 없으면 customer_id로 고객 찾기
+            if (!name && o.customer_id) {
+                const c = customers.find(x => String(x.id) === String(o.customer_id));
+                if (c) name = (c.name || '').toLowerCase().trim();
+            }
             if (!name) return;
             amountByName[name] = (amountByName[name] || 0) + (o.selling_price || 0) * (o.quantity || 0);
         });
@@ -185,7 +190,12 @@ const Customers = {
         
         const amountByName = {};
         orders.forEach(o => {
-            const name = (o.customer_name || '').toLowerCase().trim();
+            let name = (o.customer_name || '').toLowerCase().trim();
+            // customer_name이 없으면 customer_id로 고객 찾기
+            if (!name && o.customer_id) {
+                const c = customers.find(x => String(x.id) === String(o.customer_id));
+                if (c) name = (c.name || '').toLowerCase().trim();
+            }
             if (!name) return;
             amountByName[name] = (amountByName[name] || 0) + (o.selling_price || 0) * (o.quantity || 0);
         });
@@ -823,9 +833,13 @@ const Customers = {
         reader.onload = (e) => {
             const dataUrl = e.target.result;
             DB.updateCustomer(Number(id), { avatar_url: dataUrl });
-            const img = document.getElementById('customerAvatarImg');
-            if (img) {
-                img.innerHTML = `<img src="${dataUrl}" style="width:100%; height:100%; object-fit:cover;">`;
+            const avatarEl = document.getElementById('customerAvatarImg');
+            if (avatarEl) {
+                if (avatarEl.tagName === 'IMG') {
+                    avatarEl.src = dataUrl;
+                } else {
+                    avatarEl.innerHTML = `<img src="${dataUrl}" style="width:100%; height:100%; object-fit:cover;" id="customerAvatarImg">`;
+                }
             }
             App.flash(t('common', 'save') + '!', 'success');
         };

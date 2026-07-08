@@ -356,6 +356,7 @@ const ExcelManager = {
                 id: nextOrderId++,
                 order_number: row['주문번호'] || row['order_number'] || 'SAL-' + String(orders.length + 1).padStart(4, '0'),
                 customer_id: customer.id,
+                customer_name: customer.name,
                 product_id: productId,
                 brand: brand,
                 color: '',

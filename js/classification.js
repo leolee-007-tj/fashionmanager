@@ -90,14 +90,19 @@ const ClassificationService = {
         const lowerTitle = title.toLowerCase();
         const sorted = keywords.sort((a, b) => a.priority - b.priority);
         for (const kw of sorted) {
+            const toList = (val) => {
+                if (Array.isArray(val)) return val;
+                if (typeof val === 'string') return val.split(',');
+                return [];
+            };
             const allKeywords = [
-                ...(kw.ko_keywords || kw.ko || '').split(','),
-                ...(kw.zh_keywords || kw.zh || '').split(','),
-                ...(kw.en_keywords || kw.en || '').split(','),
-                ...(kw.ja_keywords || kw.ja || '').split(','),
-                ...(kw.other_aliases || '').split(','),
+                ...toList(kw.ko_keywords || kw.ko),
+                ...toList(kw.zh_keywords || kw.zh),
+                ...toList(kw.en_keywords || kw.en),
+                ...toList(kw.ja_keywords || kw.ja),
+                ...toList(kw.other_aliases),
                 kw.standard_value
-            ].filter(k => k.trim().length > 0).map(k => k.trim().toLowerCase());
+            ].filter(k => k && String(k).trim().length > 0).map(k => String(k).trim().toLowerCase());
             for (const word of allKeywords) {
                 if (word && lowerTitle.includes(word)) {
                     return kw;
