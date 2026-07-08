@@ -17,11 +17,35 @@ const Orders = {
     _extractYearMonth(dateStr) {
         if (!dateStr) return null;
         const s = String(dateStr).trim();
+        // 엑셀 일련번호 처리 (예: 45682)
+        if (/^\d{4,5}$/.test(s) && Number(s) > 30000 && Number(s) < 70000) {
+            const serial = Number(s);
+            const utcDays = Math.floor(serial - 25569);
+            const d = new Date(utcDays * 86400 * 1000);
+            if (!isNaN(d.getTime())) return { year: d.getFullYear(), month: d.getMonth() + 1 };
+        }
         const m = s.match(/(\d{4})[\.\-\/年](\d{1,2})/);
         if (m) return { year: Number(m[1]), month: Number(m[2]) };
         const d = new Date(s);
         if (!isNaN(d.getTime())) return { year: d.getFullYear(), month: d.getMonth() + 1 };
         return null;
+    },
+
+    _formatOrderDate(val) {
+        if (!val) return '';
+        const s = String(val).trim();
+        // 엑셀 일련번호 처리
+        if (/^\d{4,5}$/.test(s) && Number(s) > 30000 && Number(s) < 70000) {
+            const serial = Number(s);
+            const utcDays = Math.floor(serial - 25569);
+            const d = new Date(utcDays * 86400 * 1000);
+            if (!isNaN(d.getTime())) return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        }
+        const d = new Date(val);
+        if (!isNaN(d.getTime())) return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        const m = s.match(/(\d{4})[\.\-\/年](\d{1,2})[\.\-\/月](\d{1,2})/);
+        if (m) return m[1] + '-' + m[2].padStart(2, '0') + '-' + m[3].padStart(2, '0');
+        return s;
     },
 
     applyFilters() {
@@ -37,8 +61,10 @@ const Orders = {
             let av = a[this.state.sortBy];
             let bv = b[this.state.sortBy];
             if (this.state.sortBy === 'order_date') {
-                av = new Date(a.order_date || a.created_at);
-                bv = new Date(b.order_date || b.created_at);
+                av = this._extractYearMonth(a.order_date || a.created_at);
+                bv = this._extractYearMonth(b.order_date || b.created_at);
+                if (av && bv) { av = av.year * 100 + av.month; bv = bv.year * 100 + bv.month; }
+                else { av = 0; bv = 0; }
             }
             if (this.state.sortOrder === 'asc') {
                 return av > bv ? 1 : -1;
@@ -139,7 +165,7 @@ const Orders = {
                 html += `
                     <tr>
                         <td><input type="checkbox" class="row-checkbox" data-id="${o.id}" data-target="orders" ${this.state.selected.has(Number(o.id)) ? 'checked' : ''}></td>
-                        <td>${o.order_date || new Date(o.created_at).toISOString().slice(0, 10)}</td>
+                        <td>${this._formatOrderDate(o.order_date) || this._formatOrderDate(o.created_at) || '-'}</td>
                         <td>${customer ? customer.name : '-'}</td>
                         <td>${product ? product.brand : '-'}</td>
                         <td>${product ? product.original_title : '-'}</td>

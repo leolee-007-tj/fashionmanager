@@ -787,10 +787,10 @@ const Customers = {
             `;
             // 정렬 방향에 따라 orders 정렬
             const sortedOrders = [...orders].sort((a, b) => {
-                const aDate = new Date(a.order_date || a.created_at);
-                const bDate = new Date(b.order_date || b.created_at);
-                if (isNaN(aDate.getTime())) return 1;
-                if (isNaN(bDate.getTime())) return -1;
+                const aDate = this._parseOrderDate(a.order_date || a.created_at);
+                const bDate = this._parseOrderDate(b.order_date || b.created_at);
+                if (!aDate) return 1;
+                if (!bDate) return -1;
                 if (this.state.detailSortOrder === 'desc') {
                     return bDate - aDate;
                 }
@@ -799,7 +799,7 @@ const Customers = {
             sortedOrders.forEach(o => {
                 const product = products.find(p => p.id === o.product_id);
                 const brand = product ? product.brand : (o.brand || '-');
-                const orderDate = o.order_date ? o.order_date : (o.created_at ? new Date(o.created_at).toISOString().slice(0, 10) : '-');
+                const orderDate = this._formatOrderDate(o.order_date) || (o.created_at ? this._formatOrderDate(o.created_at) : '-');
                 html += `
                     <tr>
                         <td>${orderDate}</td>
@@ -844,6 +844,29 @@ const Customers = {
             App.flash(t('common', 'save') + '!', 'success');
         };
         reader.readAsDataURL(file);
+    },
+
+    _parseOrderDate(val) {
+        if (!val) return null;
+        // 엑셀 일련번호 (예: 45682)
+        if (typeof val === 'number' || (/^\d{4,5}$/.test(String(val)) && Number(val) > 30000 && Number(val) < 70000)) {
+            const serial = Number(val);
+            const utcDays = Math.floor(serial - 25569);
+            const utcValue = utcDays * 86400;
+            return new Date(utcValue * 1000);
+        }
+        const d = new Date(val);
+        if (!isNaN(d.getTime())) return d;
+        // yyyy.mm.dd or yyyy/mm/dd
+        const m = String(val).match(/(\d{4})[\.\-\/年](\d{1,2})[\.\-\/月](\d{1,2})/);
+        if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+        return null;
+    },
+
+    _formatOrderDate(val) {
+        const d = this._parseOrderDate(val);
+        if (!d || isNaN(d.getTime())) return String(val || '');
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     },
 
     renderAdd() {
