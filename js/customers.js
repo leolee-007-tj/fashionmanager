@@ -150,52 +150,24 @@ const Customers = {
     getMonthTopCustomers(year, month, count = 3) {
         const orders = DB.getOrders().filter(o => {
             const d = new Date(o.order_date || o.created_at);
-            return d.getFullYear() === year && (d.getMonth() + 1) === month && (o.status === 'SHIPPED' || o.status === 'COMPLETED');
-        });
-        const products = DB.getProducts();
-        const _getOrderCost = (o) => {
-            const p = products.find(pr => pr.id === o.product_id);
-            if (o.actual_converted_cost_at_sale !== null && o.actual_converted_cost_at_sale !== undefined) {
-                return o.actual_converted_cost_at_sale;
-            }
-            if (o.china_cost_at_sale !== null && o.china_cost_at_sale !== undefined) {
-                return o.china_cost_at_sale;
-            }
-            if (p) {
-                if (p.actual_converted_cost !== null && p.actual_converted_cost !== undefined) {
-                    return p.actual_converted_cost;
-                }
-                if (p.china_base_price !== null && p.china_base_price !== undefined) {
-                    return p.china_base_price;
-                }
-            }
-            return 0;
-        };
-        const amountByCustomer = {};
-        orders.forEach(o => {
-            const cid = String(o.customer_id) + '|' + (o.customer_name || '').toLowerCase();
-            const nameKey = (o.customer_name || '').toLowerCase();
-            let found = false;
-            for (const key of Object.keys(amountByCustomer)) {
-                if (key.includes(nameKey) || nameKey.includes(key.split('|')[1] || '')) {
-                    amountByCustomer[key] += (o.selling_price || 0) * (o.quantity || 0);
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                amountByCustomer[cid] = (o.selling_price || 0) * (o.quantity || 0);
-            }
+            return !isNaN(d.getTime()) && d.getFullYear() === year && (d.getMonth() + 1) === month && (o.status === 'SHIPPED' || o.status === 'COMPLETED');
         });
         const customers = DB.getCustomers();
-        return Object.entries(amountByCustomer)
+        
+        const amountByName = {};
+        orders.forEach(o => {
+            const name = (o.customer_name || '').toLowerCase().trim();
+            if (!name) return;
+            amountByName[name] = (amountByName[name] || 0) + (o.selling_price || 0) * (o.quantity || 0);
+        });
+        
+        return Object.entries(amountByName)
             .sort((a, b) => b[1] - a[1])
             .slice(0, count)
-            .map(([cid, amount]) => {
-                const namePart = cid.split('|')[1] || '';
-                const c = customers.find(x => (x.name || '').toLowerCase() === namePart);
+            .map(([nameLower, amount]) => {
+                const c = customers.find(x => (x.name || '').toLowerCase().trim() === nameLower);
                 if (!c) {
-                    return { customer: { id: 0, name: namePart }, amount: amount };
+                    return { customer: { id: 0, name: nameLower }, amount: amount };
                 }
                 return { customer: c, amount: amount };
             })
@@ -206,52 +178,24 @@ const Customers = {
         const startMonth = quarterEndMonth - 2;
         const orders = DB.getOrders().filter(o => {
             const d = new Date(o.order_date || o.created_at);
-            return d.getFullYear() === year && (d.getMonth() + 1) >= startMonth && (d.getMonth() + 1) <= quarterEndMonth && (o.status === 'SHIPPED' || o.status === 'COMPLETED');
-        });
-        const products = DB.getProducts();
-        const _getOrderCost = (o) => {
-            const p = products.find(pr => pr.id === o.product_id);
-            if (o.actual_converted_cost_at_sale !== null && o.actual_converted_cost_at_sale !== undefined) {
-                return o.actual_converted_cost_at_sale;
-            }
-            if (o.china_cost_at_sale !== null && o.china_cost_at_sale !== undefined) {
-                return o.china_cost_at_sale;
-            }
-            if (p) {
-                if (p.actual_converted_cost !== null && p.actual_converted_cost !== undefined) {
-                    return p.actual_converted_cost;
-                }
-                if (p.china_base_price !== null && p.china_base_price !== undefined) {
-                    return p.china_base_price;
-                }
-            }
-            return 0;
-        };
-        const amountByCustomer = {};
-        orders.forEach(o => {
-            const cid = String(o.customer_id) + '|' + (o.customer_name || '').toLowerCase();
-            const nameKey = (o.customer_name || '').toLowerCase();
-            let found = false;
-            for (const key of Object.keys(amountByCustomer)) {
-                if (key.includes(nameKey) || nameKey.includes(key.split('|')[1] || '')) {
-                    amountByCustomer[key] += (o.selling_price || 0) * (o.quantity || 0);
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                amountByCustomer[cid] = (o.selling_price || 0) * (o.quantity || 0);
-            }
+            return !isNaN(d.getTime()) && d.getFullYear() === year && (d.getMonth() + 1) >= startMonth && (d.getMonth() + 1) <= quarterEndMonth && (o.status === 'SHIPPED' || o.status === 'COMPLETED');
         });
         const customers = DB.getCustomers();
-        return Object.entries(amountByCustomer)
+        
+        const amountByName = {};
+        orders.forEach(o => {
+            const name = (o.customer_name || '').toLowerCase().trim();
+            if (!name) return;
+            amountByName[name] = (amountByName[name] || 0) + (o.selling_price || 0) * (o.quantity || 0);
+        });
+        
+        return Object.entries(amountByName)
             .sort((a, b) => b[1] - a[1])
             .slice(0, count)
-            .map(([cid, amount]) => {
-                const namePart = cid.split('|')[1] || '';
-                const c = customers.find(x => (x.name || '').toLowerCase() === namePart);
+            .map(([nameLower, amount]) => {
+                const c = customers.find(x => (x.name || '').toLowerCase().trim() === nameLower);
                 if (!c) {
-                    return { customer: { id: 0, name: namePart }, amount: amount };
+                    return { customer: { id: 0, name: nameLower }, amount: amount };
                 }
                 return { customer: c, amount: amount };
             })
@@ -681,10 +625,24 @@ const Customers = {
             const qty = o.quantity || 1;
             brandCounts[brand] = (brandCounts[brand] || 0) + qty;
             if (category) categoryCounts[category] = (categoryCounts[category] || 0) + qty;
-            const d = new Date(o.order_date || o.created_at);
-            const monthKey = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}`;
-            if (!monthGroups[monthKey]) monthGroups[monthKey] = [];
-            monthGroups[monthKey].push({ product: p ? p.original_title : '-', brand: brand, category: category, qty: qty });
+            
+            let monthKey = '';
+            if (o.order_date) {
+                const d = new Date(o.order_date);
+                if (!isNaN(d.getTime())) {
+                    monthKey = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}`;
+                }
+            }
+            if (!monthKey && o.created_at) {
+                const d = new Date(o.created_at);
+                if (!isNaN(d.getTime())) {
+                    monthKey = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}`;
+                }
+            }
+            if (monthKey && monthKey !== '1970.01') {
+                if (!monthGroups[monthKey]) monthGroups[monthKey] = [];
+                monthGroups[monthKey].push({ product: p ? p.original_title : '-', brand: brand, category: category, qty: qty });
+            }
         });
         const topBrands = Object.entries(brandCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
         const topCategories = Object.entries(categoryCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
@@ -813,8 +771,8 @@ const Customers = {
                 <table class="table">
                     <thead>
                         <tr>
-                            <th>${t('orders', 'order_number')}</th>
                             <th>${t('orders', 'sale_date')}</th>
+                            <th>${t('orders', 'brand')}</th>
                             <th>${t('orders', 'product')}</th>
                             <th>${t('orders', 'quantity')}</th>
                             <th>${t('orders', 'selling_price')}</th>
@@ -825,13 +783,15 @@ const Customers = {
             `;
             orders.forEach(o => {
                 const product = products.find(p => p.id === o.product_id);
+                const brand = product ? product.brand : (o.brand || '-');
+                const orderDate = o.order_date ? o.order_date : (o.created_at ? new Date(o.created_at).toISOString().slice(0, 10) : '-');
                 html += `
                     <tr>
-                        <td><strong>#${o.order_number || o.id}</strong></td>
-                        <td>${o.order_date || new Date(o.created_at).toISOString().slice(0, 10)}</td>
+                        <td>${orderDate}</td>
+                        <td>${brand}</td>
                         <td>${product ? product.original_title : '-'}</td>
-                        <td>${o.quantity}</td>
-                        <td class="font-bold">${(o.selling_price || 0).toLocaleString()} ${t('common', 'currency')}</td>
+                        <td>${o.quantity || 1}</td>
+                        <td class="font-bold">${fmtCN(o.selling_price || 0)} ${currency}</td>
                         <td><span class="badge ${statusLabels[o.status] || 'badge-pending'}">${t('orders', o.status?.toLowerCase() || 'pending')}</span></td>
                     </tr>
                 `;
