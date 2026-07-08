@@ -5,7 +5,7 @@ const Products = {
         search: '',
         sortBy: 'brand',
         sortOrder: 'asc',
-        stockYear: 2025,
+        stockYear: 2026,
         stockMonth: new Date().getMonth() + 1,
         selected: new Set(),
         editingId: null
@@ -184,7 +184,7 @@ const Products = {
 
     yearOptions() {
         let html = '';
-        for (let y = 2025; y <= 2030; y++) {
+        for (let y = 2026; y <= 2030; y++) {
             html += `<option value="${y}" ${this.state.stockYear === y ? 'selected' : ''}>${y}${t('common', 'year_suffix')}</option>`;
         }
         return html;
@@ -251,13 +251,13 @@ const Products = {
             App.flash(t('common', 'please_select'), 'warning');
             return;
         }
-        const year = prompt(t('common', 'stock_year') + ' (2025~):');
+        const year = prompt(t('common', 'stock_year') + ' (2026~):');
         if (!year) return;
         const month = prompt(t('common', 'stock_month') + ' (1~12):');
         if (!month) return;
         const y = parseInt(year);
         const m = parseInt(month);
-        if (isNaN(y) || isNaN(m) || y < 2025 || m < 1 || m > 12) {
+        if (isNaN(y) || isNaN(m) || y < 2026 || m < 1 || m > 12) {
             App.flash(t('common', 'invalid_input'), 'error');
             return;
         }

@@ -2,7 +2,7 @@ const Orders = {
     state: {
         orders: [],
         filtered: [],
-        year: 2025,
+        year: 2026,
         month: new Date().getMonth() + 1,
         sortBy: 'id',
         sortOrder: 'desc',
@@ -181,7 +181,7 @@ const Orders = {
 
     yearOptions() {
         let html = '';
-        for (let y = 2025; y <= 2030; y++) {
+        for (let y = 2026; y <= 2030; y++) {
             html += `<option value="${y}" ${this.state.year === y ? 'selected' : ''}>${y}${t('common', 'year_suffix')}</option>`;
         }
         return html;

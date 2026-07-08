@@ -1,6 +1,6 @@
 const Analytics = {
     state: {
-        year: 2025,
+        year: 2026,
         liveExchangeRate: null,
         liveRateUpdatedAt: null
     },
@@ -528,7 +528,7 @@ const Analytics = {
 
     yearOptions() {
         let html = '';
-        for (let y = 2025; y <= 2030; y++) {
+        for (let y = 2026; y <= 2030; y++) {
             html += `<option value="${y}" ${this.state.year === y ? 'selected' : ''}>${y}${t('common', 'year_suffix')}</option>`;
         }
         return html;
