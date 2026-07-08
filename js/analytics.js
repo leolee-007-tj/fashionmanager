@@ -1,6 +1,8 @@
 const Analytics = {
     state: {
-        year: 2025
+        year: 2025,
+        liveExchangeRate: null,
+        liveRateUpdatedAt: null
     },
 
     _getSettings() {
@@ -8,6 +10,46 @@ const Analytics = {
             return DB.getSettings() || { exchange_divisor: 165, price_multiplier: 3, fixed_addition: 40 };
         } catch (e) {
             return { exchange_divisor: 165, price_multiplier: 3, fixed_addition: 40 };
+        }
+    },
+
+    // 오늘 현재 환율을 인터넷에서 가져옴 (계산용 설정환율과 별도)
+    async _fetchLiveExchangeRate() {
+        if (this.state.liveExchangeRate) return this.state.liveExchangeRate;
+        try {
+            // exchangerate-api.com 무료 API (KRW/CNY)
+            const resp = await fetch('https://open.er-api.com/v6/latest/CNY');
+            if (resp.ok) {
+                const data = await resp.json();
+                if (data && data.rates && data.rates.KRW) {
+                    this.state.liveExchangeRate = data.rates.KRW;
+                    this.state.liveRateUpdatedAt = new Date();
+                    return this.state.liveExchangeRate;
+                }
+            }
+        } catch (e) {
+            console.warn('환율 가져오기 실패:', e);
+        }
+        // 실패 시 최근 캐시 또는 기본값
+        const cached = localStorage.getItem('lesoul_gh_live_rate');
+        if (cached) {
+            try {
+                const obj = JSON.parse(cached);
+                this.state.liveExchangeRate = obj.rate;
+                this.state.liveRateUpdatedAt = new Date(obj.updated);
+                return obj.rate;
+            } catch (e) {}
+        }
+        return 195; // 1 CNY = 195 KRW 기본값
+    },
+
+    async _ensureRate() {
+        await this._fetchLiveExchangeRate();
+        if (this.state.liveExchangeRate) {
+            localStorage.setItem('lesoul_gh_live_rate', JSON.stringify({
+                rate: this.state.liveExchangeRate,
+                updated: this.state.liveRateUpdatedAt ? this.state.liveRateUpdatedAt.toISOString() : new Date().toISOString()
+            }));
         }
     },
 
@@ -183,6 +225,11 @@ const Analytics = {
         return Object.values(map).sort((a, b) => b.amount - a.amount);
     },
 
+    async renderAsync() {
+        await this._ensureRate();
+        return this.render();
+    },
+
     render() {
         const year = this.state.year;
         const monthlyStats = this.calculateMonthlyStats(year);
@@ -191,10 +238,14 @@ const Analytics = {
         const productRanking = this.getProductRanking(year);
         const customerRanking = this.getCustomerRanking(year);
         const settings = this._getSettings();
-        const exchangeDivisor = settings.exchange_divisor || 165;
+        // 계산용 설정 환율 (중국 원가 환산에 사용)
+        const calcExchangeDivisor = settings.exchange_divisor || 165;
+        // 표시용 라이브 환율 (오늘 현재 인터넷 환율)
+        const liveRate = this.state.liveExchangeRate || 195;
+        const rateDate = this.state.liveRateUpdatedAt;
 
         const fmtCN = n => Math.round(n || 0).toLocaleString();
-        const fmtKR = n => Math.round((n || 0) * exchangeDivisor).toLocaleString();
+        const fmtKR = n => Math.round((n || 0) * liveRate).toLocaleString();
         const fmtPct = n => (n || 0).toFixed(1);
         const currency = t('common', 'currency');
         const currencyKR = t('common', 'currency_kr');
@@ -227,7 +278,7 @@ const Analytics = {
                                 <span style="color:#888;">${t('analytics', 'korea_price')}: </span>
                                 <strong>${fmtKR(annualStats.total_revenue)} ${currencyKR}</strong>
                             </p>
-                            <p style="color:#666; margin:0.25rem 0 0; font-size:12px;">${annualStats.order_count}${t('common', 'count_suffix')} / ${annualStats.total_quantity}개</p>
+                            <p style="color:#666; margin:0.25rem 0 0; font-size:12px;">${annualStats.order_count}${t('common', 'count_suffix')} / ${annualStats.total_quantity}${t('common', 'pieces')}</p>
                         </div>
                     </div>
                     <div class="form-group" style="flex:1;">
@@ -287,7 +338,8 @@ const Analytics = {
                     </div>
                 </div>
                 <p class="text-muted text-right" style="font-size:12px; margin-top:0.5rem;">
-                    <i class="fas fa-info-circle"></i> ${t('analytics', 'korea_price')}: ${t('analytics', 'exchange_info')} (÷${exchangeDivisor})
+                    <i class="fas fa-info-circle"></i> ${t('analytics', 'korea_price')}: ${t('analytics', 'exchange_info')}
+                    (1 CNY ≈ ${liveRate.toFixed(2)} KRW${rateDate ? ' / ' + rateDate.toLocaleString(currentLang === 'ko' ? 'ko-KR' : 'en-US') : ''})
                 </p>
 
                 <!-- 그래프: 월별 매출/이익 -->
@@ -326,7 +378,7 @@ const Analytics = {
                             <tr>
                                 <td><strong>${stat.month_name}</strong></td>
                                 <td class="text-center">${stat.order_count}</td>
-                                <td class="text-center">${stat.total_quantity}</td>
+                                <td class="text-center">${stat.total_quantity}${t('common', 'pieces')}</td>
                                 <td class="text-right">${fmtCN(stat.total_revenue)} ${currency}</td>
                                 <td class="text-right">${fmtCN(stat.total_cost)} ${currency}</td>
                                 <td class="text-right" style="color:${stat.profit > 0 ? '#28a745' : '#dc3545'};">
@@ -348,8 +400,8 @@ const Analytics = {
                         <tfoot style="background:#f8f9fa; font-weight:bold;">
                             <tr>
                                 <td>${t('common', 'all')}</td>
-                                <td class="text-center">${annualStats.order_count}</td>
-                                <td class="text-center">${annualStats.total_quantity}</td>
+                                <td class="text-center">${annualStats.order_count}${t('common', 'count_suffix')}</td>
+                                <td class="text-center">${annualStats.total_quantity}${t('common', 'pieces')}</td>
                                 <td class="text-right">${fmtCN(annualStats.total_revenue)} ${currency}</td>
                                 <td class="text-right">${fmtCN(annualStats.total_cost)} ${currency}</td>
                                 <td class="text-right" style="color:#28a745;">${fmtCN(annualStats.profit)} ${currency}</td>
@@ -460,7 +512,7 @@ const Analytics = {
                                               (i + 1) + '위'}
                                         </td>
                                         <td><strong>${c.name}</strong></td>
-                                        <td class="text-right">${c.quantity}</td>
+                                        <td class="text-right">${c.quantity}${t('common', 'pieces')}</td>
                                         <td class="text-right"><strong>${fmtCN(c.amount)}</strong></td>
                                     </tr>
                                 `).join('')}
