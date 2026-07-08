@@ -541,6 +541,10 @@ const Analytics = {
         const profits = monthlyStats.map(m => Math.round(m.profit));
         const profitMargins = monthlyStats.map(m => parseFloat(m.profit_margin.toFixed(1)));
 
+        // 두 축의 max를 동일하게 설정 (매출이익이 매출액 위로 그려지지 않도록)
+        const maxValue = Math.max(...revenues, ...profits, 0);
+        const suggestedMax = Math.ceil(maxValue * 1.1);
+
         // 기존 차트 제거
         if (window._revChart) window._revChart.destroy();
         if (window._pmChart) window._pmChart.destroy();
@@ -583,6 +587,8 @@ const Analytics = {
                             type: 'linear',
                             display: true,
                             position: 'left',
+                            beginAtZero: true,
+                            suggestedMax: suggestedMax,
                             title: { display: true, text: t('analytics', 'revenue') + ' (' + t('common', 'currency') + ')' },
                             ticks: { callback: v => (v / 10000).toFixed(0) + '만' }
                         },
@@ -590,6 +596,8 @@ const Analytics = {
                             type: 'linear',
                             display: true,
                             position: 'right',
+                            beginAtZero: true,
+                            suggestedMax: suggestedMax,
                             title: { display: true, text: t('analytics', 'profit') + ' (' + t('common', 'currency') + ')' },
                             ticks: { callback: v => (v / 10000).toFixed(0) + '만' },
                             grid: { drawOnChartArea: false }
