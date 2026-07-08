@@ -111,9 +111,15 @@ const Analytics = {
                 return ym && ym.year === year && ym.month === month;
             });
             const totalExpense = monthExpenses.reduce((s, e) => {
-                // 단일 카테고리 amount 또는 합산
-                if (typeof e.amount === 'number' && e.amount > 0) return s + e.amount;
-                const sum = (e.logistics || 0) + (e.flight || 0) + (e.hotel || 0) + (e.stay || 0) + (e.electricity || 0) + (e.water || 0) + (e.internet || 0) + (e.other || 0);
+                // Flask MonthlyExpense.total_expense 와 동일한 계산
+                if (typeof e.amount === 'number') return s + e.amount;
+                const sum = (e.logistics_cost || e.logistics || 0) + 
+                            (e.flight_cost || e.flight || 0) + 
+                            (e.hotel_cost || e.hotel || 0) + 
+                            (e.stay_cost || e.stay || 0) + 
+                            (e.electricity_cost || e.electricity || 0) + 
+                            (e.rent_cost || 0) + 
+                            (e.other_cost || e.other || 0);
                 return s + sum;
             }, 0);
 

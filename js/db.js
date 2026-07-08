@@ -274,9 +274,42 @@ const DB = {
         if (data.orders) this.setOrders(data.orders);
         if (data.customers) this.setCustomers(data.customers);
         if (data.inventory_logs) this.setInventoryLogs(data.inventory_logs);
-        if (data.expenses) this.setExpenses(data.expenses);
+        if (data.expenses) {
+            const converted = this._convertExpenses(data.expenses);
+            this.setExpenses(converted);
+        }
         if (data.keywords) this.setKeywords(data.keywords);
         if (data.settings) this.setSettings(data.settings);
+    },
+
+    _convertExpenses(expenses) {
+        return expenses.map(e => {
+            if (typeof e.amount === 'number' && e.expense_date) {
+                return e;
+            }
+            if (e.year !== undefined && e.month !== undefined) {
+                const total = (e.logistics_cost || 0) + (e.flight_cost || 0) + (e.hotel_cost || 0) + 
+                             (e.stay_cost || 0) + (e.electricity_cost || 0) + (e.rent_cost || 0) + (e.other_cost || 0);
+                if (total > 0) {
+                    return {
+                        id: e.id || Date.now() + Math.random(),
+                        expense_date: `${e.year}-${String(e.month).padStart(2, '0')}-01`,
+                        category: '기타',
+                        amount: total,
+                        description: e.notes || '',
+                        created_at: e.created_at || new Date().toISOString(),
+                        logistics_cost: e.logistics_cost || 0,
+                        flight_cost: e.flight_cost || 0,
+                        hotel_cost: e.hotel_cost || 0,
+                        stay_cost: e.stay_cost || 0,
+                        electricity_cost: e.electricity_cost || 0,
+                        rent_cost: e.rent_cost || 0,
+                        other_cost: e.other_cost || 0
+                    };
+                }
+            }
+            return e;
+        }).filter(e => typeof e.amount === 'number' && e.amount > 0);
     },
 
     clearAllData() {
