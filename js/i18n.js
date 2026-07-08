@@ -177,7 +177,7 @@ const TRANSLATIONS = {
         month: { ko: '월', zh: '月', en: 'Month', ja: '月' },
         detail_stats: { ko: '상세 통계', zh: '详细统计', en: 'Detail Stats', ja: '詳細統計' },
         order_count: { ko: '판매건수', zh: '销售数', en: 'Sale Count', ja: '販売数' },
-        sales_quantity: { ko: '판매수량', zh: '销售量', en: 'Sales Quantity', ja: '販売数' },
+        sales_quantity: { ko: '판매량', zh: '销售量', en: 'Sales Quantity', ja: '販売数' },
         year_month: { ko: '년/월', zh: '年/月', en: 'Year/Month', ja: '年/月' },
         select_year: { ko: '연도 선택', zh: '选择年度', en: 'Select Year', ja: '年度選択' },
         select_month: { ko: '월 선택', zh: '选择月份', en: 'Select Month', ja: '月選択' },

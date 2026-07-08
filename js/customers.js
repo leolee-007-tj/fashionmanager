@@ -20,10 +20,36 @@ const Customers = {
     recalculateAll() {
         const orders = DB.getOrders().filter(o => o.status === 'SHIPPED' || o.status === 'COMPLETED');
         const customers = DB.getCustomers();
+        const products = DB.getProducts();
+        
+        const _getOrderCost = (o) => {
+            const p = products.find(pr => pr.id === o.product_id);
+            if (o.actual_converted_cost_at_sale !== null && o.actual_converted_cost_at_sale !== undefined) {
+                return o.actual_converted_cost_at_sale;
+            }
+            if (o.china_cost_at_sale !== null && o.china_cost_at_sale !== undefined) {
+                return o.china_cost_at_sale;
+            }
+            if (p) {
+                if (p.actual_converted_cost !== null && p.actual_converted_cost !== undefined) {
+                    return p.actual_converted_cost;
+                }
+                if (p.china_base_price !== null && p.china_base_price !== undefined) {
+                    return p.china_base_price;
+                }
+            }
+            return 0;
+        };
+        
         const updated = customers.map(c => {
-            const cOrders = orders.filter(o => o.customer_id === c.id);
+            const nameLower = (c.name || '').toLowerCase();
+            const cOrders = orders.filter(o => {
+                const oName = (o.customer_name || '').toLowerCase();
+                return oName === nameLower || String(o.customer_id) === String(c.id);
+            });
             const totalAmount = cOrders.reduce((s, o) => s + (o.selling_price || 0) * (o.quantity || 0), 0);
-            const totalProfit = cOrders.reduce((s, o) => s + (o.actual_profit || 0), 0);
+            const totalCost = cOrders.reduce((s, o) => s + _getOrderCost(o) * (o.quantity || 0), 0);
+            const totalProfit = totalAmount - totalCost;
             const orderCount = cOrders.length;
             const totalQuantity = cOrders.reduce((s, o) => s + (o.quantity || 0), 0);
             let lastOrderDate = null;
@@ -64,13 +90,44 @@ const Customers = {
                 if (!ym) return false;
                 return ym.year === this.state.year && ym.month === this.state.month;
             });
-            list = list.filter(c => orders.some(o => Number(o.customer_id) === Number(c.id)));
+            list = list.filter(c => {
+                const nameLower = (c.name || '').toLowerCase();
+                return orders.some(o => {
+                    const oName = (o.customer_name || '').toLowerCase();
+                    return oName === nameLower || String(o.customer_id) === String(c.id);
+                });
+            });
             list = list.map(c => {
-                const mOrders = orders.filter(o => Number(o.customer_id) === Number(c.id));
+                const nameLower = (c.name || '').toLowerCase();
+                const mOrders = orders.filter(o => {
+                    const oName = (o.customer_name || '').toLowerCase();
+                    return oName === nameLower || String(o.customer_id) === String(c.id);
+                });
+                const products = DB.getProducts();
+                const _getOrderCost = (o) => {
+                    const p = products.find(pr => pr.id === o.product_id);
+                    if (o.actual_converted_cost_at_sale !== null && o.actual_converted_cost_at_sale !== undefined) {
+                        return o.actual_converted_cost_at_sale;
+                    }
+                    if (o.china_cost_at_sale !== null && o.china_cost_at_sale !== undefined) {
+                        return o.china_cost_at_sale;
+                    }
+                    if (p) {
+                        if (p.actual_converted_cost !== null && p.actual_converted_cost !== undefined) {
+                            return p.actual_converted_cost;
+                        }
+                        if (p.china_base_price !== null && p.china_base_price !== undefined) {
+                            return p.china_base_price;
+                        }
+                    }
+                    return 0;
+                };
+                const monthAmount = mOrders.reduce((s, o) => s + (o.selling_price || 0) * (o.quantity || 0), 0);
+                const monthCost = mOrders.reduce((s, o) => s + _getOrderCost(o) * (o.quantity || 0), 0);
                 return {
                     ...c,
-                    month_amount: mOrders.reduce((s, o) => s + (o.selling_price || 0) * (o.quantity || 0), 0),
-                    month_profit: mOrders.reduce((s, o) => s + (o.actual_profit || 0), 0),
+                    month_amount: monthAmount,
+                    month_profit: monthAmount - monthCost,
                     month_count: mOrders.length
                 };
             });
@@ -95,17 +152,51 @@ const Customers = {
             const d = new Date(o.order_date || o.created_at);
             return d.getFullYear() === year && (d.getMonth() + 1) === month && (o.status === 'SHIPPED' || o.status === 'COMPLETED');
         });
+        const products = DB.getProducts();
+        const _getOrderCost = (o) => {
+            const p = products.find(pr => pr.id === o.product_id);
+            if (o.actual_converted_cost_at_sale !== null && o.actual_converted_cost_at_sale !== undefined) {
+                return o.actual_converted_cost_at_sale;
+            }
+            if (o.china_cost_at_sale !== null && o.china_cost_at_sale !== undefined) {
+                return o.china_cost_at_sale;
+            }
+            if (p) {
+                if (p.actual_converted_cost !== null && p.actual_converted_cost !== undefined) {
+                    return p.actual_converted_cost;
+                }
+                if (p.china_base_price !== null && p.china_base_price !== undefined) {
+                    return p.china_base_price;
+                }
+            }
+            return 0;
+        };
         const amountByCustomer = {};
         orders.forEach(o => {
-            if (!amountByCustomer[o.customer_id]) amountByCustomer[o.customer_id] = 0;
-            amountByCustomer[o.customer_id] += (o.selling_price || 0) * (o.quantity || 0);
+            const cid = String(o.customer_id) + '|' + (o.customer_name || '').toLowerCase();
+            const nameKey = (o.customer_name || '').toLowerCase();
+            let found = false;
+            for (const key of Object.keys(amountByCustomer)) {
+                if (key.includes(nameKey) || nameKey.includes(key.split('|')[1] || '')) {
+                    amountByCustomer[key] += (o.selling_price || 0) * (o.quantity || 0);
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                amountByCustomer[cid] = (o.selling_price || 0) * (o.quantity || 0);
+            }
         });
         const customers = DB.getCustomers();
         return Object.entries(amountByCustomer)
             .sort((a, b) => b[1] - a[1])
             .slice(0, count)
             .map(([cid, amount]) => {
-                const c = customers.find(x => x.id == cid);
+                const namePart = cid.split('|')[1] || '';
+                const c = customers.find(x => (x.name || '').toLowerCase() === namePart);
+                if (!c) {
+                    return { customer: { id: 0, name: namePart }, amount: amount };
+                }
                 return { customer: c, amount: amount };
             })
             .filter(x => x.customer);
@@ -117,17 +208,51 @@ const Customers = {
             const d = new Date(o.order_date || o.created_at);
             return d.getFullYear() === year && (d.getMonth() + 1) >= startMonth && (d.getMonth() + 1) <= quarterEndMonth && (o.status === 'SHIPPED' || o.status === 'COMPLETED');
         });
+        const products = DB.getProducts();
+        const _getOrderCost = (o) => {
+            const p = products.find(pr => pr.id === o.product_id);
+            if (o.actual_converted_cost_at_sale !== null && o.actual_converted_cost_at_sale !== undefined) {
+                return o.actual_converted_cost_at_sale;
+            }
+            if (o.china_cost_at_sale !== null && o.china_cost_at_sale !== undefined) {
+                return o.china_cost_at_sale;
+            }
+            if (p) {
+                if (p.actual_converted_cost !== null && p.actual_converted_cost !== undefined) {
+                    return p.actual_converted_cost;
+                }
+                if (p.china_base_price !== null && p.china_base_price !== undefined) {
+                    return p.china_base_price;
+                }
+            }
+            return 0;
+        };
         const amountByCustomer = {};
         orders.forEach(o => {
-            if (!amountByCustomer[o.customer_id]) amountByCustomer[o.customer_id] = 0;
-            amountByCustomer[o.customer_id] += (o.selling_price || 0) * (o.quantity || 0);
+            const cid = String(o.customer_id) + '|' + (o.customer_name || '').toLowerCase();
+            const nameKey = (o.customer_name || '').toLowerCase();
+            let found = false;
+            for (const key of Object.keys(amountByCustomer)) {
+                if (key.includes(nameKey) || nameKey.includes(key.split('|')[1] || '')) {
+                    amountByCustomer[key] += (o.selling_price || 0) * (o.quantity || 0);
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                amountByCustomer[cid] = (o.selling_price || 0) * (o.quantity || 0);
+            }
         });
         const customers = DB.getCustomers();
         return Object.entries(amountByCustomer)
             .sort((a, b) => b[1] - a[1])
             .slice(0, count)
             .map(([cid, amount]) => {
-                const c = customers.find(x => x.id == cid);
+                const namePart = cid.split('|')[1] || '';
+                const c = customers.find(x => (x.name || '').toLowerCase() === namePart);
+                if (!c) {
+                    return { customer: { id: 0, name: namePart }, amount: amount };
+                }
                 return { customer: c, amount: amount };
             })
             .filter(x => x.customer);
@@ -138,6 +263,11 @@ const Customers = {
         const list = this.state.filtered;
         const totalAmount = list.reduce((s, c) => s + (c.total_amount || 0), 0);
         const totalProfit = list.reduce((s, c) => s + (c.total_profit || 0), 0);
+        const liveRate = Analytics.state.liveExchangeRate || 195;
+        const fmtCN = n => Math.round(n || 0).toLocaleString();
+        const fmtKR = n => Math.round((n || 0) * liveRate).toLocaleString();
+        const currency = t('common', 'currency');
+        const currencyKR = t('common', 'currency_kr');
 
         const monthTop = this.getMonthTopCustomers(this.state.year, this.state.month || new Date().getMonth() + 1, 3);
         const currentMonth = this.state.month || new Date().getMonth() + 1;
@@ -171,12 +301,14 @@ const Customers = {
                     </div>
                     <div class="stat-card">
                         <div class="stat-label">${t('analytics', 'total_sales')}</div>
-                        <div class="stat-value">${totalAmount.toLocaleString()}</div>
-                        <i class="fas fa-won-sign stat-icon"></i>
+                        <div class="stat-value">${fmtCN(totalAmount)} <span style="font-size:0.6em; color:#999;">${currency}</span></div>
+                        <div style="color:#999; font-size:0.75rem; margin-top:4px;">≈ ${fmtKR(totalAmount)} ${currencyKR}</div>
+                        <i class="fas fa-yen-sign stat-icon"></i>
                     </div>
                     <div class="stat-card">
                         <div class="stat-label">${t('analytics', 'total_profit')}</div>
-                        <div class="stat-value" style="color: #28a745;">${totalProfit.toLocaleString()}</div>
+                        <div class="stat-value" style="color: #28a745;">${fmtCN(totalProfit)} <span style="font-size:0.6em; color:#999;">${currency}</span></div>
+                        <div style="color:#999; font-size:0.75rem; margin-top:4px;">≈ ${fmtKR(totalProfit)} ${currencyKR}</div>
                         <i class="fas fa-chart-line stat-icon"></i>
                     </div>
                 </div>
@@ -498,19 +630,44 @@ const Customers = {
     },
 
     renderDetail(id) {
-        const customer = DB.getCustomers().find(c => c.id === parseInt(id));
+        const customer = DB.getCustomers().find(c => String(c.id) === String(id));
         if (!customer) {
             App.flash(t('customers', 'not_found'), 'error');
             location.hash = '#/customers';
             return '';
         }
+        const customerNameLower = (customer.name || '').toLowerCase();
         const orders = DB.getOrders()
-            .filter(o => o.customer_id === customer.id)
+            .filter(o => {
+                const oName = (o.customer_name || '').toLowerCase();
+                return oName === customerNameLower || String(o.customer_id) === String(customer.id);
+            })
             .sort((a, b) => new Date(b.order_date || b.created_at) - new Date(a.order_date || a.created_at));
         const products = DB.getProducts();
         const completedOrders = orders.filter(o => o.status === 'SHIPPED' || o.status === 'COMPLETED');
+        
+        const _getOrderCost = (o) => {
+            const p = products.find(pr => pr.id === o.product_id);
+            if (o.actual_converted_cost_at_sale !== null && o.actual_converted_cost_at_sale !== undefined) {
+                return o.actual_converted_cost_at_sale;
+            }
+            if (o.china_cost_at_sale !== null && o.china_cost_at_sale !== undefined) {
+                return o.china_cost_at_sale;
+            }
+            if (p) {
+                if (p.actual_converted_cost !== null && p.actual_converted_cost !== undefined) {
+                    return p.actual_converted_cost;
+                }
+                if (p.china_base_price !== null && p.china_base_price !== undefined) {
+                    return p.china_base_price;
+                }
+            }
+            return 0;
+        };
+        
         const totalAmount = completedOrders.reduce((s, o) => s + (o.selling_price || 0) * (o.quantity || 0), 0);
-        const totalProfit = completedOrders.reduce((s, o) => s + (o.actual_profit || 0), 0);
+        const totalCost = completedOrders.reduce((s, o) => s + _getOrderCost(o) * (o.quantity || 0), 0);
+        const totalProfit = totalAmount - totalCost;
         const totalQuantity = completedOrders.reduce((s, o) => s + (o.quantity || 0), 0);
         const level = this.getLevel(totalAmount);
 
@@ -534,6 +691,11 @@ const Customers = {
         const sortedMonths = Object.keys(monthGroups).sort();
 
         const avatar = customer.avatar_url || '';
+        const liveRate = Analytics.state.liveExchangeRate || 195;
+        const fmtCN = n => Math.round(n || 0).toLocaleString();
+        const fmtKR = n => Math.round((n || 0) * liveRate).toLocaleString();
+        const currency = t('common', 'currency');
+        const currencyKR = t('common', 'currency_kr');
 
         let html = `
             <div class="card mb-4">
@@ -557,12 +719,14 @@ const Customers = {
                 <div class="stats-grid">
                     <div class="stat-card">
                         <div class="stat-label">${t('customers', 'total_amount')}</div>
-                        <div class="stat-value">${totalAmount.toLocaleString()}</div>
-                        <i class="fas fa-won-sign stat-icon"></i>
+                        <div class="stat-value">${fmtCN(totalAmount)} <span style="font-size:0.6em; color:#999;">${currency}</span></div>
+                        <div style="color:#999; font-size:0.75rem; margin-top:4px;">≈ ${fmtKR(totalAmount)} ${currencyKR}</div>
+                        <i class="fas fa-yen-sign stat-icon"></i>
                     </div>
                     <div class="stat-card">
                         <div class="stat-label">${t('analytics', 'total_profit')}</div>
-                        <div class="stat-value" style="color: #28a745;">${totalProfit.toLocaleString()}</div>
+                        <div class="stat-value" style="color: #28a745;">${fmtCN(totalProfit)} <span style="font-size:0.6em; color:#999;">${currency}</span></div>
+                        <div style="color:#999; font-size:0.75rem; margin-top:4px;">≈ ${fmtKR(totalProfit)} ${currencyKR}</div>
                         <i class="fas fa-chart-line stat-icon"></i>
                     </div>
                     <div class="stat-card">

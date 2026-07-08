@@ -203,6 +203,7 @@ const ExcelManager = {
         const products = DB.getProducts();
         let added = 0;
         let skipped = 0;
+        let nextProductId = DB.getNextId('products');
 
         data.forEach((row, idx) => {
             // 한국매입원가(KRW) 찾기
@@ -221,7 +222,7 @@ const ExcelManager = {
             const currentStock = parseInt(row['초기재고'] || row['현재재고'] || row['재고'] || row['수량'] || row['stock'] || row['quantity'] || 0) || 0;
 
             products.push({
-                id: Date.now() + Math.random(),
+                id: nextProductId++,
                 product_code: productCode,
                 original_title: title,
                 brand: brand,
@@ -268,6 +269,8 @@ const ExcelManager = {
         let added = 0;
         let skipped = 0;
         let replaced = 0;
+        let nextCustomerId = DB.getNextId('customers');
+        let nextOrderId = DB.getNextId('orders');
 
         // 1단계: 업로드 데이터에서 (고객 + 브랜드 + 상품명) 키와 판매월 추출
         const uploadedKeys = new Set();
@@ -324,7 +327,7 @@ const ExcelManager = {
             let customer = customers.find(c => c.name && c.name.toLowerCase() === customerName.toLowerCase());
             if (!customer) {
                 customer = {
-                    id: Date.now() + Math.random(),
+                    id: nextCustomerId++,
                     name: customerName,
                     wechat_nickname: '',
                     phone: row['전화번호'] || row['phone'] || '',
@@ -346,11 +349,11 @@ const ExcelManager = {
                 product = products.find(p => p.original_title === productName);
             }
             const productId = product ? product.id : 0;
-            const cost = product ? product.korea_cost : 0;
-            const profit = sellingPrice - cost;
+            const convertedCost = product ? (product.actual_converted_cost || product.china_base_price || 0) : 0;
+            const profit = sellingPrice - convertedCost;
 
             orders.push({
-                id: Date.now() + Math.random() + idx,
+                id: nextOrderId++,
                 order_number: row['주문번호'] || row['order_number'] || 'SAL-' + String(orders.length + 1).padStart(4, '0'),
                 customer_id: customer.id,
                 product_id: productId,
@@ -390,12 +393,13 @@ const ExcelManager = {
 
         const customers = DB.getCustomers();
         let added = 0;
+        let nextCustomerId = DB.getNextId('customers');
 
         data.forEach(row => {
             const name = row['이름'] || row['name'] || row['고객명'] || row['customer_name'] || '';
             if (!name) return;
             customers.push({
-                id: Date.now() + Math.random(),
+                id: nextCustomerId++,
                 name: name,
                 wechat_nickname: row['위챗닉네임'] || row['wechat_nickname'] || '',
                 phone: row['전화번호'] || row['phone'] || row['연락처'] || '',

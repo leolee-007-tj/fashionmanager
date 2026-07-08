@@ -284,7 +284,7 @@ const Analytics = {
                                 <span style="color:#888;">${t('analytics', 'korea_price')}: </span>
                                 <strong>${fmtKR(annualStats.total_revenue)} ${currencyKR}</strong>
                             </p>
-                            <p style="color:#666; margin:0.25rem 0 0; font-size:12px;">${annualStats.order_count}${t('common', 'count_suffix')} / ${annualStats.total_quantity}${t('common', 'pieces')}</p>
+                            <p style="color:#666; margin:0.25rem 0 0; font-size:12px;">${t('analytics', 'sales_quantity')}: ${annualStats.total_quantity}${t('common', 'pieces')}</p>
                         </div>
                     </div>
                     <div class="form-group" style="flex:1;">
