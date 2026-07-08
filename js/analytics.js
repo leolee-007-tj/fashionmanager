@@ -68,10 +68,10 @@ const Analytics = {
     },
 
     _getOrderCost(order, products) {
-        if (order.actual_converted_cost_at_sale !== undefined && order.actual_converted_cost_at_sale !== null && order.actual_converted_cost_at_sale > 0) {
+        if (order.actual_converted_cost_at_sale !== undefined && order.actual_converted_cost_at_sale !== null && order.actual_converted_cost_at_sale !== '') {
             return order.actual_converted_cost_at_sale;
         }
-        if (order.china_cost_at_sale !== undefined && order.china_cost_at_sale !== null && order.china_cost_at_sale > 0) {
+        if (order.china_cost_at_sale !== undefined && order.china_cost_at_sale !== null && order.china_cost_at_sale !== '') {
             return order.china_cost_at_sale;
         }
         const p = products.find(x => x.id === order.product_id || x.id === Number(order.product_id));
@@ -252,7 +252,7 @@ const Analytics = {
 
         const fmtCN = n => Math.round(n || 0).toLocaleString();
         const fmtKR = n => Math.round((n || 0) * liveRate).toLocaleString();
-        const fmtPct = n => (n || 0).toFixed(1);
+        const fmtPct = n => Math.round(n || 0).toString();
         const currency = t('common', 'currency');
         const currencyKR = t('common', 'currency_kr');
 
