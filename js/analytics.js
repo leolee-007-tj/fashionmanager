@@ -328,14 +328,6 @@ const Analytics = {
                             <p style="color:#666; margin:0.25rem 0 0; font-size:12px;">${t('expenses', 'title')}</p>
                         </div>
                     </div>
-                    <div class="form-group" style="flex:1;">
-                        <!-- 빈 카드(레이아웃 균형용) -->
-                        <div class="info-box" style="background:#f8f9fa; text-align:center; padding:1rem; border-radius:8px; color:#999;">
-                            <h4 style="color:#999; margin-bottom:0.5rem;">${t('analytics', 'expense')}</h4>
-                            <h2 style="color:#999; margin:0;">-</h2>
-                            <p style="margin:0.5rem 0 0; font-size:12px;">&nbsp;</p>
-                        </div>
-                    </div>
                 </div>
                 <p class="text-muted text-right" style="font-size:12px; margin-top:0.5rem;">
                     <i class="fas fa-info-circle"></i> ${t('analytics', 'korea_price')}: ${t('analytics', 'exchange_info')}

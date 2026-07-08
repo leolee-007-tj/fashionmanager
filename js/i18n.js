@@ -155,7 +155,7 @@ const TRANSLATIONS = {
         level_silver: { ko: 'Silver', zh: 'Silver', en: 'Silver', ja: 'Silver' },
         level_bronze: { ko: 'Bronze', zh: 'Bronze', en: 'Bronze', ja: 'Bronze' },
         level_normal: { ko: '일반', zh: '普通', en: 'Normal', ja: '一般' },
-        count_suffix: { ko: '건', zh: '件', en: '', ja: '件' },
+        count_suffix: { ko: '건', zh: '件', en: 'orders', ja: '件' },
     },
     analytics: {
         title: { ko: '수익 분석', zh: '收益分析', en: 'Analytics', ja: '分析' },
