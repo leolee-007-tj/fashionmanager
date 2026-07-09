@@ -4,7 +4,7 @@ const Orders = {
         filtered: [],
         year: 2026,
         month: new Date().getMonth() + 1,
-        sortBy: 'id',
+        sortBy: 'order_date',
         sortOrder: 'desc',
         selected: new Set()
     },
@@ -12,6 +12,22 @@ const Orders = {
     load() {
         this.state.orders = DB.getOrders();
         this.applyFilters();
+    },
+
+    _parseOrderDate(val) {
+        if (!val) return null;
+        const s = String(val).trim();
+        if (/^\d{4,5}$/.test(s) && Number(s) > 30000 && Number(s) < 70000) {
+            const serial = Number(s);
+            const utcDays = Math.floor(serial - 25569);
+            const d = new Date(utcDays * 86400 * 1000);
+            if (!isNaN(d.getTime())) return d;
+        }
+        const m = s.match(/(\d{4})[\.\-\/年](\d{1,2})[\.\-\/月](\d{1,2})/);
+        if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+        const d = new Date(s);
+        if (!isNaN(d.getTime())) return d;
+        return null;
     },
 
     _extractYearMonth(dateStr) {
@@ -61,10 +77,10 @@ const Orders = {
             let av = a[this.state.sortBy];
             let bv = b[this.state.sortBy];
             if (this.state.sortBy === 'order_date') {
-                av = this._extractYearMonth(a.order_date || a.created_at);
-                bv = this._extractYearMonth(b.order_date || b.created_at);
-                if (av && bv) { av = av.year * 100 + av.month; bv = bv.year * 100 + bv.month; }
-                else { av = 0; bv = 0; }
+                const dateA = this._parseOrderDate(a.order_date || a.created_at);
+                const dateB = this._parseOrderDate(b.order_date || b.created_at);
+                av = dateA ? dateA.getTime() : 0;
+                bv = dateB ? dateB.getTime() : 0;
             }
             if (this.state.sortOrder === 'asc') {
                 return av > bv ? 1 : -1;
