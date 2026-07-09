@@ -245,6 +245,9 @@ const Customers = {
                         <h2><i class="fas fa-users"></i> ${t('customers', 'title')}</h2>
                     </div>
                     <div class="action-bar-right">
+                        <button class="btn btn-secondary" onclick="Customers.cleanupDuplicates()">
+                            <i class="fas fa-broom"></i> ${t('customers', 'cleanup_duplicates')}
+                        </button>
                         <a href="#/customers/add" class="btn btn-primary"><i class="fas fa-plus"></i> ${t('customers', 'add')}</a>
                     </div>
                 </div>
@@ -534,6 +537,39 @@ const Customers = {
         DB.setCustomers(customers);
         this.state.selected.clear();
         App.flash(t('common', 'delete') + '!', 'success');
+        App.render();
+    },
+
+    cleanupDuplicates() {
+        if (!confirm(t('customers', 'cleanup_confirm'))) return;
+        const customers = DB.getCustomers();
+        const orders = DB.getOrders();
+        const nameMap = new Map();
+        const toDelete = [];
+        let mergedCount = 0;
+
+        customers.forEach(c => {
+            const nameLower = (c.name || '').toLowerCase().trim();
+            if (!nameLower) { toDelete.push(c.id); return; }
+            if (nameMap.has(nameLower)) {
+                const keepId = nameMap.get(nameLower);
+                orders.forEach(o => {
+                    if (String(o.customer_id) === String(c.id)) {
+                        o.customer_id = keepId;
+                        mergedCount++;
+                    }
+                });
+                toDelete.push(c.id);
+            } else {
+                nameMap.set(nameLower, c.id);
+            }
+        });
+
+        const remaining = customers.filter(c => !toDelete.includes(c.id));
+        DB.setCustomers(remaining);
+        DB.setOrders(orders);
+        this.state.selected.clear();
+        App.flash(t('customers', 'cleanup_done') + ' (' + toDelete.length + ' ' + t('customers', 'merged') + ', ' + mergedCount + ' ' + t('customers', 'orders_moved') + ')', 'success');
         App.render();
     },
 

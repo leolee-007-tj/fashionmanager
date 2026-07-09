@@ -156,6 +156,11 @@ const TRANSLATIONS = {
         level_bronze: { ko: 'Bronze', zh: 'Bronze', en: 'Bronze', ja: 'Bronze' },
         level_normal: { ko: '일반', zh: '普通', en: 'Normal', ja: '一般' },
         count_suffix: { ko: '건', zh: '件', en: 'orders', ja: '件' },
+        cleanup_duplicates: { ko: '중복 정리', zh: '清理重复', en: 'Cleanup Duplicates', ja: '重複整理' },
+        cleanup_confirm: { ko: '중복 고객을 정리할까요? 같은 이름의 고객 중 가장 오래된 것 하나만 남기고 나머지는 병합됩니다. 주문 데이터도 함께 이동합니다.', zh: '要清理重复的客户吗？同名客户中只保留最旧的一个，其余将被合并。订单数据也会一起移动。', en: 'Clean up duplicate customers? Only the oldest one will be kept for same name, others will be merged. Order data will be moved too.', ja: '重複顧客を整理しますか？同じ名前の顧客の中で最も古いものだけ残して、他は統合されます。注文データも一緒に移動します。' },
+        cleanup_done: { ko: '중복 정리 완료', zh: '重复清理完成', en: 'Duplicates cleaned up', ja: '重複整理完了' },
+        merged: { ko: '명 병합', zh: '名已合并', en: 'merged', ja: '名統合' },
+        orders_moved: { ko: '건 주문이동', zh: '笔订单移动', en: 'orders moved', ja: '件注文移動' },
     },
     analytics: {
         title: { ko: '수익 분석', zh: '收益分析', en: 'Analytics', ja: '分析' },
