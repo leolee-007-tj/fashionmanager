@@ -168,6 +168,9 @@ const TRANSLATIONS = {
         cleanup_done: { ko: '중복 정리 완료', zh: '重复清理完成', en: 'Duplicates cleaned up', ja: '重複整理完了' },
         merged: { ko: '명 병합', zh: '名已合并', en: 'merged', ja: '名統合' },
         orders_moved: { ko: '건 주문이동', zh: '笔订单移动', en: 'orders moved', ja: '件注文移動' },
+        select_duplicates: { ko: '중복 선택', zh: '选择重复', en: 'Select Duplicates', ja: '重複選択' },
+        duplicates_found: { ko: '중복 발견', zh: '发现重复', en: 'Duplicates found', ja: '重複発見' },
+        items_selected: { ko: '건 선택됨', zh: '条已选择', en: 'items selected', ja: '件選択済' },
     },
     analytics: {
         title: { ko: '수익 분석', zh: '收益分析', en: 'Analytics', ja: '分析' },

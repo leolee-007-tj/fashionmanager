@@ -9,7 +9,9 @@ const Customers = {
         month: null,
         selected: new Set(),
         editingCustomerId: null,
-        detailSortOrder: 'desc' // desc: 최신순, asc: 오름차순
+        detailSortOrder: 'desc',
+        detailSelected: new Set(),
+        detailEditingOrderId: null
     },
 
     load() {
@@ -796,7 +798,19 @@ const Customers = {
             </div>
 
             <div class="card mt-4">
-                <h3><i class="fas fa-history"></i> ${t('orders', 'title')} ${t('common', 'history')}</h3>
+                <div class="action-bar">
+                    <div class="action-bar-left">
+                        <h3 style="margin:0;"><i class="fas fa-history"></i> ${t('orders', 'title')} ${t('common', 'history')}</h3>
+                    </div>
+                    <div class="action-bar-right">
+                        <button class="btn btn-sm btn-secondary" onclick="Customers.selectDetailDuplicates('${customer.id}')">
+                            <i class="fas fa-copy"></i> ${t('customers', 'select_duplicates')}
+                        </button>
+                        <button class="btn btn-sm btn-danger" onclick="Customers.batchDeleteDetailOrders('${customer.id}')" ${this.state.detailSelected.size === 0 ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>
+                            <i class="fas fa-trash"></i> ${t('common', 'delete')} (${this.state.detailSelected.size})
+                        </button>
+                    </div>
+                </div>
         `;
         if (orders.length === 0) {
             html += `<div class="empty-state"><i class="fas fa-shopping-cart"></i><p>${t('common', 'no_data')}</p></div>`;
@@ -807,6 +821,7 @@ const Customers = {
                 <table class="table">
                     <thead>
                         <tr>
+                            <th style="width:36px;"><input type="checkbox" onchange="Customers.toggleDetailSelectAll('${customer.id}', this.checked)"></th>
                             <th onclick="Customers.toggleDetailSort()" style="cursor:pointer;">
                                 ${t('orders', 'sale_date')}
                                 <i class="fas fa-sort-${this.state.detailSortOrder === 'desc' ? 'down' : 'up'}" style="margin-left:4px;"></i>
@@ -816,6 +831,7 @@ const Customers = {
                             <th>${t('orders', 'quantity')}</th>
                             <th>${t('orders', 'selling_price')}</th>
                             <th>${t('common', 'status')}</th>
+                            <th>${t('common', 'action')}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -835,16 +851,60 @@ const Customers = {
                 const product = products.find(p => p.id === o.product_id);
                 const brand = product ? product.brand : (o.brand || '-');
                 const orderDate = this._formatOrderDate(o.order_date) || (o.created_at ? this._formatOrderDate(o.created_at) : '-');
+                const isEditing = String(this.state.detailEditingOrderId) === String(o.id);
+                const isSelected = this.state.detailSelected.has(Number(o.id));
                 html += `
-                    <tr>
+                    <tr${isEditing ? ' style="background:#eef3ff;"' : ''}>
+                        <td><input type="checkbox" ${isSelected ? 'checked' : ''} onchange="Customers.toggleDetailSelect(${o.id}, this.checked)"></td>
                         <td>${orderDate}</td>
                         <td>${brand}</td>
                         <td>${product ? product.original_title : '-'}</td>
                         <td>${o.quantity || 1}</td>
                         <td class="font-bold">${fmtCN(o.selling_price || 0)} ${currency}</td>
                         <td><span class="badge ${statusLabels[o.status] || 'badge-pending'}">${t('orders', o.status?.toLowerCase() || 'pending')}</span></td>
+                        <td>
+                            <button class="btn btn-sm ${isEditing ? 'btn-warning' : 'btn-secondary'}" onclick="Customers.toggleDetailEdit(${o.id})"><i class="fas fa-edit"></i></button>
+                            <button class="btn btn-sm btn-danger" onclick="Customers.deleteDetailOrder(${o.id})"><i class="fas fa-trash"></i></button>
+                        </td>
                     </tr>
                 `;
+                if (isEditing) {
+                    html += `
+                        <tr style="background:#f8f9fa;">
+                            <td colspan="8">
+                                <form onsubmit="Customers.submitDetailEdit(event, ${o.id}, '${customer.id}')" style="padding:12px 8px;">
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>${t('orders', 'sale_date')}</label>
+                                            <input type="date" class="form-control" name="order_date" value="${this._formatOrderDate(o.order_date) || this._formatOrderDate(o.created_at) || ''}">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>${t('orders', 'selling_price')} (${currency})</label>
+                                            <input type="number" class="form-control" name="selling_price" value="${o.selling_price || 0}" min="0">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>${t('orders', 'quantity')}</label>
+                                            <input type="number" class="form-control" name="quantity" value="${o.quantity || 1}" min="1">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>${t('common', 'status')}</label>
+                                            <select class="form-control" name="status">
+                                                <option value="COMPLETED"${o.status === 'COMPLETED' ? ' selected' : ''}>${t('orders', 'status_completed') || '완료'}</option>
+                                                <option value="SHIPPED"${o.status === 'SHIPPED' ? ' selected' : ''}>${t('orders', 'status_shipped') || '출고'}</option>
+                                                <option value="PENDING"${o.status === 'PENDING' ? ' selected' : ''}>${t('orders', 'status_pending') || '대기'}</option>
+                                                <option value="CANCELLED"${o.status === 'CANCELLED' ? ' selected' : ''}>${t('orders', 'status_cancelled') || '취소'}</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex gap-2 ml-auto">
+                                        <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-save"></i> ${t('common', 'save')}</button>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="Customers.cancelDetailEdit()">${t('common', 'cancel')}</button>
+                                    </div>
+                                </form>
+                            </td>
+                        </tr>
+                    `;
+                }
             });
             html += '</tbody></table></div>';
         }
@@ -855,6 +915,131 @@ const Customers = {
     toggleDetailSort() {
         this.state.detailSortOrder = this.state.detailSortOrder === 'desc' ? 'asc' : 'desc';
         App.renderPage();
+    },
+
+    toggleDetailSelect(orderId, checked) {
+        const numId = Number(orderId);
+        if (checked) {
+            this.state.detailSelected.add(numId);
+        } else {
+            this.state.detailSelected.delete(numId);
+        }
+        App.renderPage();
+    },
+
+    toggleDetailSelectAll(customerId, checked) {
+        const customer = DB.getCustomers().find(c => String(c.id) === String(customerId));
+        if (!customer) return;
+        const customerNameLower = (customer.name || '').toLowerCase();
+        const orders = DB.getOrders().filter(o => {
+            const oName = (o.customer_name || '').toLowerCase();
+            return oName === customerNameLower || String(o.customer_id) === String(customer.id);
+        });
+        this.state.detailSelected.clear();
+        if (checked) {
+            orders.forEach(o => this.state.detailSelected.add(Number(o.id)));
+        }
+        App.renderPage();
+    },
+
+    selectDetailDuplicates(customerId) {
+        const customer = DB.getCustomers().find(c => String(c.id) === String(customerId));
+        if (!customer) return;
+        const customerNameLower = (customer.name || '').toLowerCase();
+        const orders = DB.getOrders().filter(o => {
+            const oName = (o.customer_name || '').toLowerCase();
+            return oName === customerNameLower || String(o.customer_id) === String(customer.id);
+        });
+        const seen = new Map();
+        const dupIds = [];
+        orders.forEach(o => {
+            const dateStr = this._formatOrderDate(o.order_date || o.created_at);
+            const key = String(o.product_id) + '|' + dateStr + '|' + (o.selling_price || 0);
+            if (seen.has(key)) {
+                dupIds.push(o.id);
+            } else {
+                seen.set(key, o.id);
+            }
+        });
+        this.state.detailSelected.clear();
+        dupIds.forEach(id => this.state.detailSelected.add(Number(id)));
+        App.flash(t('customers', 'duplicates_found') + ': ' + dupIds.length + t('customers', 'items_selected'), dupIds.length > 0 ? 'info' : 'warning');
+        App.renderPage();
+    },
+
+    batchDeleteDetailOrders(customerId) {
+        if (this.state.detailSelected.size === 0) {
+            App.flash(t('common', 'please_select'), 'warning');
+            return;
+        }
+        if (!confirm(this.state.detailSelected.size + t('common', 'confirm_delete_items'))) return;
+        const products = DB.getProducts();
+        const orders = DB.getOrders();
+        orders.forEach(o => {
+            if (this.state.detailSelected.has(o.id) && o.status === 'PENDING') {
+                const product = products.find(p => p.id === o.product_id);
+                if (product) {
+                    product.reserved_stock = Math.max(0, (product.reserved_stock || 0) - (o.quantity || 0));
+                }
+            }
+        });
+        DB.setProducts(products);
+        const remaining = orders.filter(o => !this.state.detailSelected.has(o.id));
+        DB.setOrders(remaining);
+        this.state.detailSelected.clear();
+        App.flash(t('common', 'delete') + '!', 'success');
+        App.render();
+    },
+
+    toggleDetailEdit(orderId) {
+        if (String(this.state.detailEditingOrderId) === String(orderId)) {
+            this.state.detailEditingOrderId = null;
+        } else {
+            this.state.detailEditingOrderId = Number(orderId);
+        }
+        App.renderPage();
+    },
+
+    cancelDetailEdit() {
+        this.state.detailEditingOrderId = null;
+        App.renderPage();
+    },
+
+    submitDetailEdit(e, orderId, customerId) {
+        e.preventDefault();
+        const form = e.target;
+        const orders = DB.getOrders();
+        const idx = orders.findIndex(o => String(o.id) === String(orderId));
+        if (idx === -1) return;
+        const order = orders[idx];
+        order.order_date = form.order_date.value;
+        order.selling_price = Number(form.selling_price.value) || 0;
+        order.quantity = Number(form.quantity.value) || 1;
+        order.status = form.status.value || order.status;
+        orders[idx] = order;
+        DB.setOrders(orders);
+        this.state.detailEditingOrderId = null;
+        App.flash(t('common', 'save') + '!', 'success');
+        App.render();
+    },
+
+    deleteDetailOrder(orderId) {
+        if (!confirm(t('common', 'confirm_delete'))) return;
+        const orders = DB.getOrders();
+        const order = orders.find(o => String(o.id) === String(orderId));
+        if (order && order.status === 'PENDING') {
+            const products = DB.getProducts();
+            const product = products.find(p => p.id === order.product_id);
+            if (product) {
+                product.reserved_stock = Math.max(0, (product.reserved_stock || 0) - (order.quantity || 0));
+            }
+            DB.setProducts(products);
+        }
+        const remaining = orders.filter(o => String(o.id) !== String(orderId));
+        DB.setOrders(remaining);
+        this.state.detailSelected.delete(Number(orderId));
+        App.flash(t('common', 'delete') + '!', 'success');
+        App.render();
     },
 
     showAvatarUpload(id) {
