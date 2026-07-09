@@ -488,6 +488,9 @@ const App = {
                         <h2><i class="fas fa-magic"></i> <span data-i18n="classification.title">${t('classification', 'title')}</span></h2>
                     </div>
                     <div class="action-bar-right">
+                        <button class="btn btn-secondary" onclick="App.cleanupDuplicateKeywords()">
+                            <i class="fas fa-broom"></i> <span data-i18n="classification.cleanup_duplicates">${t('classification', 'cleanup_duplicates')}</span>
+                        </button>
                         <button class="btn btn-secondary" onclick="App.initDefaultKeywords()">
                             <i class="fas fa-cogs"></i> <span data-i18n="classification.init_default">${t('classification', 'init_default')}</span>
                         </button>
@@ -711,6 +714,26 @@ const App = {
         if (!confirm(t('classification', 'init_help'))) return;
         const added = ClassificationService.initDefaultKeywords();
         this.flash(t('settings', 'save_success') + ' (' + added + ' ' + t('classification', 'keywords_added') + ')', 'success');
+        this.render();
+    },
+
+    cleanupDuplicateKeywords() {
+        if (!confirm(t('classification', 'cleanup_confirm'))) return;
+        const keywords = DB.getKeywords();
+        const seen = new Map();
+        const toDelete = [];
+        keywords.forEach(k => {
+            const kType = k.type || k.classification_type || '';
+            const kStandard = (k.standard || k.standard_value || '').toLowerCase().trim();
+            const key = kType + '|' + kStandard;
+            if (seen.has(key)) {
+                toDelete.push(k.id);
+            } else {
+                seen.set(key, k.id);
+            }
+        });
+        toDelete.forEach(id => DB.deleteKeyword(id));
+        this.flash(t('classification', 'cleanup_done') + ' (' + toDelete.length + ' ' + t('classification', 'items_deleted') + ')', 'success');
         this.render();
     },
 

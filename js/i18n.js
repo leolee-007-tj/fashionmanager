@@ -327,6 +327,10 @@ const TRANSLATIONS = {
         show_all: { ko: '전체 보기', zh: '查看全部', en: 'Show All', ja: 'すべて表示' },
         show_less: { ko: '간략히', zh: '收起', en: 'Show Less', ja: '一部表示' },
         keywords_added: { ko: '개 추가됨', zh: '个已添加', en: 'added', ja: '個追加' },
+        cleanup_duplicates: { ko: '중복 정리', zh: '清理重复', en: 'Cleanup Duplicates', ja: '重複整理' },
+        cleanup_confirm: { ko: '중복 키워드를 정리할까요? 같은 유형+같은 표준값인 키워드 중 가장 오래된 것 하나만 남기고 삭제됩니다.', zh: '要清理重复的关键词吗？相同类型+相同标准值的关键词中，只保留最旧的一个，其余将被删除。', en: 'Clean up duplicate keywords? Only the oldest one will be kept for same type + standard value.', ja: '重複キーワードを整理しますか？同じタイプ+同じ標準値のキーワードの中で最も古いものだけ残して削除されます。' },
+        cleanup_done: { ko: '중복 정리 완료', zh: '重复清理完成', en: 'Duplicates cleaned up', ja: '重複整理完了' },
+        items_deleted: { ko: '개 삭제됨', zh: '个已删除', en: 'deleted', ja: '個削除' },
         add: { ko: '추가', zh: '添加', en: 'Add', ja: '追加' },
     },
     excel: {
