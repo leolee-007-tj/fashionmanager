@@ -381,6 +381,106 @@ const App = {
     renderClassification() {
         const keywords = DB.getKeywords();
         const testTitles = ClassificationService.getTestTitles();
+        const groups = {
+            category: { label: t('classification', 'type_category'), icon: 'fas fa-tags', color: '#8b5cf6', keywords: [] },
+            color: { label: t('classification', 'type_color'), icon: 'fas fa-palette', color: '#ec4899', keywords: [] },
+            brand: { label: t('classification', 'type_brand'), icon: 'fas fa-building', color: '#3b82f6', keywords: [] },
+            size: { label: t('classification', 'type_size'), icon: 'fas fa-ruler', color: '#10b981', keywords: [] },
+            material: { label: t('classification', 'type_material'), icon: 'fas fa-layer-group', color: '#f59e0b', keywords: [] },
+            style: { label: t('classification', 'type_style') || 'Style', icon: 'fas fa-tshirt', color: '#06b6d4', keywords: [] },
+            pattern: { label: t('classification', 'type_pattern') || 'Pattern', icon: 'fas fa-th', color: '#84cc16', keywords: [] },
+            fit: { label: t('classification', 'type_fit') || 'Fit', icon: 'fas fa-user', color: '#f97316', keywords: [] },
+            other: { label: t('classification', 'type_other'), icon: 'fas fa-cubes', color: '#6b7280', keywords: [] }
+        };
+        keywords.forEach(k => {
+            const kType = k.type || k.classification_type || '';
+            if (groups[kType]) {
+                groups[kType].keywords.push(k);
+            } else {
+                groups.other.keywords.push(k);
+            }
+        });
+
+        const renderGroup = (groupKey, group) => {
+            if (group.keywords.length === 0) return '';
+            const showAllKey = 'showAll_' + groupKey;
+            const isExpanded = this[showAllKey] === true;
+            const displayCount = isExpanded ? group.keywords.length : Math.min(3, group.keywords.length);
+            const displayedKeywords = group.keywords.slice(0, displayCount);
+            let groupHtml = '<div style="margin-top: 24px; border-left: 4px solid ' + group.color + '; padding-left: 12px; border-radius: 4px;">';
+            groupHtml += '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">';
+            groupHtml += '<div style="display: flex; align-items: center; gap: 10px;">';
+            groupHtml += '<i class="' + group.icon + '" style="color: ' + group.color + '; font-size: 18px;"></i>';
+            groupHtml += '<h3 style="margin: 0; font-size: 16px;">' + group.label + ' <span class="badge badge-secondary">' + group.keywords.length + '</span></h3>';
+            groupHtml += '</div>';
+            if (group.keywords.length > 3) {
+                const btnText = isExpanded ? t('classification', 'show_less') : t('classification', 'show_all');
+                groupHtml += '<button class="btn btn-sm btn-outline-primary" onclick="App.toggleKeywordGroup(\'' + groupKey + '\')">' + btnText + '</button>';
+            }
+            groupHtml += '</div>';
+            groupHtml += '<div style="overflow-x:auto;"><table class="table table-sm">';
+            groupHtml += '<thead><tr>';
+            groupHtml += '<th style="width:40px;"><input type="checkbox" class="select-all-cb" data-target="keywords"></th>';
+            groupHtml += '<th>' + t('classification', 'standard') + '</th>';
+            groupHtml += '<th>' + t('classification', 'ko_keywords') + '</th>';
+            groupHtml += '<th>' + t('classification', 'zh_keywords') + '</th>';
+            groupHtml += '<th>' + t('classification', 'en_keywords') + '</th>';
+            groupHtml += '<th>' + t('classification', 'ja_keywords') + '</th>';
+            groupHtml += '<th>' + t('classification', 'priority') + '</th>';
+            groupHtml += '<th>' + t('common', 'status') + '</th>';
+            groupHtml += '<th>' + t('common', 'action') + '</th>';
+            groupHtml += '</tr></thead><tbody>';
+            const self = this;
+            displayedKeywords.forEach(function(k) {
+                const kType = k.type || k.classification_type || '';
+                const kStandard = k.standard || k.standard_value || '';
+                const isEditing = String(self.editingKeywordId) === String(k.id);
+                const isActive = k.is_active !== false;
+                groupHtml += '<tr' + (isEditing ? ' style="background:#eef3ff;"' : '') + '>';
+                groupHtml += '<td><input type="checkbox" class="row-checkbox" data-id="' + k.id + '" data-target="keywords"' + (self.classificationSelected.has(String(k.id)) ? ' checked' : '') + '></td>';
+                groupHtml += '<td><strong style="color: ' + group.color + ';">' + kStandard + '</strong></td>';
+                groupHtml += '<td>' + (k.ko || []).join(', ') + '</td>';
+                groupHtml += '<td>' + (k.zh || []).join(', ') + '</td>';
+                groupHtml += '<td>' + (k.en || []).join(', ') + '</td>';
+                groupHtml += '<td>' + (k.ja || []).join(', ') + '</td>';
+                groupHtml += '<td>' + (k.priority || 5) + '</td>';
+                groupHtml += '<td><span class="badge ' + (isActive ? 'badge-completed' : 'badge-cancelled') + '">' + (isActive ? t('classification', 'active') : t('classification', 'inactive')) + '</span></td>';
+                groupHtml += '<td>';
+                groupHtml += '<button class="btn btn-sm ' + (isEditing ? 'btn-warning' : 'btn-secondary') + '" onclick="App.toggleEditKeyword(\'' + k.id + '\')"><i class="fas fa-edit"></i></button> ';
+                groupHtml += '<button class="btn btn-sm btn-danger" onclick="App.deleteKeyword(\'' + k.id + '\')"><i class="fas fa-trash"></i></button>';
+                groupHtml += '</td></tr>';
+                if (isEditing) {
+                    groupHtml += '<tr style="background:#f8f9fa;"><td colspan="9">';
+                    groupHtml += '<form id="keywordEditForm_' + k.id + '" onsubmit="App.submitKeywordForm(event, \'' + k.id + '\')" style="padding:12px 8px;">';
+                    groupHtml += '<div class="form-row">';
+                    groupHtml += '<div class="form-group"><label>' + t('classification', 'type') + '</label><select class="form-control" name="type" required>';
+                    ['brand','category','color','size','material','style','pattern','fit'].forEach(function(tp){
+                        groupHtml += '<option value="' + tp + '"' + (kType === tp ? ' selected' : '') + '>' + tp.charAt(0).toUpperCase() + tp.slice(1) + '</option>';
+                    });
+                    groupHtml += '</select></div>';
+                    groupHtml += '<div class="form-group"><label>' + t('classification', 'standard') + '</label><input type="text" class="form-control" name="standard" value="' + kStandard + '" required></div>';
+                    groupHtml += '<div class="form-group"><label>' + t('classification', 'priority') + '</label><input type="number" class="form-control" name="priority" value="' + (k.priority || 5) + '" min="1" max="10"></div>';
+                    groupHtml += '</div>';
+                    groupHtml += '<div class="form-row">';
+                    groupHtml += '<div class="form-group"><label>' + t('classification', 'ko_keywords') + '</label><input type="text" class="form-control" name="ko" value="' + (k.ko || []).join(', ') + '"></div>';
+                    groupHtml += '<div class="form-group"><label>' + t('classification', 'zh_keywords') + '</label><input type="text" class="form-control" name="zh" value="' + (k.zh || []).join(', ') + '"></div>';
+                    groupHtml += '</div>';
+                    groupHtml += '<div class="form-row">';
+                    groupHtml += '<div class="form-group"><label>' + t('classification', 'en_keywords') + '</label><input type="text" class="form-control" name="en" value="' + (k.en || []).join(', ') + '"></div>';
+                    groupHtml += '<div class="form-group"><label>' + t('classification', 'ja_keywords') + '</label><input type="text" class="form-control" name="ja" value="' + (k.ja || []).join(', ') + '"></div>';
+                    groupHtml += '</div>';
+                    groupHtml += '<div class="d-flex align-items-center gap-2">';
+                    groupHtml += '<label class="checkbox-wrapper" style="margin:0;"><input type="checkbox" name="active"' + (isActive ? ' checked' : '') + '><span>' + t('classification', 'active') + '</span></label>';
+                    groupHtml += '<div class="d-flex gap-2 ml-auto">';
+                    groupHtml += '<button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-save"></i> ' + t('classification', 'save_keyword') + '</button> ';
+                    groupHtml += '<button type="button" class="btn btn-secondary btn-sm" onclick="App.cancelEditKeyword()">' + t('common', 'cancel') + '</button>';
+                    groupHtml += '</div></div></form></td></tr>';
+                }
+            });
+            groupHtml += '</tbody></table></div></div>';
+            return groupHtml;
+        };
+
         let html = `
             <div class="card">
                 <div class="action-bar">
@@ -414,105 +514,9 @@ const App = {
         if (keywords.length === 0) {
             html += `<p class="text-muted" data-i18n="classification.no_keywords">${t('classification', 'no_keywords')}</p>`;
         } else {
-            html += `<div style="overflow-x:auto;"><table class="table">
-                <thead><tr>
-                    <th style="width:40px;"><input type="checkbox" class="select-all-cb" data-target="keywords"></th>
-                    <th data-i18n="classification.type">${t('classification', 'type')}</th>
-                    <th data-i18n="classification.standard">${t('classification', 'standard')}</th>
-                    <th data-i18n="classification.ko_keywords">${t('classification', 'ko_keywords')}</th>
-                    <th data-i18n="classification.zh_keywords">${t('classification', 'zh_keywords')}</th>
-                    <th data-i18n="classification.en_keywords">${t('classification', 'en_keywords')}</th>
-                    <th data-i18n="classification.ja_keywords">${t('classification', 'ja_keywords')}</th>
-                    <th data-i18n="classification.priority">${t('classification', 'priority')}</th>
-                    <th data-i18n="common.status">${t('common', 'status')}</th>
-                    <th data-i18n="common.action">${t('common', 'action')}</th>
-                </tr></thead><tbody>`;
-            keywords.forEach(k => {
-                const kType = k.type || k.classification_type || '';
-                const kStandard = k.standard || k.standard_value || '';
-                const isEditing = String(this.editingKeywordId) === String(k.id);
-                html += `
-                    <tr ${isEditing ? 'style="background:#eef3ff;"' : ''}>
-                        <td><input type="checkbox" class="row-checkbox" data-id="${k.id}" data-target="keywords" ${this.classificationSelected.has(String(k.id)) ? 'checked' : ''}></td>
-                        <td>${kType}</td>
-                        <td><strong>${kStandard}</strong></td>
-                        <td>${(k.ko || []).join(', ')}</td>
-                        <td>${(k.zh || []).join(', ')}</td>
-                        <td>${(k.en || []).join(', ')}</td>
-                        <td>${(k.ja || []).join(', ')}</td>
-                        <td>${k.priority || 5}</td>
-                        <td><span class="badge ${k.is_active !== false ? 'badge-completed' : 'badge-cancelled'}">${k.is_active !== false ? t('classification', 'active') : t('classification', 'inactive')}</span></td>
-                        <td>
-                            <button class="btn btn-sm ${isEditing ? 'btn-warning' : 'btn-secondary'}" onclick="App.toggleEditKeyword('${k.id}')"><i class="fas fa-edit"></i></button>
-                            <button class="btn btn-sm btn-danger" onclick="App.deleteKeyword('${k.id}')"><i class="fas fa-trash"></i></button>
-                        </td>
-                    </tr>
-                `;
-                if (isEditing) {
-                    html += `
-                        <tr style="background:#f8f9fa;">
-                            <td colspan="10">
-                                <form id="keywordEditForm_${k.id}" onsubmit="App.submitKeywordForm(event, '${k.id}')" style="padding:12px 8px;">
-                                    <div class="form-row">
-                                        <div class="form-group">
-                                            <label>${t('classification', 'type')}</label>
-                                            <select class="form-control" name="type" required>
-                                                <option value="brand" ${kType === 'brand' ? 'selected' : ''}>Brand</option>
-                                                <option value="category" ${kType === 'category' ? 'selected' : ''}>Category</option>
-                                                <option value="color" ${kType === 'color' ? 'selected' : ''}>Color</option>
-                                                <option value="size" ${kType === 'size' ? 'selected' : ''}>Size</option>
-                                                <option value="material" ${kType === 'material' ? 'selected' : ''}>Material</option>
-                                                <option value="style" ${kType === 'style' ? 'selected' : ''}>Style</option>
-                                                <option value="pattern" ${kType === 'pattern' ? 'selected' : ''}>Pattern</option>
-                                                <option value="fit" ${kType === 'fit' ? 'selected' : ''}>Fit</option>
-                                            </select>
-                                        </div>
-                                        <div class="form-group">
-                                            <label>${t('classification', 'standard')}</label>
-                                            <input type="text" class="form-control" name="standard" value="${kStandard}" required>
-                                        </div>
-                                        <div class="form-group">
-                                            <label>${t('classification', 'priority')}</label>
-                                            <input type="number" class="form-control" name="priority" value="${k.priority || 5}" min="1" max="10">
-                                        </div>
-                                    </div>
-                                    <div class="form-row">
-                                        <div class="form-group">
-                                            <label>${t('classification', 'ko_keywords')}</label>
-                                            <input type="text" class="form-control" name="ko" value="${(k.ko || []).join(', ')}">
-                                        </div>
-                                        <div class="form-group">
-                                            <label>${t('classification', 'zh_keywords')}</label>
-                                            <input type="text" class="form-control" name="zh" value="${(k.zh || []).join(', ')}">
-                                        </div>
-                                    </div>
-                                    <div class="form-row">
-                                        <div class="form-group">
-                                            <label>${t('classification', 'en_keywords')}</label>
-                                            <input type="text" class="form-control" name="en" value="${(k.en || []).join(', ')}">
-                                        </div>
-                                        <div class="form-group">
-                                            <label>${t('classification', 'ja_keywords')}</label>
-                                            <input type="text" class="form-control" name="ja" value="${(k.ja || []).join(', ')}">
-                                        </div>
-                                    </div>
-                                    <div class="d-flex align-items-center gap-2">
-                                        <label class="checkbox-wrapper" style="margin:0;">
-                                            <input type="checkbox" name="active" ${k.is_active !== false ? 'checked' : ''}>
-                                            <span>${t('classification', 'active')}</span>
-                                        </label>
-                                        <div class="d-flex gap-2 ml-auto">
-                                            <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-save"></i> ${t('classification', 'save_keyword')}</button>
-                                            <button type="button" class="btn btn-secondary btn-sm" onclick="App.cancelEditKeyword()">${t('common', 'cancel')}</button>
-                                        </div>
-                                    </div>
-                                </form>
-                            </td>
-                        </tr>
-                    `;
-                }
-            });
-            html += '</tbody></table></div>';
+            for (const [groupKey, group] of Object.entries(groups)) {
+                html += renderGroup(groupKey, group);
+            }
         }
         html += `</div>
             <div class="card mt-4">
@@ -639,6 +643,12 @@ const App = {
         this.render();
     },
 
+    toggleKeywordGroup(groupKey) {
+        const showAllKey = 'showAll_' + groupKey;
+        this[showAllKey] = !this[showAllKey];
+        App.renderPage();
+    },
+
     toggleEditKeyword(id) {
         if (String(this.editingKeywordId) === String(id)) {
             this.editingKeywordId = null;
@@ -699,8 +709,8 @@ const App = {
 
     initDefaultKeywords() {
         if (!confirm(t('classification', 'init_help'))) return;
-        ClassificationService.initDefaultKeywords();
-        this.flash(t('settings', 'save_success'), 'success');
+        const added = ClassificationService.initDefaultKeywords();
+        this.flash(t('settings', 'save_success') + ' (' + added + ' ' + t('classification', 'keywords_added') + ')', 'success');
         this.render();
     },
 

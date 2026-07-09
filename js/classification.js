@@ -160,7 +160,9 @@ const ClassificationService = {
 
     initDefaultKeywords() {
         const existing = DB.getKeywords();
-        if (existing.length > 0) return;
+        const existingKeys = new Set(existing.map(k =>
+            (k.classification_type || k.type || '') + '|' + (k.standard_value || k.standard || '').toLowerCase()
+        ));
         const defaults = [
             // 브랜드
             { classification_type: 'brand', standard_value: 'SYSTEM', ko: ['시스템'], zh: ['SYSTEM', '系统'], en: ['SYSTEM', 'System'], ja: ['SYSTEM', 'システム'], priority: 8 },
@@ -247,6 +249,14 @@ const ClassificationService = {
             { classification_type: 'material', standard_value: 'RAYON', ko: ['레이온', '인견'], zh: ['人造丝', '粘胶'], en: ['rayon', 'viscose'], ja: ['レーヨン', '人絹'], priority: 7 },
             { classification_type: 'material', standard_value: 'SPANDEX', ko: ['스판', '스판덱스', '폴리우레탄'], zh: ['氨纶', '弹性纤维'], en: ['spandex', 'lycra', 'elastane'], ja: ['スパンデックス', 'ポリウレタン'], priority: 7 },
         ];
-        defaults.forEach(d => DB.addKeyword(d));
+        let addedCount = 0;
+        defaults.forEach(d => {
+            const key = (d.classification_type || d.type || '') + '|' + (d.standard_value || d.standard || '').toLowerCase();
+            if (!existingKeys.has(key)) {
+                DB.addKeyword(d);
+                addedCount++;
+            }
+        });
+        return addedCount;
     }
 };

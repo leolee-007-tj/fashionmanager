@@ -320,6 +320,13 @@ const TRANSLATIONS = {
         type_color: { ko: '색상', zh: '颜色', en: 'Color', ja: '色' },
         type_size: { ko: '사이즈', zh: '尺寸', en: 'Size', ja: 'サイズ' },
         type_material: { ko: '소재', zh: '材质', en: 'Material', ja: '素材' },
+        type_style: { ko: '스타일', zh: '风格', en: 'Style', ja: 'スタイル' },
+        type_pattern: { ko: '패턴', zh: '图案', en: 'Pattern', ja: 'パターン' },
+        type_fit: { ko: '핏', zh: '版型', en: 'Fit', ja: 'フィット' },
+        type_other: { ko: '기타', zh: '其他', en: 'Other', ja: 'その他' },
+        show_all: { ko: '전체 보기', zh: '查看全部', en: 'Show All', ja: 'すべて表示' },
+        show_less: { ko: '간략히', zh: '收起', en: 'Show Less', ja: '一部表示' },
+        keywords_added: { ko: '개 추가됨', zh: '个已添加', en: 'added', ja: '個追加' },
         add: { ko: '추가', zh: '添加', en: 'Add', ja: '追加' },
     },
     excel: {
