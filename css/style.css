@@ -110,7 +110,6 @@ body {
 
 .lang-btn:hover {
     background: rgba(255,255,255,0.3);
-    transform: scale(1.1);
 }
 
 .lang-btn.active {
@@ -227,7 +226,6 @@ body {
 }
 
 .btn:hover {
-    transform: translateY(-1px);
     box-shadow: var(--shadow-md);
 }
 
