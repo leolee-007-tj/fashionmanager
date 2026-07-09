@@ -6,7 +6,8 @@ const Orders = {
         month: new Date().getMonth() + 1,
         sortBy: 'order_date',
         sortOrder: 'desc',
-        selected: new Set()
+        selected: new Set(),
+        editingOrderId: null
     },
 
     load() {
@@ -108,6 +109,9 @@ const Orders = {
                         <h2><i class="fas fa-shopping-cart"></i> ${t('orders', 'title')}</h2>
                     </div>
                     <div class="action-bar-right">
+                        <button class="btn btn-secondary" onclick="Orders.selectDuplicates()">
+                            <i class="fas fa-copy"></i> ${t('orders', 'select_duplicates')}
+                        </button>
                         <a href="#/orders/add" class="btn btn-primary"><i class="fas fa-plus"></i> ${t('orders', 'add')}</a>
                     </div>
                 </div>
@@ -169,6 +173,7 @@ const Orders = {
                                 ${t('orders', 'selling_price')}
                                 <i class="fas fa-sort-${this.state.sortOrder === 'asc' ? 'up' : 'down'}"></i>
                             </th>
+                            <th>${t('common', 'action')}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -178,16 +183,60 @@ const Orders = {
             list.forEach(o => {
                 const product = products.find(p => p.id === o.product_id);
                 const customer = customers.find(c => c.id === o.customer_id);
+                const isEditing = String(this.state.editingOrderId) === String(o.id);
                 html += `
-                    <tr>
+                    <tr${isEditing ? ' style="background:#eef3ff;"' : ''}>
                         <td><input type="checkbox" class="row-checkbox" data-id="${o.id}" data-target="orders" ${this.state.selected.has(Number(o.id)) ? 'checked' : ''}></td>
                         <td>${this._formatOrderDate(o.order_date) || this._formatOrderDate(o.created_at) || '-'}</td>
                         <td>${customer ? customer.name : '-'}</td>
                         <td>${product ? product.brand : '-'}</td>
                         <td>${product ? product.original_title : '-'}</td>
                         <td class="font-bold">${(o.selling_price || 0).toLocaleString()} ${t('common', 'currency')}</td>
+                        <td>
+                            <button class="btn btn-sm ${isEditing ? 'btn-warning' : 'btn-secondary'}" onclick="Orders.toggleEdit(${o.id})"><i class="fas fa-edit"></i></button>
+                            <button class="btn btn-sm btn-danger" onclick="Orders.delete(${o.id})"><i class="fas fa-trash"></i></button>
+                        </td>
                     </tr>
                 `;
+                if (isEditing) {
+                    html += `
+                        <tr style="background:#f8f9fa;">
+                            <td colspan="7">
+                                <form id="orderEditForm_${o.id}" onsubmit="Orders.submitEdit(event, ${o.id})" style="padding:12px 8px;">
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>${t('orders', 'sale_date')}</label>
+                                            <input type="date" class="form-control" name="order_date" value="${this._formatOrderDate(o.order_date) || this._formatOrderDate(o.created_at) || ''}">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>${t('orders', 'customer')}</label>
+                                            <select class="form-control" name="customer_id">
+                                                ${customers.map(c => `<option value="${c.id}"${String(c.id) === String(o.customer_id) ? ' selected' : ''}>${c.name}</option>`).join('')}
+                                            </select>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>${t('orders', 'selling_price')} (${t('common', 'currency')})</label>
+                                            <input type="number" class="form-control" name="selling_price" value="${o.selling_price || 0}" min="0">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>${t('common', 'status')}</label>
+                                            <select class="form-control" name="status">
+                                                <option value="COMPLETED"${o.status === 'COMPLETED' ? ' selected' : ''}>${t('orders', 'status_completed') || '완료'}</option>
+                                                <option value="SHIPPED"${o.status === 'SHIPPED' ? ' selected' : ''}>${t('orders', 'status_shipped') || '출고'}</option>
+                                                <option value="PENDING"${o.status === 'PENDING' ? ' selected' : ''}>${t('orders', 'status_pending') || '대기'}</option>
+                                                <option value="CANCELLED"${o.status === 'CANCELLED' ? ' selected' : ''}>${t('orders', 'status_cancelled') || '취소'}</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex gap-2 ml-auto">
+                                        <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-save"></i> ${t('common', 'save')}</button>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="Orders.cancelEdit()">${t('common', 'cancel')}</button>
+                                    </div>
+                                </form>
+                            </td>
+                        </tr>
+                    `;
+                }
             });
             html += '</tbody></table></div>';
         }
@@ -273,6 +322,75 @@ const Orders = {
         const remaining = orders.filter(o => !this.state.selected.has(o.id));
         DB.setOrders(remaining);
         this.state.selected.clear();
+        App.flash(t('common', 'delete') + '!', 'success');
+        App.render();
+    },
+
+    selectDuplicates() {
+        const list = this.state.filtered;
+        const seen = new Map();
+        const dupIds = [];
+        list.forEach(o => {
+            const key = String(o.customer_id) + '|' + String(o.product_id) + '|' + this._formatOrderDate(o.order_date || o.created_at);
+            if (seen.has(key)) {
+                dupIds.push(o.id);
+            } else {
+                seen.set(key, o.id);
+            }
+        });
+        this.state.selected.clear();
+        dupIds.forEach(id => this.state.selected.add(Number(id)));
+        App.flash(t('orders', 'duplicates_found') + ': ' + dupIds.length + t('orders', 'items_selected'), dupIds.length > 0 ? 'info' : 'warning');
+        App.renderPage();
+    },
+
+    toggleEdit(orderId) {
+        if (String(this.state.editingOrderId) === String(orderId)) {
+            this.state.editingOrderId = null;
+        } else {
+            this.state.editingOrderId = Number(orderId);
+        }
+        App.renderPage();
+    },
+
+    cancelEdit() {
+        this.state.editingOrderId = null;
+        App.renderPage();
+    },
+
+    submitEdit(e, orderId) {
+        e.preventDefault();
+        const form = e.target;
+        const orders = DB.getOrders();
+        const idx = orders.findIndex(o => String(o.id) === String(orderId));
+        if (idx === -1) return;
+        const order = orders[idx];
+        order.order_date = form.order_date.value;
+        order.customer_id = Number(form.customer_id.value);
+        order.selling_price = Number(form.selling_price.value) || 0;
+        order.status = form.status.value || order.status;
+        orders[idx] = order;
+        DB.setOrders(orders);
+        this.state.editingOrderId = null;
+        App.flash(t('common', 'save') + '!', 'success');
+        App.render();
+    },
+
+    delete(orderId) {
+        if (!confirm(t('common', 'confirm_delete'))) return;
+        const orders = DB.getOrders();
+        const order = orders.find(o => String(o.id) === String(orderId));
+        if (order && order.status === 'PENDING') {
+            const products = DB.getProducts();
+            const product = products.find(p => p.id === order.product_id);
+            if (product) {
+                product.reserved_stock = Math.max(0, (product.reserved_stock || 0) - (order.quantity || 0));
+            }
+            DB.setProducts(products);
+        }
+        const remaining = orders.filter(o => String(o.id) !== String(orderId));
+        DB.setOrders(remaining);
+        this.state.selected.delete(Number(orderId));
         App.flash(t('common', 'delete') + '!', 'success');
         App.render();
     },

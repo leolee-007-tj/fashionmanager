@@ -106,6 +106,13 @@ const TRANSLATIONS = {
         select_product_required: { ko: '상품을 선택하세요.', zh: '请选择商品。', en: 'Please select a product.', ja: '商品を選択してください。' },
         enter_qty_price: { ko: '수량과 가격을 입력하세요.', zh: '请输入数量和价格。', en: 'Please enter quantity and price.', ja: '数量と価格を入力してください。' },
         order_not_found: { ko: '판매를 찾을 수 없습니다.', zh: '未找到销售记录。', en: 'Sale not found.', ja: '販売が見つかりません。' },
+        select_duplicates: { ko: '중복 선택', zh: '选择重复', en: 'Select Duplicates', ja: '重複選択' },
+        duplicates_found: { ko: '중복 발견', zh: '发现重复', en: 'Duplicates found', ja: '重複発見' },
+        items_selected: { ko: '건 선택됨', zh: '条已选择', en: 'items selected', ja: '件選択済' },
+        status_completed: { ko: '완료', zh: '完成', en: 'Completed', ja: '完了' },
+        status_shipped: { ko: '출고', zh: '出货', en: 'Shipped', ja: '出荷' },
+        status_pending: { ko: '대기', zh: '等待', en: 'Pending', ja: '待機' },
+        status_cancelled: { ko: '취소', zh: '取消', en: 'Cancelled', ja: '取消' },
     },
     customers: {
         title: { ko: '고객 목록', zh: '客户列表', en: 'Customer List', ja: '顧客リスト' },
