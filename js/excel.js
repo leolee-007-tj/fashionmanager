@@ -221,15 +221,28 @@ const ExcelManager = {
             const productCode = row['product_code'] || DB.generateProductCode(brand, stockYear, stockMonth);
             const currentStock = parseInt(row['초기재고'] || row['현재재고'] || row['재고'] || row['수량'] || row['stock'] || row['quantity'] || 0) || 0;
 
+            // 엑셀에 카테고리/색상/사이즈가 비어있으면 분류키워드로 자동 분류
+            let category = row['종류'] || row['카테고리'] || row['category'] || '';
+            let color = row['색상'] || row['컬러'] || row['color'] || '';
+            let size = row['사이즈'] || row['칫수'] || row['size'] || '';
+            let material = row['소재'] || row['재질'] || row['material'] || '';
+            if (!category || !color || !size) {
+                const autoClassified = ClassificationService.classify(title);
+                if (!category && autoClassified.category) category = autoClassified.category;
+                if (!color && autoClassified.color) color = autoClassified.color;
+                if (!size && autoClassified.size) size = autoClassified.size;
+                if (!material && autoClassified.material) material = autoClassified.material;
+            }
+
             products.push({
                 id: nextProductId++,
                 product_code: productCode,
                 original_title: title,
                 brand: brand,
-                category: row['종류'] || row['카테고리'] || row['category'] || '',
-                color: row['색상'] || row['컬러'] || row['color'] || '',
-                size: row['사이즈'] || row['칫수'] || row['size'] || '',
-                material: row['소재'] || row['재질'] || row['material'] || '',
+                category: category,
+                color: color,
+                size: size,
+                material: material,
                 korea_cost: koreaCost,
                 actual_converted_cost: priceResult.actual_converted_cost,
                 china_base_price: priceResult.china_base_price,

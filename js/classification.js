@@ -1,4 +1,37 @@
 const ClassificationService = {
+    // 상품 객체에 대해 DB에 저장된 분류값이 있으면 사용하고,
+    // 없으면 original_title로 실시간 분류하여 반환
+    classifyProduct(product) {
+        if (!product) return this.emptyResult();
+        // DB에 저장된 값이 있고 비어있지 않으면 사용
+        const hasStored = (product.category && String(product.category).trim()) ||
+                          (product.color && String(product.color).trim()) ||
+                          (product.size && String(product.size).trim());
+        if (hasStored) {
+            return {
+                detected_language: product.title_language || this.detectLanguage(product.original_title || ''),
+                brand: product.brand || null,
+                category: product.category || null,
+                color: product.color || null,
+                size: product.size || null,
+                material: product.material || null,
+                season: null,
+                fit: null,
+                style: null,
+                normalized_title: product.original_title || '',
+                confidence: 'high',
+                needs_review: false,
+                notes: [],
+                classification_status: 'auto_complete',
+                _source: 'stored'
+            };
+        }
+        // 저장된 값이 없으면 실시간 분류
+        const result = this.classify(product.original_title || '');
+        result._source = 'computed';
+        return result;
+    },
+
     classify(title) {
         if (!title) return this.emptyResult();
         const keywords = DB.getKeywords().filter(k => k.is_active !== false);

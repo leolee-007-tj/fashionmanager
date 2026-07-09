@@ -13,7 +13,36 @@ const Products = {
 
     load() {
         this.state.products = DB.getProducts();
+        this.autoClassifyAll();
         this.applyFilters();
+    },
+
+    // 모든 상품에 대해 분류키워드 자동 적용
+    // - DB에 저장된 분류값이 있으면 그대로 사용
+    // - 없으면 original_title로 실시간 분류하여 DB에 저장
+    autoClassifyAll() {
+        const allProducts = DB.getProducts();
+        let updated = false;
+        allProducts.forEach(p => {
+            if (!p.original_title) return;
+            const hasStored = (p.category && String(p.category).trim()) ||
+                              (p.color && String(p.color).trim()) ||
+                              (p.size && String(p.size).trim());
+            if (hasStored) return; // 이미 저장된 값이 있으면 그대로 사용
+            const result = ClassificationService.classify(p.original_title);
+            if (result.category || result.color || result.size) {
+                if (result.category && !p.category) p.category = result.category;
+                if (result.color && !p.color) p.color = result.color;
+                if (result.size && !p.size) p.size = result.size;
+                if (result.material && !p.material) p.material = result.material;
+                p.updated_at = new Date().toISOString();
+                updated = true;
+            }
+        });
+        if (updated) {
+            DB.setProducts(allProducts);
+            this.state.products = allProducts;
+        }
     },
 
     applyFilters() {
@@ -152,19 +181,28 @@ const Products = {
             list.forEach(p => {
                 const available = (p.current_stock || 0) - (p.reserved_stock || 0);
                 const stockStatus = available <= 0 ? 'text-danger' : available <= 5 ? 'text-warning' : '';
+                // 분류키워드 자동 적용 결과
+                const classified = ClassificationService.classifyProduct(p);
+                const categoryClass = p.category ? 'classification-badge category' : 'classification-badge unclassified';
+                const colorClass = p.color ? 'classification-badge color' : 'classification-badge unclassified';
+                const sizeClass = p.size ? 'classification-badge size' : 'classification-badge unclassified';
+                const tooltipInfo = classified._source === 'computed' ? ` (${t('common', 'auto_classified')})` : '';
                 html += `
                     <tr>
                         <td><input type="checkbox" class="row-checkbox" data-id="${p.id}" data-target="products" ${this.state.selected.has(Number(p.id)) ? 'checked' : ''}></td>
                         <td>${p.image ? `<img src="${p.image}" class="product-thumb">` : '-'}</td>
                         <td><strong>${p.brand || '-'}</strong></td>
                         <td>${p.original_title || '-'}</td>
-                        <td>${p.category || '-'}</td>
-                        <td>${p.color || '-'}</td>
-                        <td>${p.size || '-'}</td>
+                        <td><span class="${categoryClass}" title="${p.category || '-'}${tooltipInfo}">${p.category || (classified.category || '-')}</span></td>
+                        <td><span class="${colorClass}" title="${p.color || '-'}${tooltipInfo}">${p.color || (classified.color || '-')}</span></td>
+                        <td><span class="${sizeClass}" title="${p.size || '-'}${tooltipInfo}">${p.size || (classified.size || '-')}</span></td>
                         <td>${(p.korea_cost || 0).toLocaleString()} ${t('common', 'currency_kr')}</td>
                         <td class="font-bold">${(p.china_base_price || 0).toLocaleString()} ${t('common', 'currency')}</td>
                         <td class="${stockStatus}">${available} / ${p.current_stock || 0}</td>
                         <td>
+                            <button class="btn btn-sm btn-info" onclick="Products.reclassify(${p.id})" title="${t('common', 'reclassify')}">
+                                <i class="fas fa-magic"></i>
+                            </button>
                             <a href="#/products/${p.id}/edit" class="btn btn-sm btn-secondary">
                                 <i class="fas fa-edit"></i>
                             </a>
@@ -319,6 +357,11 @@ const Products = {
             stock_month: this.state.stockMonth, image: '', notes: ''
         };
         const priceResult = PriceCalculator.calculate(p.korea_cost || 0);
+        // 분류키워드에서 standard_value 목록 추출
+        const keywords = DB.getKeywords().filter(k => k.is_active !== false);
+        const categoryOptions = [...new Set(keywords.filter(k => k.classification_type === 'category').map(k => k.standard_value))].sort();
+        const colorOptions = [...new Set(keywords.filter(k => k.classification_type === 'color').map(k => k.standard_value))].sort();
+        const sizeOptions = [...new Set(keywords.filter(k => k.classification_type === 'size').map(k => k.standard_value))].sort();
         return `
             <div class="card">
                 <h2><i class="fas fa-plus text-primary"></i> ${isEdit ? t('products', 'edit') : t('products', 'add')}</h2>
@@ -364,15 +407,18 @@ const Products = {
                     <div class="form-row">
                         <div class="form-group">
                             <label>${t('products', 'category')}</label>
-                            <input type="text" name="category" id="category" class="form-control" value="${p.category}">
+                            <input type="text" name="category" id="category" class="form-control" value="${p.category}" list="categoryList" placeholder="${t('common', 'select_from_keywords')}">
+                            <datalist id="categoryList">${categoryOptions.map(c => `<option value="${c}">`).join('')}</datalist>
                         </div>
                         <div class="form-group">
                             <label>${t('products', 'color')}</label>
-                            <input type="text" name="color" id="color" class="form-control" value="${p.color}">
+                            <input type="text" name="color" id="color" class="form-control" value="${p.color}" list="colorList" placeholder="${t('common', 'select_from_keywords')}">
+                            <datalist id="colorList">${colorOptions.map(c => `<option value="${c}">`).join('')}</datalist>
                         </div>
                         <div class="form-group">
                             <label>${t('products', 'size')}</label>
-                            <input type="text" name="size" id="size" class="form-control" value="${p.size}">
+                            <input type="text" name="size" id="size" class="form-control" value="${p.size}" list="sizeList" placeholder="${t('common', 'select_from_keywords')}">
+                            <datalist id="sizeList">${sizeOptions.map(s => `<option value="${s}">`).join('')}</datalist>
                         </div>
                         <div class="form-group">
                             <label>${t('products', 'material')}</label>
@@ -475,6 +521,28 @@ const Products = {
     },
 
     tempImage: null,
+
+    // 단일 상품 재분류 (목록에서 magic 버튼 클릭 시)
+    reclassify(id) {
+        const products = DB.getProducts();
+        const idx = products.findIndex(p => p.id === Number(id));
+        if (idx < 0) return;
+        const p = products[idx];
+        if (!p.original_title) {
+            App.flash(t('common', 'no_product_name'), 'warning');
+            return;
+        }
+        const result = ClassificationService.classify(p.original_title);
+        if (result.category) p.category = result.category;
+        if (result.color) p.color = result.color;
+        if (result.size) p.size = result.size;
+        if (result.material) p.material = result.material;
+        p.updated_at = new Date().toISOString();
+        DB.setProducts(products);
+        this.state.products = products;
+        App.flash(t('common', 'reclassify') + '!', 'success');
+        App.render();
+    },
 
     submitForm(editId = null) {
         const form = document.getElementById('productForm');
