@@ -429,7 +429,6 @@ const Customers = {
             html += '</tbody></table></div>';
         }
         html += '</div>';
-        setTimeout(() => this.updateSelectAllCheckbox(), 0);
         return html;
     },
 

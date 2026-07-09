@@ -137,7 +137,6 @@ const Expenses = {
             html += '</tbody></table></div>';
         }
         html += '</div>';
-        setTimeout(() => this.updateSelectAllCheckbox(), 0);
         return html;
     },
 
