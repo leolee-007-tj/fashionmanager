@@ -83,7 +83,13 @@ const Customers = {
             list = list.filter(c =>
                 (c.name || '').toLowerCase().includes(s) ||
                 (c.wechat_nickname || '').toLowerCase().includes(s) ||
-                (c.phone || '').includes(s)
+                (c.phone || '').includes(s) ||
+                (c.email || '').toLowerCase().includes(s) ||
+                (c.address || '').toLowerCase().includes(s) ||
+                (c.notes || '').toLowerCase().includes(s) ||
+                (c.memo || '').toLowerCase().includes(s) ||
+                String(c.total_amount || '').includes(s) ||
+                String(c.order_count || '').includes(s)
             );
         }
         if (this.state.year && this.state.month) {
@@ -491,10 +497,15 @@ const Customers = {
         App.render();
     },
 
+    searchTimer: null,
+
     setSearch(val) {
         this.state.search = val;
-        this.applyFilters();
-        App.renderPage();
+        if (this.searchTimer) clearTimeout(this.searchTimer);
+        this.searchTimer = setTimeout(() => {
+            this.applyFilters();
+            App.renderPage();
+        }, 200);
     },
 
     sort(field) {
