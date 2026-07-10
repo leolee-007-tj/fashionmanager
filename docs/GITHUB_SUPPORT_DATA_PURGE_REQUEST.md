@@ -40,6 +40,10 @@ A file containing private operational data was accidentally committed and pushed
 
 ## First Changed Commits (old SHAs containing the data)
 
+<!-- Verified against .git/filter-repo/first-changed-commits on 2026-07-10.
+     Both SHAs below are present in the actual git-filter-repo output file.
+     These are NOT guessed or inferred from the commit that added the file;
+     they are the exact values emitted by git-filter-repo. -->
 - 9806e0fd0a4e3a8fab3f552c9776453a1a454052
 - 9cf0a0d4be3714a35a0d0a5238a58562b1d1d117
 
@@ -58,19 +62,23 @@ A file containing private operational data was accidentally committed and pushed
 
 - None (this repository does not use Git LFS)
 
+## Known forks referencing the old commits
+
+- None identified
+
 ## What we are requesting
 
 1. **Cached views / cached commits**: Please clear all cached views and cached commit pages that reference the old SHAs listed above.
 2. **Dangling / unreachable objects**: Please run server-side garbage collection to remove the dangling Git objects that are no longer reachable from any ref.
 3. **Pull request references**: Please confirm that no pull request references retain the old data (we believe there are none, but please verify).
-4. **Search cache**: Please remove any search index entries that reference the removed file.
+4. **Search index**: Please also remove related search index entries, if applicable.
 
 ## Verification
 
 After processing, we will verify that:
-- Direct URL access to the old commit returns 404
-- Direct URL access to the file blob at old commit returns 404
-- GitHub search no longer returns results for the removed file
+- The sensitive file and blob must no longer be accessible through the old commit SHA. A 404 response is preferred; any remaining commit metadata must not expose the removed file or its contents.
+- Direct URL access to the file blob at old commit must not expose the removed file or its contents.
+- Cached views must not display the sensitive data.
 
 Please let me know if you need any additional information or if there are any steps I need to take on my end.
 
@@ -111,30 +119,32 @@ Follow these steps to submit the request to GitHub Support:
 ### Step 5: Submit and Wait
 1. Submit the ticket
 2. Save the ticket number for your records
-3. Wait for a response from GitHub Support (usually within 1-3 business days)
+3. Wait for a response from GitHub Support
 
 ### Step 6: After Support Confirms Processing
 Once GitHub Support confirms the data has been purged, verify the following:
 
-1. **Old commit page returns 404**:
+The sensitive file and blob must no longer be accessible through the old commit SHA. A 404 response is preferred; any remaining commit metadata must not expose the removed file or its contents.
+
+1. **Old commit page**:
    ```
    https://github.com/leolee-007-tj/fashionmanager/commit/9cf0a0d4be3714a35a0d0a5238a58562b1d1d117
    ```
-   Should return "This commit does not belong to any branch on this repository" or 404.
+   Preferably returns 404, or at minimum does not expose the removed file or its contents.
 
-2. **File blob at old commit returns 404**:
+2. **File blob at old commit**:
    ```
    https://github.com/leolee-007-tj/fashionmanager/blob/9cf0a0d4be3714a35a0d0a5238a58562b1d1d117/data_export.json
    ```
-   Should return 404.
+   Must not expose the removed file or its contents. A 404 response is preferred.
 
-3. **API returns 404**:
+3. **API access**:
    ```
    https://api.github.com/repos/leolee-007-tj/fashionmanager/git/commits/9cf0a0d4be3714a35a0d0a5238a58562b1d1d117
    ```
-   Should return 404.
+   Preferably returns 404, or at minimum does not expose the removed file or its contents.
 
-4. **GitHub search**: Search for "data_export" in the repository - should return no results.
+4. **Cached views**: Verify that no cached view displays the sensitive data.
 
 ---
 
