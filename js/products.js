@@ -132,6 +132,9 @@ const Products = {
                             <input type="checkbox" class="select-all-cb" data-target="products">
                             ${t('products', 'select_all')}
                         </label>
+                        <button class="btn btn-sm btn-info" onclick="Products.batchReclassify()">
+                            <i class="fas fa-magic"></i> ${t('products', 'batch_reclassify')}
+                        </button>
                         <button class="btn btn-sm btn-secondary" onclick="Products.batchMonthChange()">
                             <i class="fas fa-calendar"></i> ${t('products', 'change_month')}
                         </button>
@@ -281,6 +284,33 @@ const Products = {
             this.state.filtered.forEach(p => this.state.selected.add(Number(p.id)));
         }
         App.renderPage();
+    },
+
+    batchReclassify() {
+        if (this.state.selected.size === 0) {
+            App.flash(t('common', 'please_select'), 'warning');
+            return;
+        }
+        if (!confirm(this.state.selected.size + t('common', 'confirm_reclassify_items'))) return;
+        const products = DB.getProducts();
+        let count = 0;
+        products.forEach(p => {
+            if (this.state.selected.has(p.id)) {
+                if (!p.original_title) return;
+                const result = ClassificationService.classify(p.original_title);
+                p.category = result.category || '';
+                p.color = result.color || '';
+                p.size = result.size || '';
+                p.material = result.material || '';
+                p.updated_at = new Date().toISOString();
+                count++;
+            }
+        });
+        DB.setProducts(products);
+        this.state.products = products;
+        this.state.selected.clear();
+        App.flash(count + t('common', 'items_reclassified'), 'success');
+        App.render();
     },
 
     batchMonthChange() {

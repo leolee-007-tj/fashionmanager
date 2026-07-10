@@ -45,6 +45,7 @@ const TRANSLATIONS = {
         total_stock: { ko: '총 재고', zh: '总库存', en: 'Total Stock', ja: '総在庫' },
         select_all: { ko: '전체 선택', zh: '全选', en: 'Select All', ja: '全選択' },
         change_month: { ko: '년/월 변경', zh: '年月变更', en: 'Change Month', ja: '年月変更' },
+        batch_reclassify: { ko: '선택 자동분류', zh: '选择自动分类', en: 'Auto Classify Selected', ja: '選択自動分類' },
         classification_result: { ko: '자동분류 결과', zh: '自动分类结果', en: 'Auto Classification Result', ja: '自動分類結果' },
         normalized_result: { ko: '정규화 결과', zh: '标准化结果', en: 'Normalized Result', ja: '正規化結果' },
         review_classification_msg: { ko: '자동분류 결과를 확인하고 필요시 수정한 후 저장하세요.', zh: '请确认自动分类结果，必要时修改后保存。', en: 'Please review the auto-classification result and save after making corrections.', ja: '自動分類結果を確認し、必要に応じて修正して保存してください。' },
@@ -586,6 +587,8 @@ const TRANSLATIONS = {
         day_suffix: { ko: '일', zh: '日', en: '', ja: '日' },
         day_label: { ko: '일', zh: '日', en: 'Day', ja: '日' },
         confirm_delete_items: { ko: '개 항목을 삭제하시겠습니까?', zh: '确定要删除这些项目吗？', en: 'items will be deleted. Continue?', ja: '件の項目を削除しますか？' },
+        confirm_reclassify_items: { ko: '개 상품을 자동분류 하시겠습니까?', zh: '确定要自动分类这些商品吗？', en: 'items will be auto-classified. Continue?', ja: '件の商品を自動分類しますか？' },
+        items_reclassified: { ko: '개 상품이 자동분류 되었습니다!', zh: '个商品已自动分类！', en: 'items auto-classified!', ja: '件の商品が自動分類されました！' },
         out_of_stock: { ko: '재고없음', zh: '缺货', en: 'Out of Stock', ja: '在庫切れ' },
         ship_out_log: { ko: '출고', zh: '出货', en: 'Ship', ja: '出荷' },
     }
