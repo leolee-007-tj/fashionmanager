@@ -1,8 +1,15 @@
 # 데이터 노출 보안 사고 조치 보고서
 
 **문서 작성일**: 2026-07-10
+**최종 업데이트**: 2026-07-10 (GitHub cached data 제거 요청 준비)
 **사고 유형**: 공개 GitHub 저장소에 운영 데이터 및 고객 식별정보 노출
-**조치 상태**: 기록 정리 완료, 원격 반영 예정
+**조치 상태**: **진행 중**
+- ✅ 기록 재작성 완료 (git filter-repo)
+- ✅ 원격 force push 완료 (main, gh-pages, feature, tags)
+- ✅ 현재 브랜치/태그 파일 제거 완료
+- ⚠️ 과거 SHA 직접 접근 잔존 (GitHub cached views / dangling objects)
+- ⏳ GitHub Support 서버 purge 요청 필요
+- 최종 해결: 진행 중 (GitHub Support 처리 후 완료)
 
 ---
 
@@ -94,11 +101,18 @@ git show backup/pre-supabase-20260710:data_export.json  # 없음
 
 ### 검증 결과
 - ✅ 현재 트리 제거 완료 (모든 브랜치)
-- ✅ Git history 정리 완료 (전체 기록)
+- ✅ Git history 정리 완료 (전체 기록, 55개 커밋 재작성)
 - ✅ 태그 기록 제거 완료
 - ✅ 애플리케이션 코드 파일 보존
 - ✅ 1단계 분석 문서 4개 보존
 - ✅ .gitignore에 정확한 패턴 추가
+- ⚠️ 과거 SHA 직접 접근 잔존 (GitHub API로 200 OK 응답 확인 - cached views / dangling objects)
+
+### 과거 SHA 직접 접근 현황
+- **대상 커밋**: `9cf0a0d4be3714a35a0d0a5238a58562b1d1d117` (파일이 최초 추가된 커밋)
+- **현재 상태**: GitHub API로 직접 접근 시 여전히 200 OK 응답
+- **원인**: GitHub 서버의 cached views 및 dangling object가 아직 GC되지 않음
+- **대응**: GitHub Support에 purge 요청 필요 (docs/GITHUB_SUPPORT_DATA_PURGE_REQUEST.md 참고)
 
 ---
 
@@ -145,5 +159,35 @@ git reset --hard origin/main  # 또는 해당 브랜치
 ---
 
 ## 6. 관련 문서
-- `docs/RISK_ANALYSIS.md` - 위험 분석 (3.1 data_export.json 노출 위험 항목에 해결 상태 추가)
+- `docs/RISK_ANALYSIS.md` - 위험 분석 (3.1 data_export.json 노출 위험 항목)
 - `docs/BASELINE_STATUS.md` - 0단계 기준 상태 문서
+- `docs/GITHUB_SUPPORT_DATA_PURGE_REQUEST.md` - GitHub Support purge 요청 템플릿 및 제출 절차
+
+---
+
+## 7. 추가 보호 조치 (권장)
+
+### 7.1 기존 clone 사용자 안내
+- Git 기록이 재작성됐으므로 이 저장소를 기존에 clone한 사용자는 재-clone 필요
+- 기존 clone에서 오염된 커밋을 재-push하지 않도록 주의
+- 권장: `git fetch origin && git reset --hard origin/브랜치명` 또는 새로 clone
+
+### 7.2 mirror 백업 관리
+- mirror 백업에는 실제 운영 데이터가 포함되어 있으므로 접근 제한 필요
+- 로컬 안전한 위치에만 보관, 외부 공유 절대 금지
+- 장기 보관 여부: Supabase 마이그레이션 완료 및 데이터 검증 후 삭제 고려
+
+### 7.3 향후 예방 조치
+1. **테스트 데이터는 더미 데이터만 사용**: 공개 저장소에는 절대 실제 운영 데이터를 포함하지 않음
+2. **export 파일 pre-commit 차단**: pre-commit hook 또는 gitleaks 등 도구 도입 권장
+3. **저장소 private 전환 고려**: 운영 데이터 관련 작업은 private 저장소에서 진행
+4. **정기 보안 스캔**: gitleaks, truffleHog 등 도구로 주기적으로 민감 정보 스캔
+5. **코드 리뷰 시 데이터 파일 포함 여부 확인**: PR 리뷰 시 .json, .xlsx, .csv 등 데이터 파일 포함 여부 체크
+
+### 7.4 Support 처리 후 재검증 항목
+GitHub Support에서 처리 완료 통보 후 다음을 확인:
+- [ ] 과거 커밋 URL 접근 시 404 반환
+- [ ] 과거 파일 blob URL 접근 시 404 반환  
+- [ ] GitHub API로 과거 SHA 접근 시 404 반환
+- [ ] GitHub 저장소 내 검색에서 data_export.json 검색 결과 없음
+- [ ] 구글 등 외부 검색 엔진 캐시 확인 (필요시 별도 제거 요청)

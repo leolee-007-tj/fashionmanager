@@ -7,7 +7,7 @@
 
 | 순위 | 위험 | 범주 | 발생 가능성 | 영향도 | 관련 파일 |
 |---|---|---|---|---|---|
-| 1 | ~~`data_export.json`에 운영 데이터 + 고객명 노출 (공개 GitHub 저장소)~~ **해결됨** | 보안 | ~~높음 (이미 발생)~~ | ~~높음~~ | `data_export.json` |
+| 1 | `data_export.json`에 운영 데이터 + 고객명 노출 (공개 GitHub 저장소) — **부분 해결** | 보안 | 중간 (과거 SHA 캐시 잔존) | 높음 | `data_export.json` |
 | 2 | 주문 원가 스냅샷 미저장 → 상품 원가 변경 시 과거 수익 왜곡 | 데이터 손실 | 높음 | 높음 | `js/orders.js` (submitAdd, submitShip), `js/excel.js` (importOrders) |
 | 3 | 동기식 → 비동기 전환 시 화면 먼저 렌더링 후 데이터 누락 | 마이그레이션 | 높음 | 중간 | `js/app.js` (renderPage), 모든 모듈 |
 | 4 | Excel 대량 업로드 부분 성공 시 롤백 불가 | Excel | 높음 | 높음 | `js/excel.js` (importProducts, importOrders) |
@@ -88,10 +88,10 @@
 
 ## 3. 보안 위험
 
-### 3.1 ★ data_export.json 운영 데이터 노출 (심각) - 해결됨
-- **상태**: ✅ 해결됨 (2026-07-10 조치 완료)
-- **발생 가능성**: ~~높음 (이미 공개 저장소에 존재)~~
-- **영향도**: ~~높음~~
+### 3.1 ★ data_export.json 운영 데이터 노출 (심각) — 부분 해결
+- **상태**: ⚠️ 부분 해결 (2026-07-10) — 현재 브랜치 및 Git 기록 재작성 완료, GitHub cached SHA 제거 대기
+- **발생 가능성**: 중간 (과거 SHA 직접 접근 시 잔존)
+- **영향도**: 높음
 - **관련 파일**: `data_export.json`
 - **상세**:
   - 132명 고객의 name 포함 (전화/위챗/이메일/주소는 없음 - 확인 완료)
@@ -99,17 +99,23 @@
   - 3,032건 상품의 원가, 판매가 포함
   - Git 추적됨 (commit 9cf0a0d), GitHub 원격 저장소에 push됨
   - `.gitignore`의 `data_export_*.json` 패턴과 불일치 (실제 파일은 `data_export.json`으로 언더스코어 없음)
+  - 과거 SHA로 직접 접근 시 GitHub API가 200 OK 응답 (cached views / dangling objects)
 - **수행한 조치**:
   - `.gitignore`에 `data_export.json` 포함 정확한 패턴 추가
-  - `git filter-repo`로 전체 Git 기록에서 파일 제거 (모든 브랜치 + 태그)
-  - 원격 저장소 force-with-lease push 예정
+  - `git filter-repo`로 전체 Git 기록에서 파일 제거 (모든 브랜치 + 태그, 55개 커밋 재작성)
+  - force push 완료 (main, gh-pages, feature/supabase-cloud-migration, tags)
+  - 현재 브랜치/태그 트리에서는 파일 완전 제거 확인
+- **남은 작업**:
+  - GitHub Support에 cached views / dangling object purge 요청 필요
+  - Support 처리 후 과거 SHA 404 여부 재검증 필요
 - **예방 방법**:
-  - `data_export.json`을 .gitignore에 추가 (`data_export*.json` 패턴으로 수정)
-  - Git 히스토리에서 파일 제거 (`git filter-repo` 또는 BFG)
+  - `data_export.json`을 .gitignore에 추가 (`data_export*.json` 패턴으로 수정) ✅ 완료
+  - Git 히스토리에서 파일 제거 (`git filter-repo` 또는 BFG) ✅ 완료
+  - GitHub Support에 캐시 및 dangling object 제거 요청 ⏳ 예정
   - GitHub 저장소가 public이면 민감 정보 포함하지 않도록 주의
   - Supabase 마이그레이션 시 RLS로 데이터 보호
-- **테스트 방법**: GitHub 저장소에서 data_export.json 접근 확인, .gitignore 적용 후 추적 중단 확인
-- **관련 문서**: `docs/SECURITY_DATA_EXPOSURE_REMEDIATION.md`
+- **테스트 방법**: GitHub 저장소에서 data_export.json 접근 확인, .gitignore 적용 후 추적 중단 확인, 과거 SHA 404 여부 확인
+- **관련 문서**: `docs/SECURITY_DATA_EXPOSURE_REMEDIATION.md`, `docs/GITHUB_SUPPORT_DATA_PURGE_REQUEST.md`
 
 ### 3.2 XSS 가능성 (HTML 문자열 직접 삽입)
 - **발생 가능성**: 중간
@@ -186,17 +192,18 @@
   - 환율 API를 Supabase Edge Function으로 프록시 (API 키 숨김)
 - **테스트 방법**: 미인증 상태에서 Supabase 데이터 접근 차단 확인
 
-### 3.8 설정/백업 파일 노출 - 해결됨
-- **상태**: ✅ 해결됨 (2026-07-10)
-- **발생 가능성**: ~~낮음~~
-- **영향도**: ~~중간~~
+### 3.8 설정/백업 파일 노출 - 부분 해결
+- **상태**: ⚠️ 부분 해결 (2026-07-10) — .gitignore 수정 및 기록 재작성 완료, GitHub 캐시 제거 대기
+- **발생 가능성**: ~~낮음~~ 중간 (과거 SHA 캐시 잔존)
+- **영향도**: ~~중간~~ 높음
 - **관련 파일**: `data_export.json`, `.gitignore`
 - **상세**:
   - `.gitignore`에 `*.backup`, `*.backup.json`, `backups/`, `data_export_*.json` 패턴 있음
-  - 단, `data_export.json` (언더스코어 없음)은 패턴 불일치로 추적됨 → **해결: `data_export.json`을 .gitignore에 정확히 추가**
+  - 단, `data_export.json` (언더스코어 없음)은 패턴 불일치로 추적됨 → **해결: `data_export.json`을 .gitignore에 정확히 추가** ✅
   - Supabase 설정 파일(`js/config.js`)은 .gitignore에 포함됨
-- **수행한 조치**: `.gitignore`에 `data_export.json`, `data_export*.json`, `data-export*.json`, `exports/`, `private-data/`, `*.sqlite`, `*.db` 추가
-- **예방 방법**: .gitignore 패턴 수정 (`data_export*.json`), 히스토리 정리
+- **수행한 조치**: `.gitignore`에 `data_export.json`, `data_export*.json`, `data-export*.json`, `exports/`, `private-data/`, `*.sqlite`, `*.db` 추가 ✅
+- **남은 작업**: GitHub Support 캐시 purge 요청 (3.1 참조)
+- **예방 방법**: .gitignore 패턴 수정, 히스토리 정리
 - **테스트 방법**: `git ls-files`로 추적 파일 확인
 
 ## 4. 동시성 위험
@@ -475,9 +482,10 @@
 ## 8. 우선순위 요약
 
 ### 즉시 조치 필요 (마이그레이션 전)
-1. ~~**data_export.json Git 히스토리 제거** + .gitignore 수정 (보안 3.1)~~ ✅ 완료 (2026-07-10)
-2. **주문 원가 스냅샷 저장 로직 설계** (데이터 2.1) - 구현은 2단계 이후
-3. **참조 무결성 정리 스크립트 작성** (데이터 2.5) - orphan 데이터 정리
+1. ~~**data_export.json Git 히스토리 제거** + .gitignore 수정 (보안 3.1)~~ ✅ 기록 재작성 완료 (GitHub 캐시 제거 대기)
+2. **GitHub Support에 cached data purge 요청** (보안 3.1) — 과거 SHA 직접 접근 차단
+3. **주문 원가 스냅샷 저장 로직 설계** (데이터 2.1) - 구현은 2단계 이후
+4. **참조 무결성 정리 스크립트 작성** (데이터 2.5) - orphan 데이터 정리
 
 ### 마이그레이션 중 필수
 4. **트랜잭션 설계** (출고, 병합, 임포트) (동시성 4.1, 마이그레이션 5.3)
