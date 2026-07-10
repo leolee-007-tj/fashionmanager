@@ -8,13 +8,15 @@ const Products = {
         stockYear: 2026,
         stockMonth: new Date().getMonth() + 1,
         selected: new Set(),
-        editingId: null
+        editingId: null,
+        loaded: false
     },
 
     load() {
         this.state.products = DB.getProducts();
         this.autoClassifyAll();
         this.applyFilters();
+        this.state.loaded = true;
     },
 
     // 모든 상품에 대해 분류키워드 자동 적용
@@ -85,7 +87,11 @@ const Products = {
     },
 
     renderList() {
-        this.load();
+        if (!this.state.loaded) {
+            this.load();
+        } else {
+            this.applyFilters();
+        }
         const list = this.state.filtered;
         const totalStock = list.reduce((sum, p) => sum + (p.current_stock || 0), 0);
         let html = `
@@ -261,7 +267,7 @@ const Products = {
         this.searchTimer = setTimeout(() => {
             this.applyFilters();
             App.renderPage();
-        }, 200);
+        }, 300);
     },
 
     sort(field) {

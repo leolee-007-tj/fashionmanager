@@ -11,13 +11,15 @@ const Customers = {
         editingCustomerId: null,
         detailSortOrder: 'desc',
         detailSelected: new Set(),
-        detailEditingOrderId: null
+        detailEditingOrderId: null,
+        loaded: false
     },
 
     load() {
         this.state.customers = DB.getCustomers();
         this.recalculateAll();
         this.applyFilters();
+        this.state.loaded = true;
     },
 
     recalculateAll() {
@@ -222,7 +224,11 @@ const Customers = {
     },
 
     renderList() {
-        this.load();
+        if (!this.state.loaded) {
+            this.load();
+        } else {
+            this.applyFilters();
+        }
         const list = this.state.filtered;
         const totalAmount = list.reduce((s, c) => s + (c.total_amount || 0), 0);
         const totalProfit = list.reduce((s, c) => s + (c.total_profit || 0), 0);
@@ -505,7 +511,7 @@ const Customers = {
         this.searchTimer = setTimeout(() => {
             this.applyFilters();
             App.renderPage();
-        }, 200);
+        }, 300);
     },
 
     sort(field) {
