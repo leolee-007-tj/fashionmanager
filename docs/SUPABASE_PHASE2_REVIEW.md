@@ -50,15 +50,18 @@
 | 일반 인덱스 | 48 |
 | RLS 활성화 테이블 | 12 |
 | RLS 정책 | 36 |
-| trigger (updated_at/version) | 10 |
-| trigger (audit metadata) | 7 |
-| trigger (cross-store 검증) | 2 |
-| trigger (audit log) | 8 |
-| trigger (last owner 보호) | 1 |
+| trigger (updated_at/version) | 9 | (profiles, stores, 6 store_data, store_members) |
+| trigger (audit metadata) | 7 | (6개 업무 테이블 + stores 별도 처리) |
+| trigger (cross-store + soft-delete 검증) | 2 | orders, inventory_logs |
+| trigger (audit log) | 8 | |
+| trigger (last owner 보호) | 1 | store_members |
+| trigger (migration_runs metadata) | 1 | initiated_by 전용 |
+| trigger 총계 | 28 | |
 | helper 함수 | 3 |
 | audit 함수 | 3 |
 | security definer 함수 | 9 |
-| 테스트 시나리오 | 56개 (문서) + 30개 (SQL, 미실행) |
+| 테스트 시나리오 | 72개 (문서) + 30개 (SQL 시나리오, 미실행) |
+| pgTAP 테스트 파일 | 1개 (35+ assertion, 미실행) |
 
 ---
 
@@ -100,16 +103,22 @@
 
 | 검사 항목 | 결과 | 비고 |
 |---|---|---|
-| updated_at 갱신 | ✅ | 10개 테이블 (3개 함수로 분리) |
-| version 증가 | ✅ | version 컬럼 존재 시 |
+| updated_at 갱신 | ✅ | 9개 테이블 (4개 함수로 분리: profiles/stores/store_data/store_member) |
+| version 증가 | ✅ | version 컬럼 존재 시 (stores + 6개 업무 테이블 + migration_runs) |
 | created_at 유지 | ✅ | trigger가 created_at 변경 차단 |
 | created_by 위조 차단 | ✅ | INSERT 시 auth.uid() 자동 설정, UPDATE 시 변경 차단 |
 | updated_by 자동 설정 | ✅ | INSERT/UPDATE 시 auth.uid() 자동 설정 |
 | id 변경 차단 | ✅ | RAISE EXCEPTION |
-| store_id 변경 차단 | ✅ | RAISE EXCEPTION |
+| store_id 변경 차단 | ✅ | RAISE EXCEPTION (store_id 있는 테이블에서만) |
+| store_members user_id 변경 차단 | ✅ | RAISE EXCEPTION |
+| stores no store_id 컬럼 안전 | ✅ | 별도 handle_store_update() 함수 사용 |
+| migration_runs initiated_by 안전 | ✅ | 별도 handle_migration_run_metadata() 함수 사용 |
 | append-only 테이블 update 차단 | ✅ | RLS로 INSERT/UPDATE 정책 없음 |
-| soft-deleted entity 신규 연결 차단 | ✅ | orders, inventory_logs trigger |
-| 마지막 owner 제거 차단 | ✅ | store_members UPDATE trigger |
+| soft-deleted entity 신규 연결 차단 | ✅ | orders, inventory_logs trigger (관계 변경 시만) |
+| 과거 주문 변경 허용 | ✅ | 관계 unchanged 시 삭제 상태 재검사 안 함 |
+| 마지막 owner 제거 차단 | ✅ | store_members UPDATE trigger + advisory lock |
+| 동시성 owner 0명 방지 | ✅ | pg_advisory_xact_lock per store |
+| trigger 함수 EXECUTE 권한 제한 | ✅ | PUBLIC/anon/authenticated에서 모두 REVOKE |
 
 ### RLS
 
@@ -134,11 +143,12 @@
 | 검사 항목 | 결과 | 비고 |
 |---|---|---|
 | security definer 최소 사용 | ✅ | 필요한 함수에만 적용 |
-| `set search_path = ''` | ✅ | 8개 함수 모두 |
+| `set search_path = ''` | ✅ | 9개 함수 모두 |
 | schema-qualified relation | ✅ | public. 또는 private. 명시 |
-| public/anon execute revoke | ✅ | |
+| public/anon execute revoke | ✅ | trigger 함수, audit 함수 모두 |
 | authenticated grant 최소화 | ✅ | 필요한 함수에만 |
 | RLS recursion 없음 | ✅ | SECURITY DEFINER로 bypass |
+| 정확한 함수 signature | ✅ | 매개변수 타입까지 명시 |
 
 ### 감사 로그
 
@@ -196,7 +206,8 @@
 | staff 업무 기능 미지원 | 중간 | base table SELECT 차단됨. 제한 view/RPC 구현 전 staff는 업무 데이터 접근 불가 |
 | 주문 생성/상태 변경 보호된 RPC 미구현 | 중간 | 향후 구현 필요 |
 | 초기 owner 생성 방식 미확정 | 낮음 | 관리자 SQL 또는 Edge Function |
-| RLS 테스트 미실행 | 중간 | 30개 SQL 시나리오 + 56개 문서 시나리오, 실제 실행 전 |
+| RLS 테스트 미실행 | 중간 | 72개 문서 시나리오 + 30개 SQL 시나리오 + 35개 pgTAP assertion, 실제 실행 전 |
+| pgTAP 테스트 미실행 | 중간 | supabase CLI + 로컬 Supabase 환경 필요 |
 
 ---
 

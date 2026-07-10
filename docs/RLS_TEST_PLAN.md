@@ -37,6 +37,31 @@
 
 ## 2. 테스트 시나리오
 
+### 2.0 테스트 실행 방식
+
+권장 순서 (신뢰도 높음 → 낮음):
+
+1. **Supabase CLI + pgTAP** (가장 신뢰)
+   - 로컬 Supabase에서 `supabase test db`로 실행
+   - `set local role authenticated` + `request.jwt.claim.sub` 설정
+   - 파일: `supabase/tests/rls_access_matrix.test.sql`
+   
+2. **Supabase JS client** (중간 신뢰)
+   - 실제 테스트 사용자 회원가입/로그인
+   - 각 사용자의 access token으로 supabase-js client 생성
+   - 실제 네트워크 요청으로 RLS 검증
+
+3. **curl/Postman** (중간 신뢰)
+   - publishable key + Authorization Bearer JWT
+   - REST API 직접 호출
+
+4. **SQL Editor** (가장 낮은 신뢰)
+   - ⚠️ SQL Editor는 일반적으로 elevated role (postgres/supabase_admin)으로 실행되므로
+     RLS를 우회할 수 있음
+   - RLS 검증 목적으로 사용하지 말 것
+   - 관리자 DDL 실행 용도로만 사용
+   - RLS 테스트는 반드시 `set local role authenticated;` + JWT claim 설정 후 실행
+
 ### 2.1 인증 안 됨 / anon
 
 | 번호 | 시나리오 | 예상 결과 | 테스트 방법 |

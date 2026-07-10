@@ -151,8 +151,10 @@ CREATE TRIGGER trg_migration_runs_audit
 -- Permission restrictions for audit functions
 -- ============================================================
 
-REVOKE ALL ON FUNCTION private.mask_sensitive_data FROM PUBLIC;
-REVOKE ALL ON FUNCTION private.determine_audit_action FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.log_audit FROM PUBLIC;
+REVOKE ALL ON FUNCTION private.mask_sensitive_data(jsonb) FROM PUBLIC;
+REVOKE ALL ON FUNCTION private.determine_audit_action(jsonb, jsonb) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.log_audit() FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.log_audit() FROM anon;
+REVOKE EXECUTE ON FUNCTION public.log_audit() FROM authenticated;
 
 -- No GRANT to any role - only triggers can execute these functions
