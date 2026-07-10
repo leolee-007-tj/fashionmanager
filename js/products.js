@@ -61,7 +61,12 @@ const Products = {
                 (p.category || '').toLowerCase().includes(s) ||
                 (p.color || '').toLowerCase().includes(s) ||
                 (p.size || '').toLowerCase().includes(s) ||
-                (p.brand || '').toLowerCase().includes(s)
+                (p.material || '').toLowerCase().includes(s) ||
+                (p.product_code || '').toLowerCase().includes(s) ||
+                (p.notes || '').toLowerCase().includes(s) ||
+                String(p.korea_cost || '').includes(s) ||
+                String(p.china_base_price || '').includes(s) ||
+                String(p.current_stock || '').includes(s)
             );
         }
         list.sort((a, b) => {
@@ -248,10 +253,15 @@ const Products = {
         App.render();
     },
 
+    searchTimer: null,
+
     setSearch(val) {
         this.state.search = val;
-        this.applyFilters();
-        App.renderPage();
+        if (this.searchTimer) clearTimeout(this.searchTimer);
+        this.searchTimer = setTimeout(() => {
+            this.applyFilters();
+            App.renderPage();
+        }, 200);
     },
 
     sort(field) {
