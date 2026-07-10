@@ -1,0 +1,27 @@
+# Supabase / Environment secrets
+.env
+.env.local
+.env.*.local
+js/config.js
+supabase/.temp
+supabase/config.toml
+
+# Local backup data
+*.backup
+*.backup.json
+backups/
+local-storage-dump/
+data_export_*.json
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Node modules (if added later)
+node_modules/
+
+# Logs
+*.log
