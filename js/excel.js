@@ -383,7 +383,7 @@ const ExcelManager = {
                 status: 'COMPLETED',
                 actual_profit: profit,
                 actual_profit_margin: sellingPrice > 0 ? Math.round((profit / sellingPrice) * 100) : 0,
-                actual_cost_ratio: sellingPrice > 0 ? Math.round((cost / sellingPrice) * 100) : 0,
+                actual_cost_ratio: sellingPrice > 0 ? Math.round((convertedCost / sellingPrice) * 100) : 0,
                 is_zi_liu: isZiLiu,
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString()
