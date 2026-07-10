@@ -6,12 +6,21 @@ js/config.js
 supabase/.temp
 supabase/config.toml
 
+# Private operational data exports
+data_export.json
+data_export*.json
+data-export*.json
+exports/
+private-data/
+
 # Local backup data
 *.backup
 *.backup.json
 backups/
 local-storage-dump/
 data_export_*.json
+*.sqlite
+*.db
 
 # macOS
 .DS_Store
