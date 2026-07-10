@@ -10,14 +10,15 @@
 |---|---|
 | 테이블 | 12 |
 | enum 타입 | 5 |
-| CHECK 제약조건 | 27 |
-| UNIQUE 제약조건 | 6 |
-| 인덱스 | 48 |
-| RLS 정책 | 30 |
-| trigger | 20 |
+| CHECK 제약조건 | 31 |
+| UNIQUE 제약조건 | 5 |
+| partial unique index | 6 |
+| 일반 인덱스 | 48 |
+| RLS 정책 | 36 |
+| trigger | 28 |
 | helper 함수 | 3 |
 | audit 함수 | 3 |
-| security definer 함수 | 8 |
+| security definer 함수 | 9 |
 
 ---
 
@@ -142,7 +143,7 @@
 | notes | text | - | - | - | - |
 | level | text | - | - | - | - |
 | total_amount | numeric | ✅ | 0 | CHECK >= 0 | 파생 데이터 |
-| total_profit | numeric | ✅ | 0 | CHECK >= 0 | 파생 데이터 |
+| total_profit | numeric | ✅ | 0 | - | 파생 데이터. 음수 가능 (손실 주문) |
 | order_count | integer | ✅ | 0 | CHECK >= 0 | 파생 데이터 |
 | total_quantity | integer | ✅ | 0 | CHECK >= 0 | 파생 데이터 |
 | last_order_date | date | - | - | - | - |
@@ -414,8 +415,8 @@ nullable FK도 정상 처리 (NULL이면 검증 스킵).
 
 ## 관련 문서
 
-- 초안: [SUPABASE_SCHEMA_DRAFT.md](file:///Users/lesoul888/Documents/LESOUL_STORE_APP/github-pages-version/docs/SUPABASE_SCHEMA_DRAFT.md)
-- 관계: [SUPABASE_RELATIONSHIPS.md](file:///Users/lesoul888/Documents/LESOUL_STORE_APP/github-pages-version/docs/SUPABASE_RELATIONSHIPS.md)
-- RLS: [SUPABASE_RLS_DESIGN.md](file:///Users/lesoul888/Documents/LESOUL_STORE_APP/github-pages-version/docs/SUPABASE_RLS_DESIGN.md)
-- 테스트: [RLS_TEST_PLAN.md](file:///Users/lesoul888/Documents/LESOUL_STORE_APP/github-pages-version/docs/RLS_TEST_PLAN.md)
-- 실행 순서: [SUPABASE_MIGRATION_ORDER.md](file:///Users/lesoul888/Documents/LESOUL_STORE_APP/github-pages-version/docs/SUPABASE_MIGRATION_ORDER.md)
+- 초안: [SUPABASE_SCHEMA_DRAFT.md](./SUPABASE_SCHEMA_DRAFT.md)
+- 관계: [SUPABASE_RELATIONSHIPS.md](./SUPABASE_RELATIONSHIPS.md)
+- RLS: [SUPABASE_RLS_DESIGN.md](./SUPABASE_RLS_DESIGN.md)
+- 테스트: [RLS_TEST_PLAN.md](./RLS_TEST_PLAN.md)
+- 실행 순서: [SUPABASE_MIGRATION_ORDER.md](./SUPABASE_MIGRATION_ORDER.md)

@@ -69,15 +69,23 @@ $$ LANGUAGE plpgsql STABLE SECURITY DEFINER
 SET search_path = '';
 
 -- ============================================================
+-- Schema permissions
+-- ============================================================
+
+-- Lock down the private schema
+REVOKE ALL ON SCHEMA private FROM PUBLIC;
+GRANT USAGE ON SCHEMA private TO authenticated;
+
+-- ============================================================
 -- Permissions: lock down helper functions
 -- ============================================================
 
 -- Revoke all access from PUBLIC (includes anon, authenticated, and all roles)
-REVOKE ALL ON FUNCTION private.is_store_member FROM PUBLIC;
-REVOKE ALL ON FUNCTION private.current_store_role FROM PUBLIC;
-REVOKE ALL ON FUNCTION private.has_store_role FROM PUBLIC;
+REVOKE ALL ON FUNCTION private.is_store_member(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION private.current_store_role(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION private.has_store_role(uuid, public.member_role[]) FROM PUBLIC;
 
 -- Grant execute only to authenticated users
-GRANT EXECUTE ON FUNCTION private.is_store_member TO authenticated;
-GRANT EXECUTE ON FUNCTION private.current_store_role TO authenticated;
-GRANT EXECUTE ON FUNCTION private.has_store_role TO authenticated;
+GRANT EXECUTE ON FUNCTION private.is_store_member(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION private.current_store_role(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION private.has_store_role(uuid, public.member_role[]) TO authenticated;

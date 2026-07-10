@@ -27,12 +27,14 @@ ALTER TABLE public.products
 ALTER TABLE public.customers
     ADD CONSTRAINT chk_customers_total_amount_non_negative
         CHECK (total_amount >= 0),
-    ADD CONSTRAINT chk_customers_total_profit_non_negative
-        CHECK (total_profit >= 0),
     ADD CONSTRAINT chk_customers_order_count_non_negative
         CHECK (order_count >= 0),
     ADD CONSTRAINT chk_customers_total_quantity_non_negative
         CHECK (total_quantity >= 0);
+
+-- NOTE: total_profit CHECK intentionally omitted.
+-- Loss orders can make total_profit negative.
+-- total_amount, order_count, total_quantity remain non-negative.
 
 -- orders
 ALTER TABLE public.orders

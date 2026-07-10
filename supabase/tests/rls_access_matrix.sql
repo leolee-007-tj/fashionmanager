@@ -1,252 +1,366 @@
 -- ============================================================
--- RLS Access Matrix Test
+-- RLS Access Matrix Test Scenarios
 -- ============================================================
--- WARNING: This test file is for TEST Supabase only.
--- DO NOT execute in production environments.
--- Use dummy UUIDs only.
--- Wrap in transaction and rollback after testing.
--- ============================================================
-
-BEGIN;
-
--- ============================================================
--- Test setup: Create dummy users and stores
--- ============================================================
-
--- Dummy user IDs (not real auth users)
-\set owner_user_id '00000000-0000-0000-0000-000000000001'
-\set manager_user_id '00000000-0000-0000-0000-000000000002'
-\set staff_user_id '00000000-0000-0000-0000-000000000003'
-\set other_user_id '00000000-0000-0000-0000-000000000004'
-
--- Test store IDs
-\set store_a_id '11111111-1111-1111-1111-111111111111'
-\set store_b_id '22222222-2222-2222-2222-222222222222'
-
--- ============================================================
--- Helper function: simulate auth.uid() override for testing
--- Note: This requires security definer and is for testing only
+-- WARNING:
+-- - This file contains test scenarios ONLY.
+-- - These scenarios have NOT been executed.
+-- - Do NOT run this file directly in a production environment.
+-- - Run only in a dedicated TEST Supabase project.
+-- - Use dummy/test data only.
+-- - The auth.uid() function depends on the current Supabase Auth session.
+--   These statements only work when executed by an authenticated user
+--   through the Supabase SQL Editor or JS client.
 -- ============================================================
 
-CREATE OR REPLACE FUNCTION public.test_set_uid(new_uid uuid)
-RETURNS void AS $$
-BEGIN
-    PERFORM set_config('test.uid', new_uid::text, true);
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = '';
-
-REVOKE ALL ON FUNCTION public.test_set_uid FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.test_set_uid TO authenticated;
-
--- Override auth.uid() for testing
-CREATE OR REPLACE FUNCTION auth.uid()
-RETURNS uuid AS $$
-DECLARE
-    v_test_uid text;
-BEGIN
-    v_test_uid := current_setting('test.uid', true);
-    IF v_test_uid IS NOT NULL THEN
-        RETURN v_test_uid::uuid;
-    END IF;
-    RETURN NULL;
-END;
-$$ LANGUAGE plpgsql STABLE;
+-- ============================================================
+-- How to run these tests
+-- ============================================================
+--
+-- Option A: Supabase SQL Editor (authenticated as test user)
+-- 1. Create test users in Supabase Auth (Admin API or Auth UI).
+-- 2. Log in as the test user in your application.
+-- 3. Open the SQL Editor while authenticated.
+-- 4. Run individual test statements.
+-- 5. Verify results against expected outcomes.
+--
+-- Option B: Supabase JS Client (recommended for reliable auth testing)
+-- 1. Create test users via Supabase Auth Admin API.
+-- 2. Use the JS client with the test user's JWT.
+-- 3. Execute supabase.from('table').select() / .insert() / .update().
+-- 4. Check error.code and error.message.
+-- 5. See docs/RLS_TEST_PLAN.md for JS test examples.
+--
+-- Option C: psql (requires direct DB access, usually not available
+--                 for Supabase hosted projects)
+-- 1. SET LOCAL ROLE authenticated;
+-- 2. Use request.jwt.claim.sub for auth.uid() simulation.
+-- 3. Not compatible with standard Supabase hosted projects.
+--
+-- DO NOT:
+-- - Use CREATE OR REPLACE FUNCTION auth.uid() -- breaks auth system
+-- - Use \set (psql-only syntax) in Supabase SQL Editor
+-- - Run in production
+-- - Claim "tests passed" without actual execution
 
 -- ============================================================
--- Test 1: anon products SELECT should fail
+-- Test Data Setup (run before each test group)
 -- ============================================================
+-- Replace with actual test UUIDs from your test project.
+-- These are dummy values for documentation only.
 
-SELECT 'Test 1: anon products SELECT' AS test,
-    (SELECT count(*) FROM public.products WHERE store_id = :store_a_id) AS result,
-    'EXPECTED: 0 (RLS blocks anon)' AS expected;
+-- Test store A
+-- INSERT INTO public.stores (id, name) VALUES
+--   ('11111111-1111-1111-1111-111111111111', 'Test Store A');
 
--- ============================================================
--- Test 2: unauthenticated customers SELECT should fail
--- ============================================================
+-- Test store B
+-- INSERT INTO public.stores (id, name) VALUES
+--   ('22222222-2222-2222-2222-222222222222', 'Test Store B');
 
-SELECT 'Test 2: unauthenticated customers SELECT' AS test,
-    (SELECT count(*) FROM public.customers WHERE store_id = :store_a_id) AS result,
-    'EXPECTED: 0 (no auth.uid())' AS expected;
-
--- ============================================================
--- Test 3: owner can view their own store
--- ============================================================
-
-SELECT public.test_set_uid(:owner_user_id);
-SELECT 'Test 3: owner view own store' AS test,
-    (SELECT count(*) FROM public.stores WHERE id = :store_a_id) AS result,
-    'EXPECTED: 1' AS expected;
+-- Test users must be created via Supabase Auth first.
+-- Their UUIDs must be obtained from auth.users(id).
 
 -- ============================================================
--- Test 4: owner cannot view other store
+-- Scenario 1: Anon / unauthenticated access blocked
 -- ============================================================
+-- Expected: 0 rows (no RLS policy for anon)
+-- Method: Execute without Authorization header or JWT.
 
-SELECT 'Test 4: owner view other store' AS test,
-    (SELECT count(*) FROM public.stores WHERE id = :store_b_id) AS result,
-    'EXPECTED: 0 (not a member)' AS expected;
+-- SELECT count(*) FROM public.products;
+-- Expected result: 0
 
--- ============================================================
--- Test 5: manager can insert product
--- ============================================================
-
-SELECT public.test_set_uid(:manager_user_id);
-SELECT 'Test 5: manager insert product' AS test,
-    (SELECT count(*) FROM public.products WHERE store_id = :store_a_id) AS result,
-    'EXPECTED: depends on existing data' AS expected;
+-- SELECT count(*) FROM public.customers;
+-- Expected result: 0
 
 -- ============================================================
--- Test 6: manager cannot update store_members role
+-- Scenario 2: Owner can view own store
 -- ============================================================
+-- Precondition: Owner user is an active member of store A.
+-- Expected: 1 row
 
-SELECT 'Test 6: manager update store_members role' AS test,
-    'EXPECTED: RLS blocks (requires owner)' AS expected;
-
--- ============================================================
--- Test 7: staff cannot update cost fields
--- ============================================================
-
-SELECT public.test_set_uid(:staff_user_id);
-SELECT 'Test 7: staff update products' AS test,
-    'EXPECTED: RLS blocks (requires owner/manager)' AS expected;
+-- SELECT count(*) FROM public.stores WHERE id = 'store-a-uuid';
+-- Expected result: 1
 
 -- ============================================================
--- Test 8: staff order insert policy check
+-- Scenario 3: Owner cannot view other store
 -- ============================================================
+-- Precondition: Owner user is NOT a member of store B.
+-- Expected: 0 rows
 
-SELECT 'Test 8: staff order insert' AS test,
-    'EXPECTED: RLS blocks (requires owner/manager)' AS expected;
-
--- ============================================================
--- Test 9: staff cannot view store_settings
--- ============================================================
-
-SELECT 'Test 9: staff view store_settings' AS test,
-    (SELECT count(*) FROM public.store_settings WHERE store_id = :store_a_id) AS result,
-    'EXPECTED: 0 (owner only)' AS expected;
+-- SELECT count(*) FROM public.stores WHERE id = 'store-b-uuid';
+-- Expected result: 0
 
 -- ============================================================
--- Test 10: owner can view audit_logs
+-- Scenario 4: Manager can insert product
 -- ============================================================
+-- Precondition: Manager is an active member of store A.
+-- Expected: Success (201 or 1 row inserted)
 
-SELECT public.test_set_uid(:owner_user_id);
-SELECT 'Test 10: owner view audit_logs' AS test,
-    (SELECT count(*) FROM public.audit_logs WHERE store_id = :store_a_id) AS result,
-    'EXPECTED: 0 or more (owner can view)' AS expected;
-
--- ============================================================
--- Test 11: manager cannot view audit_logs
--- ============================================================
-
-SELECT public.test_set_uid(:manager_user_id);
-SELECT 'Test 11: manager view audit_logs' AS test,
-    (SELECT count(*) FROM public.audit_logs WHERE store_id = :store_a_id) AS result,
-    'EXPECTED: 0 (owner only)' AS expected;
+-- INSERT INTO public.products (store_id, product_code, original_title, brand)
+-- VALUES ('store-a-uuid', 'TEST001', 'Test Product', 'TestBrand');
+-- Expected result: Success
 
 -- ============================================================
--- Test 12: staff cannot view audit_logs
+-- Scenario 5: Manager cannot change store_members role
 -- ============================================================
+-- Precondition: Manager is active member of store A.
+-- Expected: Error 403 / permission denied
 
-SELECT public.test_set_uid(:staff_user_id);
-SELECT 'Test 12: staff view audit_logs' AS test,
-    (SELECT count(*) FROM public.audit_logs WHERE store_id = :store_a_id) AS result,
-    'EXPECTED: 0 (owner only)' AS expected;
-
--- ============================================================
--- Test 13: owner can view migration_runs
--- ============================================================
-
-SELECT public.test_set_uid(:owner_user_id);
-SELECT 'Test 13: owner view migration_runs' AS test,
-    (SELECT count(*) FROM public.migration_runs WHERE store_id = :store_a_id) AS result,
-    'EXPECTED: 0 or more' AS expected;
+-- UPDATE public.store_members
+-- SET role = 'owner'
+-- WHERE store_id = 'store-a-uuid' AND user_id = 'some-user-uuid';
+-- Expected result: 0 rows affected or permission denied
 
 -- ============================================================
--- Test 14: staff cannot view migration_runs
+-- Scenario 6: Staff cannot view products base table
 -- ============================================================
+-- Precondition: Staff is active member of store A.
+-- Expected: 0 rows (staff base table SELECT blocked for products)
 
-SELECT public.test_set_uid(:staff_user_id);
-SELECT 'Test 14: staff view migration_runs' AS test,
-    (SELECT count(*) FROM public.migration_runs WHERE store_id = :store_a_id) AS result,
-    'EXPECTED: 0 (owner only)' AS expected;
-
--- ============================================================
--- Test 15: cross-store customer_id should fail
--- ============================================================
-
-SELECT public.test_set_uid(:owner_user_id);
-SELECT 'Test 15: cross-store customer_id' AS test,
-    'EXPECTED: trigger blocks (customer from different store)' AS expected;
+-- SELECT count(*) FROM public.products WHERE store_id = 'store-a-uuid';
+-- Expected result: 0
 
 -- ============================================================
--- Test 16: cross-store product_id should fail
+-- Scenario 7: Staff cannot view customers base table
 -- ============================================================
+-- Precondition: Staff is active member of store A.
+-- Expected: 0 rows
 
-SELECT 'Test 16: cross-store product_id' AS test,
-    'EXPECTED: trigger blocks (product from different store)' AS expected;
-
--- ============================================================
--- Test 17: soft deleted rows visibility
--- ============================================================
-
-SELECT 'Test 17: soft deleted rows' AS test,
-    'EXPECTED: depends on application logic (RLS does not filter deleted_at)' AS expected;
+-- SELECT count(*) FROM public.customers WHERE store_id = 'store-a-uuid';
+-- Expected result: 0
 
 -- ============================================================
--- Test 18: inactive member cannot access
+-- Scenario 8: Staff cannot view orders base table
 -- ============================================================
+-- Precondition: Staff is active member of store A.
+-- Expected: 0 rows
 
-SELECT 'Test 18: inactive member access' AS test,
-    'EXPECTED: RLS blocks (private.is_store_member checks is_active)' AS expected;
-
--- ============================================================
--- Test 19: last owner removal prevention
--- ============================================================
-
-SELECT 'Test 19: last owner removal' AS test,
-    'EXPECTED: needs trigger/function (RLS alone insufficient)' AS expected;
+-- SELECT count(*) FROM public.orders WHERE store_id = 'store-a-uuid';
+-- Expected result: 0
 
 -- ============================================================
--- Test 20: auth.uid() null should fail
+-- Scenario 9: Staff cannot view store_settings
 -- ============================================================
+-- Precondition: Staff is active member of store A.
+-- Expected: 0 rows
 
-SELECT public.test_set_uid(NULL);
-SELECT 'Test 20: auth.uid() null' AS test,
-    (SELECT count(*) FROM public.products) AS result,
-    'EXPECTED: 0 (no authentication)' AS expected;
-
--- ============================================================
--- Test 21: physical DELETE should fail
--- ============================================================
-
-SELECT public.test_set_uid(:owner_user_id);
-SELECT 'Test 21: physical DELETE' AS test,
-    'EXPECTED: permission denied (no DELETE granted)' AS expected;
+-- SELECT count(*) FROM public.store_settings WHERE store_id = 'store-a-uuid';
+-- Expected result: 0
 
 -- ============================================================
--- Test 22: self role escalation should fail
+-- Scenario 10: Owner can view audit_logs
 -- ============================================================
+-- Precondition: Owner is active member of store A.
+-- Expected: >= 0 rows
 
-SELECT 'Test 22: self role escalation' AS test,
-    'EXPECTED: RLS blocks (owner check for store_members UPDATE)' AS expected;
-
--- ============================================================
--- Test 23: other store settings access should fail
--- ============================================================
-
-SELECT 'Test 23: other store settings' AS test,
-    (SELECT count(*) FROM public.store_settings WHERE store_id = :store_b_id) AS result,
-    'EXPECTED: 0 (not a member)' AS expected;
+-- SELECT count(*) FROM public.audit_logs WHERE store_id = 'store-a-uuid';
+-- Expected result: >= 0
 
 -- ============================================================
--- Test 24: inventory_logs direct insert should fail
+-- Scenario 11: Manager cannot view audit_logs
 -- ============================================================
+-- Precondition: Manager is active member of store A.
+-- Expected: 0 rows
 
-SELECT 'Test 24: inventory_logs direct insert' AS test,
-    'EXPECTED: RLS blocks (no INSERT policy)' AS expected;
+-- SELECT count(*) FROM public.audit_logs WHERE store_id = 'store-a-uuid';
+-- Expected result: 0
 
 -- ============================================================
--- Cleanup
+-- Scenario 12: Staff cannot view audit_logs
 -- ============================================================
+-- Precondition: Staff is active member of store A.
+-- Expected: 0 rows
 
-ROLLBACK;
+-- SELECT count(*) FROM public.audit_logs WHERE store_id = 'store-a-uuid';
+-- Expected result: 0
+
+-- ============================================================
+-- Scenario 13: Owner can view migration_runs
+-- ============================================================
+-- Precondition: Owner is active member of store A.
+-- Expected: >= 0 rows
+
+-- SELECT count(*) FROM public.migration_runs WHERE store_id = 'store-a-uuid';
+-- Expected result: >= 0
+
+-- ============================================================
+-- Scenario 14: Staff cannot view migration_runs
+-- ============================================================
+-- Precondition: Staff is active member of store A.
+-- Expected: 0 rows
+
+-- SELECT count(*) FROM public.migration_runs WHERE store_id = 'store-a-uuid';
+-- Expected result: 0
+
+-- ============================================================
+-- Scenario 15: Cross-store customer_id blocked for new order
+-- ============================================================
+-- Precondition: Store B customer exists.
+-- Expected: Error (trigger blocks)
+
+-- INSERT INTO public.orders (store_id, order_number, customer_id, quantity, selling_price)
+-- VALUES ('store-a-uuid', 'ORD001', 'store-b-customer-id', 1, 100);
+-- Expected result: Error - customer_id must be active and belong to the same store
+
+-- ============================================================
+-- Scenario 16: Cross-store product_id blocked for new order
+-- ============================================================
+-- Precondition: Store B product exists.
+-- Expected: Error (trigger blocks)
+
+-- INSERT INTO public.orders (store_id, order_number, product_id, quantity, selling_price)
+-- VALUES ('store-a-uuid', 'ORD002', 'store-b-product-id', 1, 100);
+-- Expected result: Error - product_id must be active and belong to the same store
+
+-- ============================================================
+-- Scenario 17: Soft-deleted customer cannot be used in new order
+-- ============================================================
+-- Precondition: Store A customer with deleted_at IS NOT NULL exists.
+-- Expected: Error (trigger blocks)
+
+-- INSERT INTO public.orders (store_id, order_number, customer_id, quantity, selling_price)
+-- VALUES ('store-a-uuid', 'ORD003', 'soft-deleted-customer-id', 1, 100);
+-- Expected result: Error - customer_id must be active and belong to the same store
+
+-- ============================================================
+-- Scenario 18: Soft-deleted product cannot be used in new order
+-- ============================================================
+-- Precondition: Store A product with deleted_at IS NOT NULL exists.
+-- Expected: Error (trigger blocks)
+
+-- INSERT INTO public.orders (store_id, order_number, product_id, quantity, selling_price)
+-- VALUES ('store-a-uuid', 'ORD004', 'soft-deleted-product-id', 1, 100);
+-- Expected result: Error - product_id must be active and belong to the same store
+
+-- ============================================================
+-- Scenario 19: Inactive member cannot access store data
+-- ============================================================
+-- Precondition: User is a store member with is_active = false.
+-- Expected: 0 rows for all business tables.
+
+-- SELECT count(*) FROM public.stores WHERE id = 'store-a-uuid';
+-- Expected result: 0
+
+-- ============================================================
+-- Scenario 20: Last active owner removal blocked
+-- ============================================================
+-- Precondition: Only one active owner exists for store A.
+-- Expected: Error (trigger blocks)
+
+-- UPDATE public.store_members
+-- SET is_active = false
+-- WHERE store_id = 'store-a-uuid' AND role = 'owner';
+-- Expected result: Error - Cannot remove the last active owner of a store
+
+-- ============================================================
+-- Scenario 21: Last owner role change blocked
+-- ============================================================
+-- Precondition: Only one active owner exists for store A.
+-- Expected: Error (trigger blocks)
+
+-- UPDATE public.store_members
+-- SET role = 'manager'
+-- WHERE store_id = 'store-a-uuid' AND role = 'owner';
+-- Expected result: Error - Cannot remove the last active owner of a store
+
+-- ============================================================
+-- Scenario 22: Physical DELETE blocked
+-- ============================================================
+-- Precondition: Owner of store A.
+-- Expected: Error (permission denied)
+
+-- DELETE FROM public.products WHERE store_id = 'store-a-uuid';
+-- Expected result: Error - permission denied
+
+-- ============================================================
+-- Scenario 23: Self role escalation blocked
+-- ============================================================
+-- Precondition: Manager tries to change their own role to owner.
+-- Expected: 0 rows affected (RLS blocks)
+
+-- UPDATE public.store_members
+-- SET role = 'owner'
+-- WHERE store_id = 'store-a-uuid' AND user_id = auth.uid();
+-- Expected result: 0 rows affected or permission denied
+
+-- ============================================================
+-- Scenario 24: Inventory logs direct insert blocked
+-- ============================================================
+-- Precondition: Owner of store A.
+-- Expected: Error (no INSERT policy)
+
+-- INSERT INTO public.inventory_logs (store_id, product_id, change_type, quantity_change)
+-- VALUES ('store-a-uuid', 'product-id', 'SHIP', -1);
+-- Expected result: Error - permission denied
+
+-- ============================================================
+-- Scenario 25: Owner can view soft-deleted products
+-- ============================================================
+-- Precondition: Owner of store A, soft-deleted product exists.
+-- Expected: >= 1 row
+
+-- SELECT count(*) FROM public.products
+-- WHERE store_id = 'store-a-uuid' AND deleted_at IS NOT NULL;
+-- Expected result: >= 1
+
+-- ============================================================
+-- Scenario 26: Manager cannot view soft-deleted products
+-- ============================================================
+-- Precondition: Manager of store A, soft-deleted product exists.
+-- Expected: 0 rows
+
+-- SELECT count(*) FROM public.products
+-- WHERE store_id = 'store-a-uuid' AND deleted_at IS NOT NULL;
+-- Expected result: 0
+
+-- ============================================================
+-- Scenario 27: Soft-deleted rows excluded from active views
+-- ============================================================
+-- Precondition: Owner/manager of store A.
+-- Expected: Soft-deleted rows do NOT appear in normal active queries.
+
+-- SELECT count(*) FROM public.products
+-- WHERE store_id = 'store-a-uuid' AND deleted_at IS NULL;
+-- Expected result: Only active rows
+
+-- ============================================================
+-- Scenario 28: created_by tampering blocked
+-- ============================================================
+-- Precondition: Owner of store A updates a product.
+-- Expected: created_by remains unchanged; updated_by = auth.uid().
+
+-- UPDATE public.products SET original_title = 'New Title' WHERE id = 'product-id';
+-- Then verify: SELECT created_by, updated_by FROM public.products WHERE id = 'product-id';
+-- Expected: created_by unchanged, updated_by = current user UUID
+
+-- ============================================================
+-- Scenario 29: Manager cannot update store_settings
+-- ============================================================
+-- Precondition: Manager of store A.
+-- Expected: 0 rows affected
+
+-- UPDATE public.store_settings SET exchange_divisor = 200 WHERE store_id = 'store-a-uuid';
+-- Expected result: 0 rows affected or permission denied
+
+-- ============================================================
+-- Scenario 30: Manager can view expenses
+-- ============================================================
+-- Precondition: Manager of store A.
+-- Expected: >= 0 rows
+
+-- SELECT count(*) FROM public.expenses WHERE store_id = 'store-a-uuid';
+-- Expected result: >= 0
+
+-- ============================================================
+-- Execution Status
+-- ============================================================
+--
+-- Total scenarios documented: 30
+-- Actually executed: 0 (not yet run in any test Supabase project)
+-- Passed: N/A
+-- Failed: N/A
+--
+-- To execute: Create a test Supabase project, run migrations 001-007,
+-- create test users via Auth Admin API, and run these statements
+-- through the Supabase JS client or SQL Editor while authenticated.
+--
+-- See also: docs/RLS_TEST_PLAN.md for detailed JS test examples.

@@ -9,8 +9,8 @@
 |---|---|---|---|---|
 | 1 | `001_extensions_and_types.sql` | pgcrypto 확장, 5개 enum 타입 생성 | 없음 | ❌ 미실행 |
 | 2 | `002_initial_schema.sql` | 12개 테이블 생성 | 001 (enum 필요) | ❌ 미실행 |
-| 3 | `003_constraints_and_indexes.sql` | CHECK/UNIQUE 제약, 인덱스 생성 | 002 (테이블 필요) | ❌ 미실행 |
-| 4 | `004_triggers.sql` | updated_at/version trigger, cross-store 검증 trigger | 002 (테이블 필요) | ❌ 미실행 |
+| 3 | `003_constraints_and_indexes.sql` | CHECK 31개, UNIQUE 5개, partial unique 6개, 인덱스 48개 | 002 (테이블 필요) | ❌ 미실행 |
+| 4 | `004_triggers.sql` | updated_at/version trigger 3종 분리, audit metadata 보호, cross-store 검증, 마지막 owner 보호 | 002 (테이블 필요) | ❌ 미실행 |
 | 5 | `005_private_helpers.sql` | private schema, RLS helper 함수, 권한 설정 | 002 (테이블 참조) | ❌ 미실행 |
 | 6 | `006_rls_policies.sql` | RLS 활성화, 정책 생성, GRANT/REVOKE | 005 (helper 함수 필요) | ❌ 미실행 |
 | 7 | `007_audit_functions.sql` | audit trigger 함수, 마스킹, 권한 설정 | 002, 005 (테이블/권한) | ❌ 미실행 |
@@ -58,10 +58,10 @@
 **목적**: CHECK 제약조건, UNIQUE 제약조건, partial unique index, 일반 인덱스를 생성한다.
 
 **내용**:
-- 27개 CHECK 제약조건
-- 6개 UNIQUE 제약조건
+- 31개 CHECK 제약조건
+- 5개 UNIQUE 제약조건
 - 6개 partial unique index
-- 42개 일반 인덱스
+- 48개 일반 인덱스
 
 **선행 조건**: 002 (테이블이 존재해야 함)
 
@@ -76,9 +76,13 @@
 **목적**: updated_at/version 자동 갱신 trigger와 cross-store 검증 trigger를 생성한다.
 
 **내용**:
-- `handle_updated_at_and_version()`: 10개 테이블에 적용
-- `validate_order_store_consistency()`: orders에 적용
-- `validate_inventory_log_store_consistency()`: inventory_logs에 적용
+- `handle_profile_update()`: profiles (store_id/version 없음)
+- `handle_store_data_update()`: store_id + version 테이블 8개
+- `handle_store_member_update()`: store_members (store_id만, version 없음)
+- `handle_audit_metadata()`: created_by/updated_by 보호 (7개 테이블)
+- `validate_order_store_consistency()`: orders cross-store + soft-deleted 차단
+- `validate_inventory_log_store_consistency()`: inventory_logs cross-store + soft-deleted 차단
+- `prevent_last_owner_removal()`: 마지막 owner 보호
 
 **선행 조건**: 002 (테이블 필요)
 
@@ -112,7 +116,7 @@
 
 **내용**:
 - 12개 테이블 RLS 활성화
-- 30개 정책
+- 36개 정책 (soft-delete SELECT 이중화, staff base table 차단 반영)
 - GRANT/REVOKE 설정
 
 **선행 조건**: 005 (helper 함수 필요)
@@ -148,9 +152,9 @@
 **목적**: RLS 정책을 테스트한다.
 
 **내용**:
-- dummy UUID를 사용한 24개 테스트 시나리오
-- auth.uid() 오버라이드 함수
-- BEGIN/ROLLBACK 트랜잭션
+- 30개 SQL 테스트 시나리오 (미실행)
+- auth.uid() 오버라이드 없음
+- 주석으로만 작성된 예상 결과 문서
 
 **선행 조건**: 001~007 전체
 
@@ -158,8 +162,8 @@
 
 **주의**:
 - ⚠️ **운영 환경에서 실행 금지**
-- ⚠️ 테스트용 auth.uid() 오버라이드 함수가 auth 스키마를 수정함
-- ⚠️ 테스트 완료 후 반드시 ROLLBACK
+- ⚠️ 본 파일은 시나리오 문서일 뿐, 실제 실행된 테스트가 아님
+- ⚠️ Supabase JS client 또는 SQL Editor에서 별도로 실행 필요
 
 ---
 
@@ -179,5 +183,6 @@ supabase db reset
 
 ## 관련 문서
 
-- 스키마: [SUPABASE_SCHEMA.md](file:///Users/lesoul888/Documents/LESOUL_STORE_APP/github-pages-version/docs/SUPABASE_SCHEMA.md)
-- RLS: [SUPABASE_RLS_DESIGN.md](file:///Users/lesoul888/Documents/LESOUL_STORE_APP/github-pages-version/docs/SUPABASE_RLS_DESIGN.md)
+- 스키마: [SUPABASE_SCHEMA.md](./SUPABASE_SCHEMA.md)
+- RLS: [SUPABASE_RLS_DESIGN.md](./SUPABASE_RLS_DESIGN.md)
+- 테스트 계획: [RLS_TEST_PLAN.md](./RLS_TEST_PLAN.md)

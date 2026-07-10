@@ -34,7 +34,7 @@
 
 | 파일 | 내용 |
 |---|---|
-| `supabase/tests/rls_access_matrix.sql` | RLS 테스트 24개 시나리오 |
+| `supabase/tests/rls_access_matrix.sql` | RLS 테스트 30개 시나리오 (미실행) |
 
 ---
 
@@ -44,19 +44,21 @@
 |---|---|
 | 테이블 | 12 |
 | enum 타입 | 5 |
-| CHECK 제약조건 | 27 |
-| UNIQUE 제약조건 | 6 |
+| CHECK 제약조건 | 31 |
+| UNIQUE 제약조건 | 5 |
 | partial unique index | 6 |
-| 일반 인덱스 | 42 |
+| 일반 인덱스 | 48 |
 | RLS 활성화 테이블 | 12 |
-| RLS 정책 | 30 |
-| trigger (updated_at) | 10 |
+| RLS 정책 | 36 |
+| trigger (updated_at/version) | 10 |
+| trigger (audit metadata) | 7 |
 | trigger (cross-store 검증) | 2 |
-| trigger (audit) | 8 |
+| trigger (audit log) | 8 |
+| trigger (last owner 보호) | 1 |
 | helper 함수 | 3 |
 | audit 함수 | 3 |
-| security definer 함수 | 8 |
-| 테스트 시나리오 | 56개 (문서) + 24개 (SQL) |
+| security definer 함수 | 9 |
+| 테스트 시나리오 | 56개 (문서) + 30개 (SQL, 미실행) |
 
 ---
 
@@ -98,12 +100,16 @@
 
 | 검사 항목 | 결과 | 비고 |
 |---|---|---|
-| updated_at 갱신 | ✅ | 10개 테이블 |
+| updated_at 갱신 | ✅ | 10개 테이블 (3개 함수로 분리) |
 | version 증가 | ✅ | version 컬럼 존재 시 |
-| created_at 유지 | ✅ | trigger가 created_at 변경 안 함 |
+| created_at 유지 | ✅ | trigger가 created_at 변경 차단 |
+| created_by 위조 차단 | ✅ | INSERT 시 auth.uid() 자동 설정, UPDATE 시 변경 차단 |
+| updated_by 자동 설정 | ✅ | INSERT/UPDATE 시 auth.uid() 자동 설정 |
 | id 변경 차단 | ✅ | RAISE EXCEPTION |
 | store_id 변경 차단 | ✅ | RAISE EXCEPTION |
 | append-only 테이블 update 차단 | ✅ | RLS로 INSERT/UPDATE 정책 없음 |
+| soft-deleted entity 신규 연결 차단 | ✅ | orders, inventory_logs trigger |
+| 마지막 owner 제거 차단 | ✅ | store_members UPDATE trigger |
 
 ### RLS
 
@@ -118,6 +124,10 @@
 | USING/WITH CHECK 구분 | ✅ | INSERT/UPDATE에 WITH CHECK |
 | DELETE 기본 차단 | ✅ | REVOKE DELETE |
 | cross-store 접근 차단 | ✅ | RLS + trigger 이중 차단 |
+| soft delete SELECT 필터 | ✅ | deleted_at IS NULL for active rows |
+| owner 복구 SELECT | ✅ | owner can view deleted_at IS NOT NULL |
+| staff base table 차단 | ✅ | products/customers/orders SELECT blocked for staff |
+| manager deleted rows 차단 | ✅ | manager cannot view soft-deleted rows |
 
 ### 함수 보안
 
@@ -183,11 +193,10 @@
 | SQL 문법 오류 (미실행) | 중간 | 테스트 Supabase에서 001~007 순차 실행 필요 |
 | RLS 정책 42710 중복 오류 | 낮음 | 재실행 시 DROP POLICY IF EXISTS 선행 |
 | reserved_stock > current_stock 데이터 존재 | 낮음 | 마이그레이션 시 정리 또는 앱 로직으로 처리 |
-| staff가 원가/개인정보 컬럼 접근 | 중간 | 향후 제한 view 또는 RPC 필요 |
-| 마지막 owner 제거 방지 미구현 | 중간 | 향후 trigger 또는 protected function 필요 |
+| staff 업무 기능 미지원 | 중간 | base table SELECT 차단됨. 제한 view/RPC 구현 전 staff는 업무 데이터 접근 불가 |
 | 주문 생성/상태 변경 보호된 RPC 미구현 | 중간 | 향후 구현 필요 |
 | 초기 owner 생성 방식 미확정 | 낮음 | 관리자 SQL 또는 Edge Function |
-| auth.uid() 오버라이드 테스트 함수 보안 | 낮음 | 테스트 전용, 운영 환경 실행 금지 |
+| RLS 테스트 미실행 | 중간 | 30개 SQL 시나리오 + 56개 문서 시나리오, 실제 실행 전 |
 
 ---
 
@@ -211,13 +220,14 @@
 | 항목 | 값 |
 |---|---|
 | 브랜치 | feature/supabase-cloud-migration |
-| 커밋 메시지 | `docs: finalize supabase schema and rls design` |
+| 커밋 메시지 | `fix: harden supabase schema rls and test design` |
 | 커밋 SHA | (커밋 후 기록) |
 
 ---
 
 ## 관련 문서
 
-- 스키마: [SUPABASE_SCHEMA.md](file:///Users/lesoul888/Documents/LESOUL_STORE_APP/github-pages-version/docs/SUPABASE_SCHEMA.md)
-- 실행 순서: [SUPABASE_MIGRATION_ORDER.md](file:///Users/lesoul888/Documents/LESOUL_STORE_APP/github-pages-version/docs/SUPABASE_MIGRATION_ORDER.md)
-- RLS: [SUPABASE_RLS_DESIGN.md](file:///Users/lesoul888/Documents/LESOUL_STORE_APP/github-pages-version/docs/SUPABASE_RLS_DESIGN.md)
+- 스키마: [SUPABASE_SCHEMA.md](./SUPABASE_SCHEMA.md)
+- 실행 순서: [SUPABASE_MIGRATION_ORDER.md](./SUPABASE_MIGRATION_ORDER.md)
+- RLS: [SUPABASE_RLS_DESIGN.md](./SUPABASE_RLS_DESIGN.md)
+- 테스트 계획: [RLS_TEST_PLAN.md](./RLS_TEST_PLAN.md)

@@ -1,7 +1,8 @@
 # RLS 테스트 계획
 
-> 본 문서는 2-3단계 RLS 테스트 시나리오를 문서화한다.
+> 본 문서는 2-5단계 보안·무결성 보완을 반영한 RLS 테스트 시나리오이다.
 > 테스트 Supabase 프로젝트 전용. 운영 환경 실행 금지.
+> **모든 시나리오는 미실행 상태이다.**
 
 ## 1. 테스트 환경 설정
 
@@ -29,9 +30,9 @@
 
 ### 1.4 테스트 데이터
 
-- store_a에 샘플 상품 5개
-- store_a에 샘플 고객 3명
-- store_a에 샘플 주문 5건
+- store_a에 샘플 상품 5개 (1개는 soft-deleted)
+- store_a에 샘플 고객 3명 (1명은 soft-deleted)
+- store_a에 샘플 주문 5건 (1건은 soft-deleted)
 - store_b에 샘플 상품 3개
 
 ## 2. 테스트 시나리오
@@ -60,82 +61,108 @@
 | 13 | owner로 audit_logs 조회 | 성공 | Supabase JS client |
 | 14 | owner로 migration_runs 조회 | 성공 | Supabase JS client |
 | 15 | owner로 migration_runs insert | 성공 | Supabase JS client |
+| 16 | owner로 soft-deleted product 조회 | >= 1건 | Supabase JS client |
+| 17 | owner로 soft-deleted customer 조회 | >= 1건 | Supabase JS client |
+| 18 | owner로 soft-deleted order 조회 | >= 1건 | Supabase JS client |
 
 ### 2.3 manager 권한
 
 | 번호 | 시나리오 | 예상 결과 | 테스트 방법 |
 |---|---|---|---|
-| 16 | manager로 store 조회 | 성공 | Supabase JS client (manager token) |
-| 17 | manager로 store update | 실패 (owner only) | Supabase JS client |
-| 18 | manager로 product insert | 성공 | Supabase JS client |
-| 19 | manager로 product update | 성공 | Supabase JS client |
-| 20 | manager로 customer insert | 성공 | Supabase JS client |
-| 21 | manager로 customer update | 성공 | Supabase JS client |
-| 22 | manager로 order insert | 성공 | Supabase JS client |
-| 23 | manager로 order update | 성공 | Supabase JS client |
-| 24 | manager로 store_members role 변경 | 실패 (owner only) | Supabase JS client |
-| 25 | manager로 store_settings 조회 | 실패 (owner only) | Supabase JS client |
-| 26 | manager로 audit_logs 조회 | 실패 (owner only) | Supabase JS client |
-| 27 | manager로 migration_runs 조회 | 실패 (owner only) | Supabase JS client |
+| 19 | manager로 store 조회 | 성공 | Supabase JS client (manager token) |
+| 20 | manager로 store update | 실패 (owner only) | Supabase JS client |
+| 21 | manager로 product insert | 성공 | Supabase JS client |
+| 22 | manager로 product update | 성공 | Supabase JS client |
+| 23 | manager로 customer insert | 성공 | Supabase JS client |
+| 24 | manager로 customer update | 성공 | Supabase JS client |
+| 25 | manager로 order insert | 성공 | Supabase JS client |
+| 26 | manager로 order update | 성공 | Supabase JS client |
+| 27 | manager로 store_members role 변경 | 실패 (owner only) | Supabase JS client |
+| 28 | manager로 store_settings 조회 | 실패 (owner only) | Supabase JS client |
+| 29 | manager로 audit_logs 조회 | 실패 (owner only) | Supabase JS client |
+| 30 | manager로 migration_runs 조회 | 실패 (owner only) | Supabase JS client |
+| 31 | manager로 soft-deleted product 조회 | 0건 | Supabase JS client |
+| 32 | manager로 soft-deleted customer 조회 | 0건 | Supabase JS client |
+| 33 | manager로 soft-deleted order 조회 | 0건 | Supabase JS client |
 
 ### 2.4 staff 권한
 
 | 번호 | 시나리오 | 예상 결과 | 테스트 방법 |
 |---|---|---|---|
-| 28 | staff로 store 조회 | 성공 | Supabase JS client (staff token) |
-| 29 | staff로 product 조회 | 성공 | Supabase JS client |
-| 30 | staff로 product insert | 실패 (owner/manager only) | Supabase JS client |
-| 31 | staff로 product update | 실패 (owner/manager only) | Supabase JS client |
-| 32 | staff로 customer 조회 | 성공 | Supabase JS client |
-| 33 | staff로 customer update | 실패 (owner/manager only) | Supabase JS client |
-| 34 | staff로 order 조회 | 성공 | Supabase JS client |
-| 35 | staff로 order insert | 실패 (owner/manager only) | Supabase JS client |
-| 36 | staff로 expenses 조회 | 실패 (owner/manager only) | Supabase JS client |
-| 37 | staff로 store_settings 조회 | 실패 (owner only) | Supabase JS client |
-| 38 | staff로 audit_logs 조회 | 실패 (owner only) | Supabase JS client |
-| 39 | staff로 migration_runs 조회 | 실패 (owner only) | Supabase JS client |
+| 34 | staff로 store 조회 | 성공 | Supabase JS client (staff token) |
+| 35 | staff로 product 조회 | 실패 (0건) | Supabase JS client |
+| 36 | staff로 product insert | 실패 (owner/manager only) | Supabase JS client |
+| 37 | staff로 product update | 실패 (owner/manager only) | Supabase JS client |
+| 38 | staff로 customer 조회 | 실패 (0건) | Supabase JS client |
+| 39 | staff로 customer update | 실패 (owner/manager only) | Supabase JS client |
+| 40 | staff로 order 조회 | 실패 (0건) | Supabase JS client |
+| 41 | staff로 order insert | 실패 (owner/manager only) | Supabase JS client |
+| 42 | staff로 expenses 조회 | 실패 (owner/manager only) | Supabase JS client |
+| 43 | staff로 store_settings 조회 | 실패 (owner only) | Supabase JS client |
+| 44 | staff로 audit_logs 조회 | 실패 (owner only) | Supabase JS client |
+| 45 | staff로 migration_runs 조회 | 실패 (owner only) | Supabase JS client |
+| 46 | staff로 classification_keywords 조회 | 성공 (active only) | Supabase JS client |
 
 ### 2.5 Cross-store 공격
 
 | 번호 | 시나리오 | 예상 결과 | 테스트 방법 |
 |---|---|---|---|
-| 40 | store_a owner로 store_b customer_id로 주문 생성 | 실패 (trigger 차단) | SQL Editor |
-| 41 | store_a owner로 store_b product_id로 주문 생성 | 실패 (trigger 차단) | SQL Editor |
-| 42 | store_a owner로 store_b product_id로 inventory_log 생성 | 실패 (trigger 차단) | SQL Editor |
-| 43 | store_a owner로 store_b settings 조회 | 실패 (RLS 차단) | Supabase JS client |
+| 47 | store_a owner로 store_b customer_id로 주문 생성 | 실패 (trigger 차단) | SQL Editor |
+| 48 | store_a owner로 store_b product_id로 주문 생성 | 실패 (trigger 차단) | SQL Editor |
+| 49 | store_a owner로 store_b product_id로 inventory_log 생성 | 실패 (trigger 차단) | SQL Editor |
+| 50 | store_a owner로 store_b settings 조회 | 실패 (RLS 차단) | Supabase JS client |
 
-### 2.6 Privilege Escalation
-
-| 번호 | 시나리오 | 예상 결과 | 테스트 방법 |
-|---|---|---|---|
-| 44 | manager가 자기 role을 owner로 변경 | 실패 (RLS 차단) | SQL Editor |
-| 45 | staff가 자기 role을 manager로 변경 | 실패 (RLS 차단) | SQL Editor |
-| 46 | 마지막 owner가 자신을 inactive로 변경 | 실패 (trigger 차단 / 보호 필요) | SQL Editor |
-
-### 2.7 데이터 삭제
+### 2.6 Soft-deleted entity 연결 차단
 
 | 번호 | 시나리오 | 예상 결과 | 테스트 방법 |
 |---|---|---|---|
-| 47 | owner로 product 물리 DELETE | 실패 (권한 없음) | Supabase JS client |
-| 48 | owner로 customer 물리 DELETE | 실패 (권한 없음) | Supabase JS client |
-| 49 | owner로 product soft delete (deleted_at 설정) | 성공 | Supabase JS client |
-| 50 | owner로 customer soft delete | 성공 | Supabase JS client |
+| 51 | store_a owner로 soft-deleted customer_id로 주문 생성 | 실패 (trigger 차단) | SQL Editor |
+| 52 | store_a owner로 soft-deleted product_id로 주문 생성 | 실패 (trigger 차단) | SQL Editor |
+| 53 | store_a owner로 soft-deleted product_id로 inventory_log 생성 | 실패 (trigger 차단) | SQL Editor |
+| 54 | 과거 주문의 customer_id를 그대로 유지한 채 다른 필드 수정 | 성공 | SQL Editor |
 
-### 2.8 Append-only 테이블
-
-| 번호 | 시나리오 | 예상 결과 | 테스트 방법 |
-|---|---|---|---|
-| 51 | owner로 inventory_logs 직접 insert | 실패 (RLS 차단) | Supabase JS client |
-| 52 | owner로 inventory_logs update | 실패 (RLS 차단) | Supabase JS client |
-| 53 | owner로 inventory_logs DELETE | 실패 (권한 없음) | Supabase JS client |
-| 54 | owner로 audit_logs 직접 insert | 실패 (RLS 차단) | Supabase JS client |
-
-### 2.9 비활성 멤버
+### 2.7 Privilege Escalation
 
 | 번호 | 시나리오 | 예상 결과 | 테스트 방법 |
 |---|---|---|---|
-| 55 | inactive member로 store 조회 | 실패 (is_store_member에서 차단) | Supabase JS client |
-| 56 | inactive member로 product 조회 | 실패 | Supabase JS client |
+| 55 | manager가 자기 role을 owner로 변경 | 실패 (RLS 차단) | SQL Editor |
+| 56 | staff가 자기 role을 manager로 변경 | 실패 (RLS 차단) | SQL Editor |
+| 57 | 마지막 owner가 자신을 inactive로 변경 | 실패 (trigger 차단) | SQL Editor |
+| 58 | 마지막 owner가 자신의 role을 manager로 변경 | 실패 (trigger 차단) | SQL Editor |
+
+### 2.8 데이터 작성자 메타데이터 보호
+
+| 번호 | 시나리오 | 예상 결과 | 테스트 방법 |
+|---|---|---|---|
+| 59 | INSERT 시 created_by를 임의 UUID로 설정 | 무시되고 auth.uid()로 덮어씀 | SQL Editor |
+| 60 | UPDATE 시 created_by를 다른 UUID로 변경 | 실패 (trigger 차단) | SQL Editor |
+| 61 | UPDATE 시 updated_by가 auth.uid()로 자동 설정 | 성공 | SQL Editor |
+
+### 2.9 데이터 삭제
+
+| 번호 | 시나리오 | 예상 결과 | 테스트 방법 |
+|---|---|---|---|
+| 62 | owner로 product 물리 DELETE | 실패 (권한 없음) | Supabase JS client |
+| 63 | owner로 customer 물리 DELETE | 실패 (권한 없음) | Supabase JS client |
+| 64 | owner로 product soft delete (deleted_at 설정) | 성공 | Supabase JS client |
+| 65 | owner로 customer soft delete | 성공 | Supabase JS client |
+| 66 | owner로 soft-deleted product 복구 (deleted_at = NULL) | 성공 | Supabase JS client |
+
+### 2.10 Append-only 테이블
+
+| 번호 | 시나리오 | 예상 결과 | 테스트 방법 |
+|---|---|---|---|
+| 67 | owner로 inventory_logs 직접 insert | 실패 (RLS 차단) | Supabase JS client |
+| 68 | owner로 inventory_logs update | 실패 (RLS 차단) | Supabase JS client |
+| 69 | owner로 inventory_logs DELETE | 실패 (권한 없음) | Supabase JS client |
+| 70 | owner로 audit_logs 직접 insert | 실패 (RLS 차단) | Supabase JS client |
+
+### 2.11 비활성 멤버
+
+| 번호 | 시나리오 | 예상 결과 | 테스트 방법 |
+|---|---|---|---|
+| 71 | inactive member로 store 조회 | 실패 (is_store_member에서 차단) | Supabase JS client |
+| 72 | inactive member로 product 조회 | 실패 | Supabase JS client |
 
 ## 3. REST API 테스트
 
@@ -204,8 +231,8 @@ publishable key (anon key)로 API 호출 시:
 
 | 시나리오 | 실제 결과 | 예상 결과 | 일치 여부 | 비고 |
 |---|---|---|---|---|
-| 1 | 0건 | 0건 | ✅ | - |
-| 2 | 0건 | 0건 | ✅ | - |
+| 1 | - | 0건 | - | 미실행 |
+| 2 | - | 0건 | - | 미실행 |
 | ... | ... | ... | ... | ... |
 
 ## 8. 실패 시 처리
@@ -219,6 +246,7 @@ RLS 정책 실패 시 다음을 확인:
 5. **GRANT/REVOKE**: authenticated에 적절한 권한이 부여되었는지
 6. **helper 함수**: private.is_store_member 등 함수가 정상 동작하는지
 7. **SECURITY DEFINER**: helper 함수가 RLS를 bypass하는지
+8. **soft delete 필터**: deleted_at IS NULL 조건이 예상대로 작동하는지
 
 ## 9. 테스트 완료 후 정리
 
@@ -226,3 +254,14 @@ RLS 정책 실패 시 다음을 확인:
 - 테스트 데이터 삭제
 - 테스트 사용자 삭제
 - 테스트 결과 문서 저장
+
+## 10. 실행 상태
+
+| 항목 | 수량 |
+|---|---|
+| 문서화된 시나리오 총계 | 72개 |
+| 실제 실행된 시나리오 | 0개 (미실행) |
+| 통과 | N/A |
+| 실패 | N/A |
+
+**본 문서의 모든 시나리오는 실제 Supabase 테스트 프로젝트에서 실행되지 않았다.**

@@ -84,10 +84,15 @@ CREATE POLICY "Profiles: users can update their own profile"
 -- stores policies
 -- ============================================================
 
-CREATE POLICY "Stores: active members can view"
+CREATE POLICY "Stores: active members can view active"
     ON public.stores
     FOR SELECT TO authenticated
-    USING (private.is_store_member(id));
+    USING (private.is_store_member(id) AND deleted_at IS NULL);
+
+CREATE POLICY "Stores: owners can view deleted"
+    ON public.stores
+    FOR SELECT TO authenticated
+    USING (private.has_store_role(id, ARRAY['owner'::member_role]) AND deleted_at IS NOT NULL);
 
 CREATE POLICY "Stores: owners can update"
     ON public.stores
@@ -117,12 +122,18 @@ CREATE POLICY "StoreMembers: owners can update"
 
 -- ============================================================
 -- products policies
+-- staff base table SELECT blocked; owner/manager only
 -- ============================================================
 
-CREATE POLICY "Products: active members can view"
+CREATE POLICY "Products: owner/manager can view active"
     ON public.products
     FOR SELECT TO authenticated
-    USING (private.is_store_member(store_id));
+    USING (private.has_store_role(store_id, ARRAY['owner'::member_role, 'manager'::member_role]) AND deleted_at IS NULL);
+
+CREATE POLICY "Products: owners can view deleted"
+    ON public.products
+    FOR SELECT TO authenticated
+    USING (private.has_store_role(store_id, ARRAY['owner'::member_role]) AND deleted_at IS NOT NULL);
 
 CREATE POLICY "Products: owner/manager can insert"
     ON public.products
@@ -137,12 +148,18 @@ CREATE POLICY "Products: owner/manager can update"
 
 -- ============================================================
 -- customers policies
+-- staff base table SELECT blocked; owner/manager only
 -- ============================================================
 
-CREATE POLICY "Customers: active members can view"
+CREATE POLICY "Customers: owner/manager can view active"
     ON public.customers
     FOR SELECT TO authenticated
-    USING (private.is_store_member(store_id));
+    USING (private.has_store_role(store_id, ARRAY['owner'::member_role, 'manager'::member_role]) AND deleted_at IS NULL);
+
+CREATE POLICY "Customers: owners can view deleted"
+    ON public.customers
+    FOR SELECT TO authenticated
+    USING (private.has_store_role(store_id, ARRAY['owner'::member_role]) AND deleted_at IS NOT NULL);
 
 CREATE POLICY "Customers: owner/manager can insert"
     ON public.customers
@@ -157,12 +174,18 @@ CREATE POLICY "Customers: owner/manager can update"
 
 -- ============================================================
 -- orders policies
+-- staff base table SELECT blocked; owner/manager only
 -- ============================================================
 
-CREATE POLICY "Orders: active members can view"
+CREATE POLICY "Orders: owner/manager can view active"
     ON public.orders
     FOR SELECT TO authenticated
-    USING (private.is_store_member(store_id));
+    USING (private.has_store_role(store_id, ARRAY['owner'::member_role, 'manager'::member_role]) AND deleted_at IS NULL);
+
+CREATE POLICY "Orders: owners can view deleted"
+    ON public.orders
+    FOR SELECT TO authenticated
+    USING (private.has_store_role(store_id, ARRAY['owner'::member_role]) AND deleted_at IS NOT NULL);
 
 CREATE POLICY "Orders: owner/manager can insert"
     ON public.orders
@@ -190,10 +213,15 @@ CREATE POLICY "InventoryLogs: active members can view"
 -- expenses policies
 -- ============================================================
 
-CREATE POLICY "Expenses: owner/manager can view"
+CREATE POLICY "Expenses: owner/manager can view active"
     ON public.expenses
     FOR SELECT TO authenticated
-    USING (private.has_store_role(store_id, ARRAY['owner'::member_role, 'manager'::member_role]));
+    USING (private.has_store_role(store_id, ARRAY['owner'::member_role, 'manager'::member_role]) AND deleted_at IS NULL);
+
+CREATE POLICY "Expenses: owners can view deleted"
+    ON public.expenses
+    FOR SELECT TO authenticated
+    USING (private.has_store_role(store_id, ARRAY['owner'::member_role]) AND deleted_at IS NOT NULL);
 
 CREATE POLICY "Expenses: owner/manager can insert"
     ON public.expenses
@@ -210,10 +238,15 @@ CREATE POLICY "Expenses: owner/manager can update"
 -- classification_keywords policies
 -- ============================================================
 
-CREATE POLICY "Keywords: active members can view"
+CREATE POLICY "Keywords: active members can view active"
     ON public.classification_keywords
     FOR SELECT TO authenticated
-    USING (private.is_store_member(store_id));
+    USING (private.is_store_member(store_id) AND deleted_at IS NULL);
+
+CREATE POLICY "Keywords: owners can view deleted"
+    ON public.classification_keywords
+    FOR SELECT TO authenticated
+    USING (private.has_store_role(store_id, ARRAY['owner'::member_role]) AND deleted_at IS NOT NULL);
 
 CREATE POLICY "Keywords: owner/manager can insert"
     ON public.classification_keywords
