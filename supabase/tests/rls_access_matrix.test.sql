@@ -492,6 +492,8 @@ SELECT throws_ok(
     $$
     DELETE FROM public.products WHERE product_code = 'MGR-TEST-1';
     $$,
+    '42501',
+    NULL,
     'T22: Physical DELETE is blocked (permission or policy)'
 );
 

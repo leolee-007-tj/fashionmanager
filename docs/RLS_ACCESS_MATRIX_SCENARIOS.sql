@@ -1,58 +1,37 @@
 -- ============================================================
--- RLS Access Matrix Test Scenarios (REFERENCE ONLY)
+-- RLS Access Matrix Test Scenarios
 -- ============================================================
---
--- PURPOSE:
---   Reference document describing 30 RLS test scenarios.
---   This file is NOT automatically executed by `supabase test db`.
---
--- LOCATION: docs/ — reference document, not a runnable test
---
--- ACTUAL AUTOMATED TEST:
---   supabase/tests/rls_access_matrix.test.sql
---   (pgTAP format, runs with: supabase test db --local)
---
--- STATUS:
---   - Scenarios in this file: NOT EXECUTED as-is (reference only)
---   - Automated pgTAP tests: 25/25 PASS (local, 2026-07-11)
---
 -- WARNING:
---   - Do NOT run this file in production.
---   - Run only in a dedicated TEST Supabase project.
---   - Use dummy/test data only.
+-- - This file contains test scenarios ONLY.
+-- - These scenarios have NOT been executed.
+-- - Do NOT run this file directly in a production environment.
+-- - Run only in a dedicated TEST Supabase project.
+-- - Use dummy/test data only.
+-- - The auth.uid() function depends on the current Supabase Auth session.
+--   These statements only work when executed by an authenticated user
+--   through the Supabase SQL Editor or JS client.
 -- ============================================================
 
 -- ============================================================
--- Automated test execution
+-- How to run these tests
 -- ============================================================
 --
--- Run the actual pgTAP test file:
---   supabase test db --local
+-- Option A: Supabase SQL Editor (authenticated as test user)
+-- 1. Create test users in Supabase Auth (Admin API or Auth UI).
+-- 2. Log in as the test user in your application.
+-- 3. Open the SQL Editor while authenticated.
+-- 4. Run individual test statements.
+-- 5. Verify results against expected outcomes.
 --
--- Test file:
---   supabase/tests/rls_access_matrix.test.sql
---
--- Results (2026-07-11, local):
---   Files=1, Tests=25, All tests successful, Result: PASS
---
--- ============================================================
--- Manual / integration test approaches
--- ============================================================
---
--- Option A: Supabase JS Client (reliable auth testing)
+-- Option B: Supabase JS Client (recommended for reliable auth testing)
 -- 1. Create test users via Supabase Auth Admin API.
 -- 2. Use the JS client with the test user's JWT.
 -- 3. Execute supabase.from('table').select() / .insert() / .update().
 -- 4. Check error.code and error.message.
+-- 5. See docs/RLS_TEST_PLAN.md for JS test examples.
 --
--- Option B: curl / Postman
--- 1. Get JWT token via Auth API.
--- 2. Send REST request with Authorization Bearer <token>.
--- 3. Check response status and body.
---
--- Option C: SQL Editor (least reliable)
--- ⚠️ SQL Editor typically runs with elevated role (postgres/supabase_admin),
---    which can bypass RLS. Use only for DDL, not RLS verification.
+-- Option C: psql (requires direct DB access, usually not available
+--                 for Supabase hosted projects)
 -- 1. SET LOCAL ROLE authenticated;
 -- 2. Use request.jwt.claim.sub for auth.uid() simulation.
 -- 3. Not compatible with standard Supabase hosted projects.
