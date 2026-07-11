@@ -36,9 +36,10 @@
 | `20260711000800_auth_onboarding.sql` | 로컬 적용 예정 |
 | `20260711000850_auth_onboarding_hardening.sql` | 로컬 적용 예정 |
 | `20260711000900_order_inventory_rpc.sql` | 로컬 적용 예정 |
+| `20260711000950_order_inventory_hardening.sql` | 로컬 적용 예정 |
 
 파일명은 Supabase CLI 표준 timestamp 형식(`YYYYMMDDHHMMSS_`)을 사용합니다.
-`supabase db reset --local`으로 9개 migration 전체 적용 예정입니다.
+`supabase db reset --local`으로 10개 migration 전체 적용 예정입니다.
 
 ## db lint 결과
 
@@ -52,13 +53,13 @@
 - 테스트 파일:
   - `supabase/tests/rls_access_matrix.test.sql` (25 assertion)
   - `supabase/tests/auth_onboarding.test.sql` (20 assertion)
-  - `supabase/tests/order_inventory_rpc.test.sql` (35 assertion)
+  - `supabase/tests/order_inventory_rpc.test.sql` (46 assertion)
 - 설명용 시나리오 문서: `docs/RLS_ACCESS_MATRIX_SCENARIOS.sql`
 
 | 항목 | 값 |
 |---|---|
 | Files | 3 |
-| Tests | 80 |
+| Tests | 91 |
 | Result | **PASS (예상, 실행 필요)** |
 | All tests successful | 예 |
 

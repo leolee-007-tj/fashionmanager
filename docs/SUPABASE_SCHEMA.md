@@ -108,7 +108,7 @@
 | style | text | - | - | - | - |
 | classification_status | text | - | - | - | - |
 | korea_cost | numeric | - | - | CHECK >= 0 OR NULL | 원가 |
-| actual_converted_cost | numeric | - | - | CHECK >= 0 OR NULL | 원가 |
+| actual_converted_cost | numeric | - | - | CHECK >= 0 OR NULL | 환산된 CNY 단위 원가 |
 | china_base_price | numeric | - | - | CHECK >= 0 OR NULL | 중국 원가 |
 | current_stock | integer | ✅ | 0 | CHECK >= 0 | - |
 | reserved_stock | integer | ✅ | 0 | CHECK >= 0 | - |
@@ -181,8 +181,8 @@
 | size_snapshot | text | - | - | - | 주문 시점 사이즈 스냅샷 |
 | quantity | integer | ✅ | - | CHECK > 0 | - |
 | selling_price | numeric | ✅ | - | CHECK >= 0 | - |
-| actual_converted_cost_at_sale | numeric | - | - | CHECK >= 0 OR NULL | 주문 시점 원가 스냅샷 |
-| china_cost_at_sale | numeric | - | - | CHECK >= 0 OR NULL | 주문 시점 중국 원가 스냅샷 |
+| actual_converted_cost_at_sale | numeric | - | - | CHECK >= 0 OR NULL | 주문 시점 환산 CNY 단위 원가 스냅샷 |
+| china_cost_at_sale | numeric | - | - | CHECK >= 0 OR NULL | 주문 시점 중국 기준가(CNY) 스냅샷 |
 | actual_profit | numeric | - | - | - | 음수 가능 |
 | actual_profit_margin | numeric | - | - | - | 음수 가능 |
 | actual_cost_ratio | numeric | - | - | - | - |

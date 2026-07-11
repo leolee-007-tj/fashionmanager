@@ -64,6 +64,10 @@ public.update_pending_order(
 ```
 
 - Only **PENDING** orders can be modified
+- **Input validation:** `p_customer_id`, `p_product_id`, `p_order_date` cannot be NULL
+- **Active product validation:** Only non-deleted products (`deleted_at IS NULL`) can be used
+- **Legacy order handling:** Orders with NULL `product_id` are blocked with explicit error
+- **Data inconsistency check:** If existing order product not found, explicit error raised
 - Product changes: release old product reservation, reserve new product
   - Products locked in UUID-sorted order to prevent deadlock
 - Quantity changes on same product: adjust reservation by delta
@@ -84,7 +88,10 @@ public.ship_order(
 
 - PENDING → SHIPPED transition
 - Deducts both `current_stock` and `reserved_stock`
-- Calculates revenue, profit, margin, cost ratio from cost snapshot
+- Calculates revenue, profit, margin, cost ratio from cost snapshot with **integer rounding** (matches web app)
+  - `profit = round((selling_price - actual_converted_cost) * quantity)`
+  - `profit_margin = round((profit_raw / revenue) * 100)` — uses raw profit before rounding
+  - `cost_ratio = round(actual_converted_cost / selling_price * 100)` — unit ratio
 - Creates SHIP inventory log
 - Recalculates customer aggregates
 - Validates stock before deducting (never goes negative)
@@ -174,8 +181,8 @@ The following fields are **snapshots** — copied from source records at order c
 | `china_cost_at_sale` | products.china_base_price | create_order, update_pending_order |
 
 **Cost snapshot semantics:**
-- `actual_converted_cost_at_sale`: The converted cost in KRW at the time of sale. Used for profit calculation.
-- `china_cost_at_sale`: The original China base price in CNY at the time of sale. Informational only.
+- `actual_converted_cost_at_sale`: The sale-time converted unit cost in CNY. Used for profit calculation.
+- `china_cost_at_sale`: The sale-time China base/reference price in CNY. Informational only.
 
 ## 5. Stock and Reserved Stock Calculation
 

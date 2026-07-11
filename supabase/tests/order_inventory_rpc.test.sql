@@ -15,7 +15,7 @@
 --   - Inventory log generation
 --   - Customer aggregate recalculation
 --
--- ASSERTIONS: 35
+-- ASSERTIONS: 46
 --
 -- ============================================================
 
@@ -23,7 +23,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
-SELECT plan(35);
+SELECT plan(46);
 
 -- ------------------------------------------------------------
 -- Helper
@@ -608,6 +608,324 @@ SELECT is(
 );
 
 -- ============================================================
+-- T36: update_pending_order NULL product_id blocked
+-- ============================================================
+
+RESET ROLE;
+SELECT set_config('request.jwt.claim.sub', '', true);
+SELECT set_config('request.jwt.claims', '', true);
+
+SELECT public.set_request_user('22222222-2222-2222-2222-222222222222');
+
+SELECT public.create_order(
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    'cccccccc-cccc-cccc-cccc-cccccccccccc',
+    'pppppppp-pppp-pppp-pppp-pppppppppppp',
+    1, 50000, '2026-07-15'
+);
+
+CREATE TEMP TABLE _update_test_order AS
+SELECT id FROM public.orders ORDER BY created_at DESC LIMIT 1;
+
+SELECT throws_ok(
+    $$
+    SELECT public.update_pending_order(
+        (SELECT id FROM _update_test_order),
+        'cccccccc-cccc-cccc-cccc-cccccccccccc',
+        NULL,
+        1, 50000, '2026-07-15'
+    )
+    $$,
+    '22023',
+    'Product ID cannot be null',
+    'T36: update_pending_order NULL product_id blocked'
+);
+
+-- ============================================================
+-- T37: update_pending_order NULL customer_id blocked
+-- ============================================================
+
+SELECT throws_ok(
+    $$
+    SELECT public.update_pending_order(
+        (SELECT id FROM _update_test_order),
+        NULL,
+        'pppppppp-pppp-pppp-pppp-pppppppppppp',
+        1, 50000, '2026-07-15'
+    )
+    $$,
+    '22023',
+    'Customer ID cannot be null',
+    'T37: update_pending_order NULL customer_id blocked'
+);
+
+-- ============================================================
+-- T38: update_pending_order NULL order_date blocked
+-- ============================================================
+
+SELECT throws_ok(
+    $$
+    SELECT public.update_pending_order(
+        (SELECT id FROM _update_test_order),
+        'cccccccc-cccc-cccc-cccc-cccccccccccc',
+        'pppppppp-pppp-pppp-pppp-pppppppppppp',
+        1, 50000, NULL
+    )
+    $$,
+    '22023',
+    'Order date cannot be null',
+    'T38: update_pending_order NULL order_date blocked'
+);
+
+-- ============================================================
+-- T39: Same product soft-deleted during update blocked
+-- ============================================================
+
+SELECT throws_ok(
+    $$
+    SELECT public.update_pending_order(
+        (SELECT id FROM _update_test_order),
+        'cccccccc-cccc-cccc-cccc-cccccccccccc',
+        'dddddddd-dddd-dddd-dddd-dddddddddddd',
+        1, 50000, '2026-07-15'
+    )
+    $$,
+    '22023',
+    'Product not found or is deleted in this store',
+    'T39: update_pending_order with deleted product blocked'
+);
+
+-- ============================================================
+-- T40: Legacy order with NULL product_id blocked
+-- ============================================================
+
+RESET ROLE;
+SELECT set_config('request.jwt.claim.sub', '', true);
+SELECT set_config('request.jwt.claims', '', true);
+
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
+SELECT set_config('request.jwt.claims',
+    json_build_object('sub', '11111111-1111-1111-1111-111111111111', 'role', 'authenticated')::text, true);
+
+INSERT INTO public.orders (
+    id, store_id, order_number, customer_id, quantity, selling_price,
+    status, order_date, created_by
+) VALUES (
+    'llllllll-llll-llll-llll-llllllllllll',
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    'ORD-LEGACY',
+    'cccccccc-cccc-cccc-cccc-cccccccccccc',
+    1, 10000,
+    'PENDING',
+    '2026-07-15',
+    '11111111-1111-1111-1111-111111111111'
+);
+
+SELECT set_config('request.jwt.claim.sub', '', true);
+SELECT set_config('request.jwt.claims', '', true);
+
+SELECT public.set_request_user('22222222-2222-2222-2222-222222222222');
+
+SELECT throws_ok(
+    $$
+    SELECT public.update_pending_order(
+        'llllllll-llll-llll-llll-llllllllllll',
+        'cccccccc-cccc-cccc-cccc-cccccccccccc',
+        'pppppppp-pppp-pppp-pppp-pppppppppppp',
+        1, 50000, '2026-07-15'
+    )
+    $$,
+    '22023',
+    'Legacy order has no product_id and must be repaired before update',
+    'T40: Legacy order with NULL product_id blocked'
+);
+
+-- ============================================================
+-- T41: Data inconsistency - existing order product not found
+-- ============================================================
+
+RESET ROLE;
+SELECT set_config('request.jwt.claim.sub', '', true);
+SELECT set_config('request.jwt.claims', '', true);
+
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
+SELECT set_config('request.jwt.claims',
+    json_build_object('sub', '11111111-1111-1111-1111-111111111111', 'role', 'authenticated')::text, true);
+
+INSERT INTO public.orders (
+    id, store_id, order_number, customer_id, product_id, quantity, selling_price,
+    status, order_date, created_by
+) VALUES (
+    'iiiiiiii-iiii-iiii-iiii-iiiiiiiiiiii',
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    'ORD-INCONSISTENT',
+    'cccccccc-cccc-cccc-cccc-cccccccccccc',
+    'ffffffff-ffff-ffff-ffff-ffffffffffff',
+    1, 10000,
+    'PENDING',
+    '2026-07-15',
+    '11111111-1111-1111-1111-111111111111'
+);
+
+SELECT set_config('request.jwt.claim.sub', '', true);
+SELECT set_config('request.jwt.claims', '', true);
+
+SELECT public.set_request_user('22222222-2222-2222-2222-222222222222');
+
+SELECT throws_ok(
+    $$
+    SELECT public.update_pending_order(
+        'iiiiiiii-iiii-iiii-iiii-iiiiiiiiiiii',
+        'cccccccc-cccc-cccc-cccc-cccccccccccc',
+        'qqqqqqqq-qqqq-qqqq-qqqq-qqqqqqqqqqqq',
+        1, 50000, '2026-07-15'
+    )
+    $$,
+    '22023',
+    'Data inconsistency: existing order product not found',
+    'T41: Data inconsistency - existing order product not found'
+);
+
+-- ============================================================
+-- T42-T44: Integer rounding tests for profit calculations
+-- ============================================================
+
+RESET ROLE;
+SELECT set_config('request.jwt.claim.sub', '', true);
+SELECT set_config('request.jwt.claims', '', true);
+
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
+SELECT set_config('request.jwt.claims',
+    json_build_object('sub', '11111111-1111-1111-1111-111111111111', 'role', 'authenticated')::text, true);
+
+INSERT INTO public.products (id, store_id, product_code, original_title, brand, category, color, size, current_stock, reserved_stock, actual_converted_cost, china_base_price, created_by) VALUES
+    ('rrrrrrrr-rrrr-rrrr-rrrr-rrrrrrrrrrrr', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'PRD-ROUND', 'Rounding Test', 'BrandR', 'test', 'white', 'M', 10, 0, 33, 15, '11111111-1111-1111-1111-111111111111');
+
+SELECT set_config('request.jwt.claim.sub', '', true);
+SELECT set_config('request.jwt.claims', '', true);
+
+SELECT public.set_request_user('22222222-2222-2222-2222-222222222222');
+
+SELECT public.create_order(
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    'cccccccc-cccc-cccc-cccc-cccccccccccc',
+    'rrrrrrrr-rrrr-rrrr-rrrr-rrrrrrrrrrrr',
+    1, 99, '2026-07-20'
+);
+
+CREATE TEMP TABLE _round_order AS
+SELECT id FROM public.orders ORDER BY created_at DESC LIMIT 1;
+
+SELECT public.ship_order((SELECT id FROM _round_order), '2026-07-21');
+
+-- T42: actual_profit integer rounding (99 - 33 = 66)
+SELECT is(
+    (SELECT actual_profit::integer FROM public.orders WHERE id = (SELECT id FROM _round_order)),
+    66,
+    'T42: actual_profit = round((99-33)*1) = 66'
+);
+
+-- T43: actual_profit_margin integer rounding (66/99*100 = 66.666... -> 67)
+SELECT is(
+    (SELECT actual_profit_margin::integer FROM public.orders WHERE id = (SELECT id FROM _round_order)),
+    67,
+    'T43: actual_profit_margin = round(66/99*100) = 67'
+);
+
+-- T44: actual_cost_ratio integer rounding (33/99*100 = 33.333... -> 33)
+SELECT is(
+    (SELECT actual_cost_ratio::integer FROM public.orders WHERE id = (SELECT id FROM _round_order)),
+    33,
+    'T44: actual_cost_ratio = round(33/99*100) = 33'
+);
+
+-- ============================================================
+-- T45: Deleted customer aggregate update blocked
+-- ============================================================
+
+RESET ROLE;
+SELECT set_config('request.jwt.claim.sub', '', true);
+SELECT set_config('request.jwt.claims', '', true);
+
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
+SELECT set_config('request.jwt.claims',
+    json_build_object('sub', '11111111-1111-1111-1111-111111111111', 'role', 'authenticated')::text, true);
+
+INSERT INTO public.customers (id, store_id, name, created_by)
+VALUES ('dddddddd-dddd-dddd-dddd-dddddddddddd', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Deleted Customer', '11111111-1111-1111-1111-111111111111');
+
+UPDATE public.customers SET deleted_at = now() WHERE id = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
+
+SELECT set_config('request.jwt.claim.sub', '', true);
+SELECT set_config('request.jwt.claims', '', true);
+
+SELECT public.set_request_user('22222222-2222-2222-2222-222222222222');
+
+SELECT public.create_order(
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    'dddddddd-dddd-dddd-dddd-dddddddddddd',
+    'pppppppp-pppp-pppp-pppp-pppppppppppp',
+    1, 50000, '2026-07-25'
+);
+
+CREATE TEMP TABLE _del_cust_order AS
+SELECT id FROM public.orders ORDER BY created_at DESC LIMIT 1;
+
+SELECT public.ship_order((SELECT id FROM _del_cust_order), '2026-07-26');
+
+SELECT is(
+    (SELECT total_amount FROM public.customers WHERE id = 'dddddddd-dddd-dddd-dddd-dddddddddddd'),
+    0,
+    'T45: Deleted customer aggregates not updated (total_amount remains 0)'
+);
+
+-- ============================================================
+-- T46: Regression check - basic order/inventory flows still work
+-- ============================================================
+
+RESET ROLE;
+SELECT set_config('request.jwt.claim.sub', '', true);
+SELECT set_config('request.jwt.claims', '', true);
+
+SELECT public.set_request_user('22222222-2222-2222-2222-222222222222');
+
+SELECT lives_ok(
+    $$
+    SELECT public.create_order(
+        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+        'cccccccc-cccc-cccc-cccc-cccccccccccc',
+        'qqqqqqqq-qqqq-qqqq-qqqq-qqqqqqqqqqqq',
+        1, 70000, '2026-07-30'
+    )
+    $$,
+    'T46a: create_order still works after hardening'
+);
+
+CREATE TEMP TABLE _reg_order AS
+SELECT id FROM public.orders ORDER BY created_at DESC LIMIT 1;
+
+SELECT lives_ok(
+    $$ SELECT public.update_pending_order((SELECT id FROM _reg_order), 'cccccccc-cccc-cccc-cccc-cccccccccccc', 'qqqqqqqq-qqqq-qqqq-qqqq-qqqqqqqqqqqq', 2, 75000, '2026-07-30') $$,
+    'T46b: update_pending_order still works'
+);
+
+SELECT lives_ok(
+    $$ SELECT public.ship_order((SELECT id FROM _reg_order), '2026-07-31') $$,
+    'T46c: ship_order still works'
+);
+
+SELECT lives_ok(
+    $$ SELECT public.complete_order((SELECT id FROM _reg_order)) $$,
+    'T46d: complete_order still works'
+);
+
+SELECT is(
+    (SELECT status::text FROM public.orders WHERE id = (SELECT id FROM _reg_order)),
+    'COMPLETED',
+    'T46e: Final status is COMPLETED'
+);
+
+-- ============================================================
 -- Cleanup
 -- ============================================================
 
@@ -618,6 +936,10 @@ SELECT set_config('request.jwt.claims', '', true);
 DROP FUNCTION IF EXISTS public.set_request_user(uuid);
 DROP TABLE IF EXISTS _test_order;
 DROP TABLE IF EXISTS _cancel_order;
+DROP TABLE IF EXISTS _update_test_order;
+DROP TABLE IF EXISTS _round_order;
+DROP TABLE IF EXISTS _del_cust_order;
+DROP TABLE IF EXISTS _reg_order;
 
 -- ============================================================
 -- Finish

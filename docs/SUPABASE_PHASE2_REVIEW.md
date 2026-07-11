@@ -5,7 +5,7 @@
 
 ## 완료된 산출물
 
-### SQL 파일 (9개)
+### SQL 파일 (10개)
 
 | 파일 | 내용 | 라인 |
 |---|---|---|
@@ -19,6 +19,7 @@
 | `20260711000800_auth_onboarding.sql` | 인증 부트스트랩 RPC (ensure_user_profile, create_initial_store) | 199 |
 | `20260711000850_auth_onboarding_hardening.sql` | 온보딩 검증 보완 (NULL 체크, 22023, 삭제 store 제외, 64-bit lock) | 201 |
 | `20260711000900_order_inventory_rpc.sql` | 주문 lifecycle RPC + 재고 transaction + 직접 DML 차단 | 978 |
+| `20260711000950_order_inventory_hardening.sql` | RPC runtime validation hardening (NULL defense, soft-delete check, integer rounding) | 475 |
 
 ### 문서 (10개)
 
