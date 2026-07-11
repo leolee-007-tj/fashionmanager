@@ -6,15 +6,18 @@
 |---|---|
 | 실행 날짜 | 2026-07-11 |
 | OS | macOS |
-| Docker 버전 | 미설치 (`command not found`) |
-| Supabase CLI 버전 | 미설치 (`command not found`) |
-| 로컬 Supabase 실행 여부 | **미실행** |
+| Docker 버전 | 미설치 (Docker Desktop 설치 권한 없음) |
+| Supabase CLI 버전 | v2.109.1 (직접 다운로드, HOME=/tmp/supa_home 우회) |
+| supabase init 결과 | 성공 (config.toml 생성됨) |
+| migration 파일명 인식 | timestamp 형식으로 변경 완료 (`20260711000100_`~`20260711000700_`) |
+| 로컬 Supabase 실행 여부 | **미실행** (Docker 없음) |
 
 ## 실행 상태
 
-⚠️ **Supabase CLI와 Docker가 설치되어 있지 않아 로컬 테스트를 실행하지 못했습니다.**
+⚠️ **Docker Desktop이 설치되어 있지 않아 로컬 Supabase DB와 테스트를 실행하지 못했습니다.**
 
-테스트 코드는 작성되었으나 실제 데이터베이스에서 검증되지 않았습니다.
+Supabase CLI는 다운로드되어 `supabase init`은 성공했지만, `supabase start`에 Docker가 필요합니다.
+migration 파일명은 Supabase CLI 표준 timestamp 형식으로 변경되었습니다.
 
 ## 코드 수정 내용
 
@@ -45,18 +48,17 @@
 
 | 파일명 | 상태 |
 |---|---|
-| `001_extensions_and_types.sql` | 작성 완료 |
-| `002_initial_schema.sql` | 작성 완료 |
-| `003_constraints_and_indexes.sql` | 작성 완료 |
-| `004_triggers.sql` | 작성 완료 |
-| `005_private_helpers.sql` | 작성 완료 |
-| `006_rls_policies.sql` | 작성 완료 |
-| `007_audit_functions.sql` | 작성 완료 |
+| `20260711000100_extensions_and_types.sql` | 작성 완료 |
+| `20260711000200_initial_schema.sql` | 작성 완료 |
+| `20260711000300_constraints_and_indexes.sql` | 작성 완료 |
+| `20260711000400_triggers.sql` | 작성 완료 |
+| `20260711000500_private_helpers.sql` | 작성 완료 |
+| `20260711000600_rls_policies.sql` | 작성 완료 |
+| `20260711000700_audit_functions.sql` | 작성 완료 |
 
-파일명 형식이 `001_`, `002_` 등 숫자 prefix로 되어 있습니다.
-Supabase CLI는 기본적으로 timestamp 형식(`20260711000000_`)을 기대하지만,
-일부 버전에서는 숫자 prefix도 인식할 수 있습니다.
-**실제 Supabase CLI 실행 후 인식 여부 확인이 필요합니다.**
+파일명은 Supabase CLI 표준 timestamp 형식(`YYYYMMDDHHMMSS_`)을 사용합니다.
+`supabase migration new test_format`으로 생성된 파일명(`20260711030012_test_format.sql`)과 동일한 패턴입니다.
+**실제 Supabase start 후 migration 적용 여부는 미확인입니다.**
 
 ## 테스트 계획
 
@@ -131,8 +133,9 @@ supabase test db supabase/tests/rls_access_matrix.test.sql
 - [x] 앱 HTML/CSS/JS 미변경
 - [x] `auth.uid()` 재정의 없음
 - [x] psql `\set` 문법 없음
-- [ ] migration 파일명 Supabase CLI 인식 여부 (미확인)
-- [ ] 실제 테스트 통과 여부 (미실행)
+- [x] config.toml에 실제 secret 없음 (모두 env 참조 또는 빈 값)
+- [x] migration 파일명 Supabase CLI 표준 timestamp 형식
+- [ ] 실제 테스트 통과 여부 (미실행, Docker 필요)
 
 ## 다음 단계
 
