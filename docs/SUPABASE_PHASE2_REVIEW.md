@@ -61,7 +61,7 @@
 | audit 함수 | 3 |
 | security definer 함수 | 9 |
 | 테스트 시나리오 | 72개 (문서) + 30개 (SQL 시나리오, 미실행) |
-| pgTAP 테스트 파일 | 1개 (35+ assertion, 미실행) |
+| pgTAP 테스트 파일 | 1개 (25 assertion, 미실행) |
 
 ---
 
@@ -113,6 +113,7 @@
 | store_members user_id 변경 차단 | ✅ | RAISE EXCEPTION |
 | stores no store_id 컬럼 안전 | ✅ | 별도 handle_store_update() 함수 사용 |
 | migration_runs initiated_by 안전 | ✅ | 별도 handle_migration_run_metadata() 함수 사용 |
+| migration_runs updated_at/version | ✅ | UPDATE 시 now() + version 증가 |
 | append-only 테이블 update 차단 | ✅ | RLS로 INSERT/UPDATE 정책 없음 |
 | soft-deleted entity 신규 연결 차단 | ✅ | orders, inventory_logs trigger (관계 변경 시만) |
 | 과거 주문 변경 허용 | ✅ | 관계 unchanged 시 삭제 상태 재검사 안 함 |
@@ -206,7 +207,7 @@
 | staff 업무 기능 미지원 | 중간 | base table SELECT 차단됨. 제한 view/RPC 구현 전 staff는 업무 데이터 접근 불가 |
 | 주문 생성/상태 변경 보호된 RPC 미구현 | 중간 | 향후 구현 필요 |
 | 초기 owner 생성 방식 미확정 | 낮음 | 관리자 SQL 또는 Edge Function |
-| RLS 테스트 미실행 | 중간 | 72개 문서 시나리오 + 30개 SQL 시나리오 + 35개 pgTAP assertion, 실제 실행 전 |
+| RLS 테스트 미실행 | 중간 | 72개 문서 시나리오 + 30개 SQL 시나리오 + 25개 pgTAP assertion, 실제 실행 전 |
 | pgTAP 테스트 미실행 | 중간 | supabase CLI + 로컬 Supabase 환경 필요 |
 
 ---

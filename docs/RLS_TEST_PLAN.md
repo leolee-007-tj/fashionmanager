@@ -285,8 +285,22 @@ RLS 정책 실패 시 다음을 확인:
 | 항목 | 수량 |
 |---|---|
 | 문서화된 시나리오 총계 | 72개 |
+| pgTAP assertion (rls_access_matrix.test.sql) | 25개 |
 | 실제 실행된 시나리오 | 0개 (미실행) |
 | 통과 | N/A |
 | 실패 | N/A |
 
-**본 문서의 모든 시나리오는 실제 Supabase 테스트 프로젝트에서 실행되지 않았다.**
+**본 문서의 모든 시나리오와 pgTAP 테스트는 실제 Supabase 테스트 프로젝트에서 실행되지 않았다.**
+
+### 10.1 pgTAP 테스트 파일 구조
+
+- 파일: `supabase/tests/rls_access_matrix.test.sql`
+- plan(25): 25개 assertion (lives_ok 7 + throws_ok 9 + is 9)
+- BEGIN/ROLLBACK으로 트랜잭션 격리
+- `set_request_user(uuid)` 헬퍼 함수로 `SET LOCAL ROLE authenticated` + `request.jwt.claim.sub` 설정
+- auth.uid() 재정의 없음
+- psql \set 없음
+- historical order setup 순서: active product 생성 → order 생성 → product soft delete → notes 수정 테스트
+- cross-store 테스트: store B UUID 명시적 사용 (product: 55555555-5555-5555-5555-555555555555, customer: 66666666-6666-6666-6666-666666666666)
+- manager store_members UPDATE: lives_ok (0 rows) + is (role unchanged) 방식
+- cleanup: RESET ROLE + JWT claim 초기화 + DROP FUNCTION IF EXISTS

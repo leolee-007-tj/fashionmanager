@@ -211,6 +211,21 @@ BEGIN
     IF TG_OP = 'INSERT' THEN
         NEW.initiated_by = auth.uid();
     ELSIF TG_OP = 'UPDATE' THEN
+        NEW.updated_at = now();
+        NEW.version = OLD.version + 1;
+
+        IF NEW.id IS DISTINCT FROM OLD.id THEN
+            RAISE EXCEPTION 'Changing id is not allowed';
+        END IF;
+
+        IF NEW.store_id IS DISTINCT FROM OLD.store_id THEN
+            RAISE EXCEPTION 'Changing store_id is not allowed';
+        END IF;
+
+        IF NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+            RAISE EXCEPTION 'Changing created_at is not allowed';
+        END IF;
+
         IF NEW.initiated_by IS DISTINCT FROM OLD.initiated_by THEN
             RAISE EXCEPTION 'Changing initiated_by is not allowed';
         END IF;
