@@ -16,8 +16,9 @@
 | `20260711000500_private_helpers.sql` | private schema, RLS helper, 권한 | 83 |
 | `20260711000600_rls_policies.sql` | RLS 활성화, 정책, GRANT/REVOKE | 278 |
 | `20260711000700_audit_functions.sql` | audit 함수, 마스킹, trigger | 158 |
+| `20260711000800_auth_onboarding.sql` | 인증 부트스트랩 RPC (ensure_user_profile, create_initial_store) | 142 |
 
-### 문서 (8개)
+### 문서 (9개)
 
 | 파일 | 내용 |
 |---|---|
@@ -29,12 +30,14 @@
 | `docs/SUPABASE_MIGRATION_ORDER.md` | 실행 순서 및 주의사항 |
 | `docs/SECURITY_DATA_EXPOSURE_REMEDIATION.md` | 1단계 보안 조치 (진행 중) |
 | `docs/RISK_ANALYSIS.md` | 위험 분석 (부분 해결) |
+| `docs/SUPABASE_AUTH_ONBOARDING.md` | 인증 부트스트랩 온보딩 설계 (3-1) |
 
 ### 테스트 파일 (2개)
 
 | 파일 | 내용 |
 |---|---|
 | `supabase/tests/rls_access_matrix.test.sql` | pgTAP 실행 파일, 25 assertion (PASS) |
+| `supabase/tests/auth_onboarding.test.sql` | pgTAP 실행 파일, 12 assertion (온보딩 RPC) |
 | `docs/RLS_ACCESS_MATRIX_SCENARIOS.sql` | 설명용 시나리오 문서, 30개 (미실행) |
 
 ---
@@ -60,9 +63,9 @@
 | trigger 총계 | 28 | |
 | helper 함수 | 3 |
 | audit 함수 | 3 |
-| security definer 함수 | 9 |
+| security definer 함수 | 11 |
 | 테스트 시나리오 | 72개 (문서) + 30개 (SQL 시나리오 문서, 미실행) |
-| pgTAP 테스트 파일 | 1개 (25 assertion, **25/25 PASS 로컬 통과) |
+| pgTAP 테스트 파일 | 2개 (25 + 12 = 37 assertion, **로컬 통과**) |
 
 ---
 
@@ -213,7 +216,7 @@
 | reserved_stock > current_stock 데이터 존재 | 낮음 | 마이그레이션 시 정리 또는 앱 로직으로 처리 |
 | staff 업무 기능 미지원 | 중간 | base table SELECT 차단됨. 제한 view/RPC 구현 전 staff는 업무 데이터 접근 불가 |
 | 주문 생성/상태 변경 보호된 RPC 미구현 | 중간 | 향후 구현 필요 |
-| 초기 owner 생성 방식 미확정 | 낮음 | 관리자 SQL 또는 Edge Function |
+| 초기 owner 생성 방식 미확정 | 낮음→해결 | 3-1 onboarding RPC로 해결 (ensure_user_profile + create_initial_store) |
 | JS client 통합 테스트 미실행 | 중간 | @supabase/supabase-js 클라이언트로 RLS 재검증 필요 |
 | REST API / PostgREST 동작 미확인 | 낮음 | 실제 network 요청으로 검증 필요 |
 | 실제 Auth 로그인 사용자 테스트 미실행 | 중간 | 실제 회원가입/로그인 흐름 검증 필요 |
@@ -238,11 +241,18 @@
 - [x] created_by/updated_by 위조 차단
 - [x] staff base table 차단
 
+### Phase 3-1 완료: Auth Onboarding Bootstrap
+
+- [x] 008 migration 추가 (ensure_user_profile, create_initial_store)
+- [x] bootstrap deadlock 해결 (SECURITY DEFINER RPC)
+- [x] idempotent onboarding (중복 호출 시 기존 store_id 반환)
+- [x] advisory transaction lock (동시성 제어)
+- [x] pgTAP onboarding 테스트 12개 추가
+
 ### Phase 3 전 추가 준비 (미완료)
 
 - [ ] staff 제한 view 설계 (원가/개인정보 숨김)
 - [ ] 주문/재고 RPC 설계
-- [ ] 초기 store/owner onboarding 흐름 확정
 - [ ] Supabase JS client 설정
 - [ ] 로그인 구현 (OAuth 또는 이메일)
 - [ ] localStorage → Supabase 마이그레이션 스크립트
