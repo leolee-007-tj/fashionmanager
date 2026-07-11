@@ -43,8 +43,8 @@
 | 파일 | 내용 |
 |---|---|
 | `supabase/tests/rls_access_matrix.test.sql` | pgTAP 실행 파일, 25 assertion (로컬 PASS) |
-| `supabase/tests/auth_onboarding.test.sql` | pgTAP 실행 파일, 20 assertion (온보딩 RPC + hardening) |
-| `supabase/tests/order_inventory_rpc.test.sql` | pgTAP 실행 파일, 35 assertion (주문/재고 RPC) |
+| `supabase/tests/auth_onboarding.test.sql` | pgTAP 실행 파일, 20 assertion (온보딩 RPC + hardening, 사용자 머신 실행 필요) |
+| `supabase/tests/order_inventory_rpc.test.sql` | pgTAP 실행 파일, 54 assertion (주문/재고 RPC + hardening, 사용자 머신 실행 필요) |
 
 #### 설명용 시나리오 문서 (1개)
 
@@ -77,7 +77,7 @@
 | audit 함수 | 3 |
 | security definer 함수 | 16 | (009: 5개 주문 lifecycle RPC 추가) |
 | 테스트 시나리오 | 72개 (문서) + 30개 (SQL 시나리오 문서, 미실행) |
-| pgTAP 테스트 파일 | 3개 (25 + 20 + 35 = 80 assertion, **로컬 pgTAP 통과 예상**) |
+| pgTAP 테스트 파일 | 3개 (25 + 20 + 54 = 99 assertion, rls_access_matrix 25개 로컬 PASS, 나머지 사용자 머신 실행 필요) |
 
 ---
 
@@ -194,9 +194,9 @@
 |---|---|
 | 자동 parser 검사 | ❌ 미수행 (별도 parser 도구 없음) |
 | 수동 정적 검사 | ✅ 수행 |
-| 로컬 Supabase migration 적용 | ✅ 7개 모두 성공 |
-| supabase db lint | ✅ 오류 없음 |
-| pgTAP 로컬 실행 | ✅ 25/25 PASS |
+| 로컬 Supabase migration 적용 | ✅ 7개 성공 (001~007), 008~00950 사용자 머신 실행 필요 |
+| supabase db lint | ✅ 오류 없음 (001~007), 008~00950 사용자 머신 실행 필요 |
+| pgTAP 로컬 실행 | ✅ 25/25 PASS (rls_access_matrix), 20+54 assertion 사용자 머신 실행 필요 |
 | 원격 Supabase 검증 | ❌ 미실행 (금지됨) |
 | JS client 통합 테스트 | ❌ 미실행 |
 | REST API 통합 테스트 | ❌ 미실행 |
@@ -282,8 +282,28 @@
 - [x] orders 직접 INSERT/UPDATE 권한 revoke + 정책 삭제
 - [x] products 재고 컬럼 직접 수정 차단 (column-level grant)
 - [x] customers 집계 컬럼 직접 수정 차단 (column-level grant)
-- [x] pgTAP 테스트 35개 추가 (생성/수정/출고/취소/완료 + DML 차단 + cross-store)
+- [x] pgTAP 테스트 54개 추가 (생성/수정/출고/취소/완료 + DML 차단 + cross-store + hardening + 회귀)
 - [x] 주문번호 자동 생성 (ORD-0001 형식, store별, advisory lock)
+
+### Phase 3-2.1 완료: Order/Inventory RPC Hardening
+
+- [x] 00950 migration 추가 (NULL 입력 방어, soft-delete 검증, legacy 처리, 정수 반올림)
+- [x] update_pending_order: p_customer_id, p_product_id, p_order_date NULL 차단 (22023)
+- [x] update_pending_order: 같은 상품 경로에서도 deleted_at IS NULL 검증
+- [x] update_pending_order: 기존 product_id NULL 시 명확한 오류 (legacy repair 필요)
+- [x] update_pending_order: 기존 product 행 없을 시 데이터 불일치 오류
+- [x] ship_order: 정수 반올림 (profit, profit_margin, cost_ratio) — 기존 웹앱과 동일
+- [x] recalculate_customer_aggregates: deleted_at IS NULL 고객만 집계 갱신
+- [x] actual_converted_cost 단위를 CNY로 문서 수정
+- [x] china_cost_at_sale을 중국 기준가(CNY)로 문서 수정
+
+### Phase 3-2.2 완료: pgTAP Suite Repair
+
+- [x] 잘못된 UUID 5종 교체 (pppp→10000000-...001, qqqq→...002, rrrr→...003, llll→20000000-...001, iiii→20000000-...002)
+- [x] T41 FK 위반 fixture 수정 (session_replication_role = replica로 우회 후 origin 복원)
+- [x] T45 삭제 고객 테스트 수정 (create_order 호출 제거, helper 직접 호출로 sentinel 검증)
+- [x] pgTAP plan 수 수정 (46 → 54, 실제 assertion 수와 일치)
+- [x] 총 99 assertion (25 + 20 + 54), 사용자 머신 실행 필요
 
 ### Phase 3 전 추가 준비 (미완료)
 
@@ -302,8 +322,8 @@
 | 항목 | 값 |
 |---|---|
 | 브랜치 | feature/supabase-cloud-migration |
-| 최신 커밋 메시지 | `test: fix local pgTAP execution and delete assertion` |
-| 최신 커밋 SHA | 6f99d79532bc7eda2353c90b7bfc507e8cee40a7 |
+| 최신 커밋 메시지 | `test: fix executable order inventory pgTAP suite` |
+| 최신 커밋 SHA | ba01138dc0eefd7d84de9f845f614f3f71060b74 |
 | Phase 2 상태 | 로컬 DB 구조 + RLS 자동화 검증 통과 |
 
 ---

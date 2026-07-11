@@ -15,7 +15,7 @@
 --   - Inventory log generation
 --   - Customer aggregate recalculation
 --
--- ASSERTIONS: 46
+-- ASSERTIONS: 54
 --
 -- ============================================================
 
@@ -23,7 +23,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
-SELECT plan(46);
+SELECT plan(54);
 
 -- ------------------------------------------------------------
 -- Helper
@@ -63,10 +63,10 @@ INSERT INTO public.store_members (id, store_id, user_id, role, is_active, invite
     ('aaaa2222-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '22222222-2222-2222-2222-222222222222', 'manager', true, '11111111-1111-1111-1111-111111111111'),
     ('aaaa3333-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '33333333-3333-3333-3333-333333333333', 'staff', true, '11111111-1111-1111-1111-111111111111');
 
--- Products
+-- Products (valid hex UUIDs only)
 INSERT INTO public.products (id, store_id, product_code, original_title, brand, category, color, size, current_stock, reserved_stock, actual_converted_cost, china_base_price, created_by) VALUES
-    ('pppppppp-pppp-pppp-pppp-pppppppppppp', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'PRD-001', 'Test Product A', 'BrandA', 'top', 'red', 'M', 50, 0, 30000, 15000, '11111111-1111-1111-1111-111111111111'),
-    ('qqqqqqqq-qqqq-qqqq-qqqq-qqqqqqqqqqqq', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'PRD-002', 'Test Product B', 'BrandB', 'bottom', 'blue', 'L', 30, 0, 25000, 12000, '11111111-1111-1111-1111-111111111111'),
+    ('10000000-0000-0000-0000-000000000001', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'PRD-001', 'Test Product A', 'BrandA', 'top', 'red', 'M', 50, 0, 30000, 15000, '11111111-1111-1111-1111-111111111111'),
+    ('10000000-0000-0000-0000-000000000002', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'PRD-002', 'Test Product B', 'BrandB', 'bottom', 'blue', 'L', 30, 0, 25000, 12000, '11111111-1111-1111-1111-111111111111'),
     ('dddddddd-dddd-dddd-dddd-dddddddddddd', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'PRD-DEL', 'Deleted Product', 'BrandC', 'acc', 'black', 'One', 10, 0, 5000, 2000, '11111111-1111-1111-1111-111111111111');
 
 UPDATE public.products SET deleted_at = now() WHERE id = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
@@ -88,7 +88,7 @@ SELECT throws_ok(
     $$ SELECT public.create_order(
         'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
         'cccccccc-cccc-cccc-cccc-cccccccccccc',
-        'pppppppp-pppp-pppp-pppp-pppppppppppp',
+        '10000000-0000-0000-0000-000000000001',
         2, 100000, current_date
     ) $$,
     '42501',
@@ -107,7 +107,7 @@ SELECT throws_ok(
     $$ SELECT public.create_order(
         'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
         'cccccccc-cccc-cccc-cccc-cccccccccccc',
-        'pppppppp-pppp-pppp-pppp-pppppppppppp',
+        '10000000-0000-0000-0000-000000000001',
         2, 100000, current_date
     ) $$,
     '42501',
@@ -129,7 +129,7 @@ SELECT lives_ok(
     $$ SELECT public.create_order(
         'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
         'cccccccc-cccc-cccc-cccc-cccccccccccc',
-        'pppppppp-pppp-pppp-pppp-pppppppppppp',
+        '10000000-0000-0000-0000-000000000001',
         2, 100000, '2026-07-01'
     ) $$,
     'T3: manager create_order succeeds'
@@ -160,7 +160,7 @@ SELECT is(
 -- ============================================================
 
 SELECT is(
-    (SELECT reserved_stock FROM public.products WHERE id = 'pppppppp-pppp-pppp-pppp-pppppppppppp'),
+    (SELECT reserved_stock FROM public.products WHERE id = '10000000-0000-0000-0000-000000000001'),
     2,
     'T6: reserved_stock increased by order quantity'
 );
@@ -170,7 +170,7 @@ SELECT is(
 -- ============================================================
 
 SELECT is(
-    (SELECT current_stock FROM public.products WHERE id = 'pppppppp-pppp-pppp-pppp-pppppppppppp'),
+    (SELECT current_stock FROM public.products WHERE id = '10000000-0000-0000-0000-000000000001'),
     50,
     'T7: current_stock unchanged after order creation'
 );
@@ -181,7 +181,7 @@ SELECT is(
 
 SELECT is(
     (SELECT count(*)::integer FROM public.inventory_logs
-     WHERE product_id = 'pppppppp-pppp-pppp-pppp-pppppppppppp'
+     WHERE product_id = '10000000-0000-0000-0000-000000000001'
        AND change_type = 'RESERVE'),
     1,
     'T8: RESERVE inventory log created'
@@ -195,7 +195,7 @@ SELECT throws_ok(
     $$ SELECT public.create_order(
         'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
         'cccccccc-cccc-cccc-cccc-cccccccccccc',
-        'qqqqqqqq-qqqq-qqqq-qqqq-qqqqqqqqqqqq',
+        '10000000-0000-0000-0000-000000000002',
         100, 50000, '2026-07-02'
     ) $$,
     '22023',
@@ -212,7 +212,7 @@ SELECT throws_ok(
     $$ SELECT public.create_order(
         'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
         'ffffffff-ffff-ffff-ffff-ffffffffffff',
-        'pppppppp-pppp-pppp-pppp-pppppppppppp',
+        '10000000-0000-0000-0000-000000000001',
         1, 10000, '2026-07-02'
     ) $$,
     '22023',
@@ -245,7 +245,7 @@ SELECT throws_ok(
     INSERT INTO public.orders (store_id, order_number, customer_id, product_id, quantity, selling_price)
     VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'DIR-001',
             'cccccccc-cccc-cccc-cccc-cccccccccccc',
-            'pppppppp-pppp-pppp-pppp-pppppppppppp', 1, 10000);
+            '10000000-0000-0000-0000-000000000001', 1, 10000);
     $$,
     '42501',
     NULL,
@@ -273,7 +273,7 @@ SELECT throws_ok(
 SELECT throws_ok(
     $$
     UPDATE public.products SET current_stock = 999
-    WHERE id = 'pppppppp-pppp-pppp-pppp-pppppppppppp';
+    WHERE id = '10000000-0000-0000-0000-000000000001';
     $$,
     '42501',
     NULL,
@@ -309,7 +309,7 @@ SELECT lives_ok(
     SELECT public.update_pending_order(
         (SELECT id FROM _test_order),
         'cccccccc-cccc-cccc-cccc-cccccccccccc',
-        'pppppppp-pppp-pppp-pppp-pppppppppppp',
+        '10000000-0000-0000-0000-000000000001',
         5, 120000, '2026-07-01'
     )
     $$,
@@ -317,7 +317,7 @@ SELECT lives_ok(
 );
 
 SELECT is(
-    (SELECT reserved_stock FROM public.products WHERE id = 'pppppppp-pppp-pppp-pppp-pppppppppppp'),
+    (SELECT reserved_stock FROM public.products WHERE id = '10000000-0000-0000-0000-000000000001'),
     5,
     'T16b: reserved_stock increased after quantity increase (2 -> 5)'
 );
@@ -331,7 +331,7 @@ SELECT lives_ok(
     SELECT public.update_pending_order(
         (SELECT id FROM _test_order),
         'cccccccc-cccc-cccc-cccc-cccccccccccc',
-        'pppppppp-pppp-pppp-pppp-pppppppppppp',
+        '10000000-0000-0000-0000-000000000001',
         2, 100000, '2026-07-01'
     )
     $$,
@@ -339,7 +339,7 @@ SELECT lives_ok(
 );
 
 SELECT is(
-    (SELECT reserved_stock FROM public.products WHERE id = 'pppppppp-pppp-pppp-pppp-pppppppppppp'),
+    (SELECT reserved_stock FROM public.products WHERE id = '10000000-0000-0000-0000-000000000001'),
     2,
     'T17b: reserved_stock decreased after quantity decrease (5 -> 2)'
 );
@@ -353,7 +353,7 @@ SELECT lives_ok(
     SELECT public.update_pending_order(
         (SELECT id FROM _test_order),
         'cccccccc-cccc-cccc-cccc-cccccccccccc',
-        'qqqqqqqq-qqqq-qqqq-qqqq-qqqqqqqqqqqq',
+        '10000000-0000-0000-0000-000000000002',
         3, 80000, '2026-07-01'
     )
     $$,
@@ -361,13 +361,13 @@ SELECT lives_ok(
 );
 
 SELECT is(
-    (SELECT reserved_stock FROM public.products WHERE id = 'pppppppp-pppp-pppp-pppp-pppppppppppp'),
+    (SELECT reserved_stock FROM public.products WHERE id = '10000000-0000-0000-0000-000000000001'),
     0,
     'T18b: Old product reserved_stock released (2 -> 0)'
 );
 
 SELECT is(
-    (SELECT reserved_stock FROM public.products WHERE id = 'qqqqqqqq-qqqq-qqqq-qqqq-qqqqqqqqqqqq'),
+    (SELECT reserved_stock FROM public.products WHERE id = '10000000-0000-0000-0000-000000000002'),
     3,
     'T18c: New product reserved_stock increased (0 -> 3)'
 );
@@ -380,7 +380,7 @@ SELECT is(
 SELECT public.update_pending_order(
     (SELECT id FROM _test_order),
     'cccccccc-cccc-cccc-cccc-cccccccccccc',
-    'pppppppp-pppp-pppp-pppp-pppppppppppp',
+    '10000000-0000-0000-0000-000000000001',
     2, 100000, '2026-07-01'
 );
 
@@ -401,7 +401,7 @@ SELECT lives_ok(
 -- ============================================================
 
 SELECT is(
-    (SELECT current_stock FROM public.products WHERE id = 'pppppppp-pppp-pppp-pppp-pppppppppppp'),
+    (SELECT current_stock FROM public.products WHERE id = '10000000-0000-0000-0000-000000000001'),
     48,
     'T20: current_stock decreased after shipment (50 -> 48)'
 );
@@ -411,7 +411,7 @@ SELECT is(
 -- ============================================================
 
 SELECT is(
-    (SELECT reserved_stock FROM public.products WHERE id = 'pppppppp-pppp-pppp-pppp-pppppppppppp'),
+    (SELECT reserved_stock FROM public.products WHERE id = '10000000-0000-0000-0000-000000000001'),
     0,
     'T21: reserved_stock decreased after shipment (2 -> 0)'
 );
@@ -422,7 +422,7 @@ SELECT is(
 
 SELECT is(
     (SELECT count(*)::integer FROM public.inventory_logs
-     WHERE product_id = 'pppppppp-pppp-pppp-pppp-pppppppppppp'
+     WHERE product_id = '10000000-0000-0000-0000-000000000001'
        AND change_type = 'SHIP'),
     1,
     'T22: SHIP inventory log created'
@@ -433,9 +433,9 @@ SELECT is(
 -- ============================================================
 
 SELECT is(
-    (SELECT round(actual_profit)::integer FROM public.orders WHERE id = (SELECT id FROM _test_order)),
+    (SELECT actual_profit::integer FROM public.orders WHERE id = (SELECT id FROM _test_order)),
     140000,
-    'T23: actual_profit = revenue - cost = 200000 - 60000 = 140000'
+    'T23: actual_profit = round((100000-30000)*2) = 140000'
 );
 
 -- ============================================================
@@ -467,7 +467,7 @@ SELECT throws_ok(
 SELECT public.create_order(
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
     'cccccccc-cccc-cccc-cccc-cccccccccccc',
-    'qqqqqqqq-qqqq-qqqq-qqqq-qqqqqqqqqqqq',
+    '10000000-0000-0000-0000-000000000002',
     1, 50000, '2026-07-10'
 );
 
@@ -484,7 +484,7 @@ SELECT lives_ok(
 -- ============================================================
 
 SELECT is(
-    (SELECT reserved_stock FROM public.products WHERE id = 'qqqqqqqq-qqqq-qqqq-qqqq-qqqqqqqqqqqq'),
+    (SELECT reserved_stock FROM public.products WHERE id = '10000000-0000-0000-0000-000000000002'),
     0,
     'T27: reserved_stock released after cancel (was 1, now 0)'
 );
@@ -495,7 +495,7 @@ SELECT is(
 
 SELECT is(
     (SELECT count(*)::integer FROM public.inventory_logs
-     WHERE product_id = 'qqqqqqqq-qqqq-qqqq-qqqq-qqqqqqqqqqqq'
+     WHERE product_id = '10000000-0000-0000-0000-000000000002'
        AND change_type = 'RELEASE'),
     1,
     'T28: RELEASE inventory log created on cancel'
@@ -552,7 +552,7 @@ SELECT throws_ok(
     $$
     INSERT INTO public.inventory_logs (store_id, product_id, change_type, quantity_change, stock_before, stock_after, reserved_before, reserved_after)
     VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-            'pppppppp-pppp-pppp-pppp-pppppppppppp',
+            '10000000-0000-0000-0000-000000000001',
             'ADJUSTMENT', 5, 48, 53, 0, 0);
     $$,
     '42501',
@@ -620,7 +620,7 @@ SELECT public.set_request_user('22222222-2222-2222-2222-222222222222');
 SELECT public.create_order(
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
     'cccccccc-cccc-cccc-cccc-cccccccccccc',
-    'pppppppp-pppp-pppp-pppp-pppppppppppp',
+    '10000000-0000-0000-0000-000000000001',
     1, 50000, '2026-07-15'
 );
 
@@ -650,7 +650,7 @@ SELECT throws_ok(
     SELECT public.update_pending_order(
         (SELECT id FROM _update_test_order),
         NULL,
-        'pppppppp-pppp-pppp-pppp-pppppppppppp',
+        '10000000-0000-0000-0000-000000000001',
         1, 50000, '2026-07-15'
     )
     $$,
@@ -668,7 +668,7 @@ SELECT throws_ok(
     SELECT public.update_pending_order(
         (SELECT id FROM _update_test_order),
         'cccccccc-cccc-cccc-cccc-cccccccccccc',
-        'pppppppp-pppp-pppp-pppp-pppppppppppp',
+        '10000000-0000-0000-0000-000000000001',
         1, 50000, NULL
     )
     $$,
@@ -703,15 +703,14 @@ RESET ROLE;
 SELECT set_config('request.jwt.claim.sub', '', true);
 SELECT set_config('request.jwt.claims', '', true);
 
-SELECT set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
-SELECT set_config('request.jwt.claims',
-    json_build_object('sub', '11111111-1111-1111-1111-111111111111', 'role', 'authenticated')::text, true);
+-- Bypass FK and RLS as postgres to insert legacy fixture
+SET LOCAL session_replication_role = replica;
 
 INSERT INTO public.orders (
     id, store_id, order_number, customer_id, quantity, selling_price,
     status, order_date, created_by
 ) VALUES (
-    'llllllll-llll-llll-llll-llllllllllll',
+    '20000000-0000-0000-0000-000000000001',
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
     'ORD-LEGACY',
     'cccccccc-cccc-cccc-cccc-cccccccccccc',
@@ -721,17 +720,16 @@ INSERT INTO public.orders (
     '11111111-1111-1111-1111-111111111111'
 );
 
-SELECT set_config('request.jwt.claim.sub', '', true);
-SELECT set_config('request.jwt.claims', '', true);
+SET LOCAL session_replication_role = origin;
 
 SELECT public.set_request_user('22222222-2222-2222-2222-222222222222');
 
 SELECT throws_ok(
     $$
     SELECT public.update_pending_order(
-        'llllllll-llll-llll-llll-llllllllllll',
+        '20000000-0000-0000-0000-000000000001',
         'cccccccc-cccc-cccc-cccc-cccccccccccc',
-        'pppppppp-pppp-pppp-pppp-pppppppppppp',
+        '10000000-0000-0000-0000-000000000001',
         1, 50000, '2026-07-15'
     )
     $$,
@@ -748,15 +746,14 @@ RESET ROLE;
 SELECT set_config('request.jwt.claim.sub', '', true);
 SELECT set_config('request.jwt.claims', '', true);
 
-SELECT set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
-SELECT set_config('request.jwt.claims',
-    json_build_object('sub', '11111111-1111-1111-1111-111111111111', 'role', 'authenticated')::text, true);
+-- Bypass FK to insert order with non-existent product_id
+SET LOCAL session_replication_role = replica;
 
 INSERT INTO public.orders (
     id, store_id, order_number, customer_id, product_id, quantity, selling_price,
     status, order_date, created_by
 ) VALUES (
-    'iiiiiiii-iiii-iiii-iiii-iiiiiiiiiiii',
+    '20000000-0000-0000-0000-000000000002',
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
     'ORD-INCONSISTENT',
     'cccccccc-cccc-cccc-cccc-cccccccccccc',
@@ -767,17 +764,16 @@ INSERT INTO public.orders (
     '11111111-1111-1111-1111-111111111111'
 );
 
-SELECT set_config('request.jwt.claim.sub', '', true);
-SELECT set_config('request.jwt.claims', '', true);
+SET LOCAL session_replication_role = origin;
 
 SELECT public.set_request_user('22222222-2222-2222-2222-222222222222');
 
 SELECT throws_ok(
     $$
     SELECT public.update_pending_order(
-        'iiiiiiii-iiii-iiii-iiii-iiiiiiiiiiii',
+        '20000000-0000-0000-0000-000000000002',
         'cccccccc-cccc-cccc-cccc-cccccccccccc',
-        'qqqqqqqq-qqqq-qqqq-qqqq-qqqqqqqqqqqq',
+        '10000000-0000-0000-0000-000000000002',
         1, 50000, '2026-07-15'
     )
     $$,
@@ -799,7 +795,7 @@ SELECT set_config('request.jwt.claims',
     json_build_object('sub', '11111111-1111-1111-1111-111111111111', 'role', 'authenticated')::text, true);
 
 INSERT INTO public.products (id, store_id, product_code, original_title, brand, category, color, size, current_stock, reserved_stock, actual_converted_cost, china_base_price, created_by) VALUES
-    ('rrrrrrrr-rrrr-rrrr-rrrr-rrrrrrrrrrrr', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'PRD-ROUND', 'Rounding Test', 'BrandR', 'test', 'white', 'M', 10, 0, 33, 15, '11111111-1111-1111-1111-111111111111');
+    ('10000000-0000-0000-0000-000000000003', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'PRD-ROUND', 'Rounding Test', 'BrandR', 'test', 'white', 'M', 10, 0, 33, 15, '11111111-1111-1111-1111-111111111111');
 
 SELECT set_config('request.jwt.claim.sub', '', true);
 SELECT set_config('request.jwt.claims', '', true);
@@ -809,7 +805,7 @@ SELECT public.set_request_user('22222222-2222-2222-2222-222222222222');
 SELECT public.create_order(
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
     'cccccccc-cccc-cccc-cccc-cccccccccccc',
-    'rrrrrrrr-rrrr-rrrr-rrrr-rrrrrrrrrrrr',
+    '10000000-0000-0000-0000-000000000003',
     1, 99, '2026-07-20'
 );
 
@@ -840,43 +836,35 @@ SELECT is(
 );
 
 -- ============================================================
--- T45: Deleted customer aggregate update blocked
+-- T45: Deleted customer aggregate not updated by helper
 -- ============================================================
 
 RESET ROLE;
 SELECT set_config('request.jwt.claim.sub', '', true);
 SELECT set_config('request.jwt.claims', '', true);
 
+-- Create a dummy customer, set sentinel aggregate, then soft-delete
 SELECT set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
 SELECT set_config('request.jwt.claims',
     json_build_object('sub', '11111111-1111-1111-1111-111111111111', 'role', 'authenticated')::text, true);
 
 INSERT INTO public.customers (id, store_id, name, created_by)
-VALUES ('dddddddd-dddd-dddd-dddd-dddddddddddd', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Deleted Customer', '11111111-1111-1111-1111-111111111111');
+VALUES ('30000000-0000-0000-0000-000000000001', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Deleted Customer', '11111111-1111-1111-1111-111111111111');
 
-UPDATE public.customers SET deleted_at = now() WHERE id = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
+UPDATE public.customers
+SET total_amount = 123,
+    deleted_at = now()
+WHERE id = '30000000-0000-0000-0000-000000000001';
 
-SELECT set_config('request.jwt.claim.sub', '', true);
-SELECT set_config('request.jwt.claims', '', true);
-
-SELECT public.set_request_user('22222222-2222-2222-2222-222222222222');
-
-SELECT public.create_order(
-    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-    'dddddddd-dddd-dddd-dddd-dddddddddddd',
-    'pppppppp-pppp-pppp-pppp-pppppppppppp',
-    1, 50000, '2026-07-25'
-);
-
-CREATE TEMP TABLE _del_cust_order AS
-SELECT id FROM public.orders ORDER BY created_at DESC LIMIT 1;
-
-SELECT public.ship_order((SELECT id FROM _del_cust_order), '2026-07-26');
+-- Call helper directly as postgres (bypasses RLS, helper is SECURITY DEFINER)
+SELECT private.recalculate_customer_aggregates('30000000-0000-0000-0000-000000000001');
 
 SELECT is(
-    (SELECT total_amount FROM public.customers WHERE id = 'dddddddd-dddd-dddd-dddd-dddddddddddd'),
-    0,
-    'T45: Deleted customer aggregates not updated (total_amount remains 0)'
+    (SELECT total_amount::integer
+     FROM public.customers
+     WHERE id = '30000000-0000-0000-0000-000000000001'),
+    123,
+    'T45: Deleted customer aggregate remains unchanged (sentinel 123 preserved)'
 );
 
 -- ============================================================
@@ -894,7 +882,7 @@ SELECT lives_ok(
     SELECT public.create_order(
         'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
         'cccccccc-cccc-cccc-cccc-cccccccccccc',
-        'qqqqqqqq-qqqq-qqqq-qqqq-qqqqqqqqqqqq',
+        '10000000-0000-0000-0000-000000000002',
         1, 70000, '2026-07-30'
     )
     $$,
@@ -905,7 +893,7 @@ CREATE TEMP TABLE _reg_order AS
 SELECT id FROM public.orders ORDER BY created_at DESC LIMIT 1;
 
 SELECT lives_ok(
-    $$ SELECT public.update_pending_order((SELECT id FROM _reg_order), 'cccccccc-cccc-cccc-cccc-cccccccccccc', 'qqqqqqqq-qqqq-qqqq-qqqq-qqqqqqqqqqqq', 2, 75000, '2026-07-30') $$,
+    $$ SELECT public.update_pending_order((SELECT id FROM _reg_order), 'cccccccc-cccc-cccc-cccc-cccccccccccc', '10000000-0000-0000-0000-000000000002', 2, 75000, '2026-07-30') $$,
     'T46b: update_pending_order still works'
 );
 
@@ -938,7 +926,6 @@ DROP TABLE IF EXISTS _test_order;
 DROP TABLE IF EXISTS _cancel_order;
 DROP TABLE IF EXISTS _update_test_order;
 DROP TABLE IF EXISTS _round_order;
-DROP TABLE IF EXISTS _del_cust_order;
 DROP TABLE IF EXISTS _reg_order;
 
 -- ============================================================
