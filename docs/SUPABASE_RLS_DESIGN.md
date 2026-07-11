@@ -46,9 +46,9 @@
 | profiles | 본인만 | - | 본인만 | ❌ | - |
 | stores | ✅ | ❌ | ❌ | ❌ | active member |
 | store_members | ✅ | ❌ | ❌ | ❌ | 조회만 |
-| products | ❌ | ❌ | ❌ | ❌ | base table 차단. 제한 view 미구현 |
-| customers | ❌ | ❌ | ❌ | ❌ | base table 차단. 제한 view 미구현 |
-| orders | ❌ | ❌ | ❌ | ❌ | base table 차단. 제한 view 미구현 |
+| products | ❌ (RPC) | ❌ | ❌ | ❌ | base table 차단. 제한 RPC로 조회 (원가 제외) |
+| customers | ❌ (RPC) | ❌ | ❌ | ❌ | base table 차단. 제한 RPC로 조회 (집계 제외) |
+| orders | ❌ (RPC) | ❌ | ❌ | ❌ | base table 차단. 제한 RPC로 조회 (원가/이익 제외) |
 | inventory_logs | ✅ | ❌ | ❌ | ❌ | append-only |
 | expenses | ❌ | ❌ | ❌ | ❌ | 차단 |
 | classification_keywords | ✅ | ❌ | ❌ | ❌ | active only, 읽기만 |

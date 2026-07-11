@@ -8,16 +8,16 @@
 | OS | macOS Intel x86_64 |
 | Docker Desktop | 설치 및 실행 성공 (v29.6.1) |
 | Supabase CLI 버전 | v2.109.1 |
-| migration 파일명 | timestamp 형식 (`20260711000100_`~`20260711000950_`) |
+| migration 파일명 | timestamp 형식 (`20260711000100_`~`20260711001000_`) |
 | 로컬 Supabase 실행 여부 | **성공** |
 
 ## 실행 상태
 
 로컬 Supabase DB와 pgTAP 테스트 검증 결과:
 
-- migration 001~00950: **로컬 적용 성공** (10개 전체)
+- migration 001~01000: **로컬 적용 성공** (11개 전체)
 - db lint: **오류 0** (lint_exit=0)
-- pgTAP 테스트: **99/99 PASS** (Files=3, Tests=99, Result: PASS)
+- pgTAP 테스트: **131/131 PASS** (Files=4, Tests=131, Result: PASS)
 
 > 이 결과는 로컬 Supabase 환경에서 검증되었습니다.
 > GitHub Actions CI는 없으므로 로컬 Supabase 검증만 해당합니다.
@@ -38,9 +38,10 @@
 | `20260711000850_auth_onboarding_hardening.sql` | 로컬 적용 성공 |
 | `20260711000900_order_inventory_rpc.sql` | 로컬 적용 성공 |
 | `20260711000950_order_inventory_hardening.sql` | 로컬 적용 성공 |
+| `20260711001000_staff_read_rpcs.sql` | 로컬 적용 성공 |
 
 파일명은 Supabase CLI 표준 timestamp 형식(`YYYYMMDDHHMMSS_`)을 사용합니다.
-`supabase db reset --local`으로 10개 migration 전체 적용 성공했습니다.
+`supabase db reset --local`으로 11개 migration 전체 적용 성공했습니다.
 
 ## db lint 결과
 
@@ -55,15 +56,16 @@
   - `supabase/tests/rls_access_matrix.test.sql` (25 assertion) — **25/25 PASS**
   - `supabase/tests/auth_onboarding.test.sql` (20 assertion) — **20/20 PASS**
   - `supabase/tests/order_inventory_rpc.test.sql` (54 assertion) — **54/54 PASS**
+  - `supabase/tests/staff_read_rpc.test.sql` (32 assertion) — **32/32 PASS**
 - 설명용 시나리오 문서: `docs/RLS_ACCESS_MATRIX_SCENARIOS.sql`
 
 | 항목 | 값 |
 |---|---|
-| Files | 3 |
-| Tests | 99 |
+| Files | 4 |
+| Tests | 131 |
 | Result | **PASS** |
 | All tests successful | Yes |
-| 실행 시간 | 1 wallclock sec |
+| 실행 시간 | 2 wallclock sec |
 
 > 이 결과는 로컬 Supabase 환경에서 검증되었습니다.
 > GitHub Actions CI는 없으므로 로컬 Supabase 검증만 해당합니다.
@@ -142,6 +144,43 @@
 | T45 | 삭제 고객 집계 갱신 차단 (sentinel 123 유지) | PASS |
 | T46 | 회귀 테스트 (create→update→ship→complete) | PASS |
 
+### 테스트 상세 (staff_read_rpc.test.sql — 32/32 PASS)
+
+| # | 테스트 | 결과 | 비고 |
+|---|---|---|---|
+| T1 | anon list_staff_products 차단 | PASS | throws_ok 42501 |
+| T2 | 비회원 list_staff_products 차단 | PASS | throws_ok 42501 |
+| T3 | inactive staff 차단 | PASS | throws_ok 42501 |
+| T4 | active staff 자기 store active product 조회 | PASS | is (2건) |
+| T5 | 삭제 product 제외 | PASS | is (0건) |
+| T6 | 타 store product 제외 | PASS | is (0건) |
+| T7 | product payload korea_cost 제외 | PASS | is (false) |
+| T8 | product payload actual_converted_cost 제외 | PASS | is (false) |
+| T9 | product payload china_base_price 제외 | PASS | is (false) |
+| T10 | product 검색어 필터 정상 작동 | PASS | is (1건) |
+| T11 | active staff 자기 store active customer 조회 | PASS | is (2건) |
+| T12 | 삭제 customer 제외 | PASS | is (0건) |
+| T13 | 타 store customer 제외 | PASS | is (0건) |
+| T14 | customer payload 안전 필드 존재 | PASS | is (true) |
+| T15 | customer payload total_amount 제외 | PASS | is (false) |
+| T16 | customer payload total_profit 제외 | PASS | is (false) |
+| T17 | customer payload order_count 제외 | PASS | is (false) |
+| T18 | active staff 자기 store active order 조회 | PASS | is (1건) |
+| T19 | 삭제 order 제외 | PASS | is (0건) |
+| T20 | 타 store order 제외 | PASS | is (0건) |
+| T21 | order payload 안전 필드 존재 | PASS | is (true) |
+| T22 | order payload actual_converted_cost_at_sale 제외 | PASS | is (false) |
+| T23 | order payload actual_profit 제외 | PASS | is (false) |
+| T24 | order payload profit_margin/cost_ratio 제외 | PASS | is (false) |
+| T25 | owner 제한 product RPC 호출 가능 | PASS | lives_ok |
+| T26 | manager 제한 customer RPC 호출 가능 | PASS | lives_ok |
+| T27 | p_limit = 0 차단 | PASS | throws_ok 22023 |
+| T28 | p_offset = -1 차단 | PASS | throws_ok 22023 |
+| T29 | staff products base table 0건 유지 | PASS | is (0건) |
+| T30 | staff customers base table 0건 유지 | PASS | is (0건) |
+| T31 | staff orders base table 0건 유지 | PASS | is (0건) |
+| T32 | staff create_order 차단 | PASS | throws_ok 42501 |
+
 ## 보안 확인
 
 - [x] 원격 Supabase 미연결
@@ -154,8 +193,11 @@
 - [x] psql `\set` 문법 없음
 - [x] config.toml에 실제 secret 없음
 - [x] migration 파일명 Supabase CLI 표준 timestamp 형식
-- [x] db lint 오류 없음 (migration 001~00950)
-- [x] pgTAP 99/99 PASS (로컬 Supabase)
+- [x] db lint 오류 없음 (migration 001~01000)
+- [x] pgTAP 131/131 PASS (로컬 Supabase)
+- [x] staff base-table RLS 유지 (0건)
+- [x] staff 민감 필드 제외 (원가, 수익, 고객 집계)
+- [x] staff 쓰기 권한 없음
 - [x] config.toml 커밋하지 않음
 - [x] data_export.json 미생성
 
@@ -168,4 +210,6 @@
 - Storage, Edge Functions, Realtime 등 부가 서비스
 - 대량 데이터 성능 테스트
 - 동시성/race condition 통합 테스트
-- staff 제한 view/RPC 구현 및 검증
+- staff용 대시보드 집계 RPC
+- staff용 반품/교환 처리
+- staff용 제한된 주문 상태 변경
