@@ -9,13 +9,13 @@
 
 | 파일 | 내용 | 라인 |
 |---|---|---|
-| `001_extensions_and_types.sql` | pgcrypto, 5개 enum | 48 |
-| `002_initial_schema.sql` | 12개 테이블 | 247 |
-| `003_constraints_and_indexes.sql` | 제약조건, 인덱스 | 207 |
-| `004_triggers.sql` | updated_at/version, cross-store 검증 trigger | 149 |
-| `005_private_helpers.sql` | private schema, RLS helper, 권한 | 83 |
-| `006_rls_policies.sql` | RLS 활성화, 정책, GRANT/REVOKE | 278 |
-| `007_audit_functions.sql` | audit 함수, 마스킹, trigger | 158 |
+| `20260711000100_extensions_and_types.sql` | pgcrypto, 5개 enum | 48 |
+| `20260711000200_initial_schema.sql` | 12개 테이블 | 247 |
+| `20260711000300_constraints_and_indexes.sql` | 제약조건, 인덱스 | 207 |
+| `20260711000400_triggers.sql` | updated_at/version, cross-store 검증 trigger | 149 |
+| `20260711000500_private_helpers.sql` | private schema, RLS helper, 권한 | 83 |
+| `20260711000600_rls_policies.sql` | RLS 활성화, 정책, GRANT/REVOKE | 278 |
+| `20260711000700_audit_functions.sql` | audit 함수, 마스킹, trigger | 158 |
 
 ### 문서 (8개)
 
@@ -30,11 +30,12 @@
 | `docs/SECURITY_DATA_EXPOSURE_REMEDIATION.md` | 1단계 보안 조치 (진행 중) |
 | `docs/RISK_ANALYSIS.md` | 위험 분석 (부분 해결) |
 
-### 테스트 파일 (1개)
+### 테스트 파일 (2개)
 
 | 파일 | 내용 |
 |---|---|
-| `supabase/tests/rls_access_matrix.sql` | RLS 테스트 30개 시나리오 (미실행) |
+| `supabase/tests/rls_access_matrix.test.sql` | pgTAP 실행 파일, 25 assertion (PASS) |
+| `docs/RLS_ACCESS_MATRIX_SCENARIOS.sql` | 설명용 시나리오 문서, 30개 (미실행) |
 
 ---
 
@@ -60,8 +61,8 @@
 | helper 함수 | 3 |
 | audit 함수 | 3 |
 | security definer 함수 | 9 |
-| 테스트 시나리오 | 72개 (문서) + 30개 (SQL 시나리오, 미실행) |
-| pgTAP 테스트 파일 | 1개 (25 assertion, 미실행) |
+| 테스트 시나리오 | 72개 (문서) + 30개 (SQL 시나리오 문서, 미실행) |
+| pgTAP 테스트 파일 | 1개 (25 assertion, **25/25 PASS 로컬 통과) |
 
 ---
 
@@ -172,15 +173,21 @@
 
 ---
 
-## Parser 검사
+## Parser / 실행 검사
 
 | 항목 | 결과 |
 |---|---|
-| 자동 parser 검사 | ❌ 미수행 |
+| 자동 parser 검사 | ❌ 미수행 (별도 parser 도구 없음) |
 | 수동 정적 검사 | ✅ 수행 |
-| 실제 적용 전 테스트 프로젝트 실행 | ⏳ 필요 |
+| 로컬 Supabase migration 적용 | ✅ 7개 모두 성공 |
+| supabase db lint | ✅ 오류 없음 |
+| pgTAP 로컬 실행 | ✅ 25/25 PASS |
+| 원격 Supabase 검증 | ❌ 미실행 (금지됨) |
+| JS client 통합 테스트 | ❌ 미실행 |
+| REST API 통합 테스트 | ❌ 미실행 |
+| 실제 Auth 로그인 기반 테스트 | ❌ 미실행 |
 
-**사유**: 로컬에 PostgreSQL parser가 설치되어 있지 않음. 실제 Supabase 테스트 프로젝트에서 실행 전 문법 검증 필요.
+**로컬 DB 구조와 RLS 자동화 검증은 통과했으나, 원격 클라우드 환경과 클라이언트 통합은 별도 검증이 필요하다.**
 
 ---
 
@@ -201,28 +208,46 @@
 
 | 위험 | 수준 | 대응 |
 |---|---|---|
-| SQL 문법 오류 (미실행) | 중간 | 테스트 Supabase에서 001~007 순차 실행 필요 |
+| SQL 문법 오류 | 낮음 | 로컬 7개 migration 적용 성공, lint 통과 |
 | RLS 정책 42710 중복 오류 | 낮음 | 재실행 시 DROP POLICY IF EXISTS 선행 |
 | reserved_stock > current_stock 데이터 존재 | 낮음 | 마이그레이션 시 정리 또는 앱 로직으로 처리 |
 | staff 업무 기능 미지원 | 중간 | base table SELECT 차단됨. 제한 view/RPC 구현 전 staff는 업무 데이터 접근 불가 |
 | 주문 생성/상태 변경 보호된 RPC 미구현 | 중간 | 향후 구현 필요 |
 | 초기 owner 생성 방식 미확정 | 낮음 | 관리자 SQL 또는 Edge Function |
-| RLS 테스트 미실행 | 중간 | 72개 문서 시나리오 + 30개 SQL 시나리오 + 25개 pgTAP assertion, 실제 실행 전 |
-| pgTAP 테스트 미실행 | 중간 | supabase CLI + 로컬 Supabase 환경 필요 |
+| JS client 통합 테스트 미실행 | 중간 | @supabase/supabase-js 클라이언트로 RLS 재검증 필요 |
+| REST API / PostgREST 동작 미확인 | 낮음 | 실제 network 요청으로 검증 필요 |
+| 실제 Auth 로그인 사용자 테스트 미실행 | 중간 | 실제 회원가입/로그인 흐름 검증 필요 |
+| 원격 Supabase 클라우드 검증 미실행 | 중간 | 운영 배포 전 원격 환경에서 재검증 필요 |
+| GitHub Support 과거 객체 purge 미완료 | 낮음 | 지원 티켓 처리 대기 중 |
+| 대량 데이터 성능 미검증 | 낮음 | Phase 3 이후 성능 테스트 필요 |
+| 동시성/race condition 통합 테스트 미실행 | 낮음 | advisory lock 로직은 단위 수준에서 검증, 실제 동시성 통합은 별도 |
 
 ---
 
 ## 3단계 전 필수 확인사항
 
-- [ ] 테스트 Supabase 프로젝트 생성
-- [ ] 001~007 순차 실행 및 문법 오류 확인
-- [ ] RLS 테스트 시나리오 24개 실행
-- [ ] 초기 owner 생성 방식 확정 (SQL Editor / Edge Function)
+### Phase 2에서 완료된 항목
+
+- [x] 001~007 migration 로컬 적용 성공
+- [x] supabase db lint 오류 없음
+- [x] pgTAP 25/25 PASS (로컬)
+- [x] 로컬 DB 구조 + RLS 자동화 검증 통과
+- [x] trigger runtime 오류 해결
+- [x] soft delete SELECT 정책
+- [x] 마지막 owner 보호
+- [x] created_by/updated_by 위조 차단
+- [x] staff base table 차단
+
+### Phase 3 전 추가 준비 (미완료)
+
 - [ ] staff 제한 view 설계 (원가/개인정보 숨김)
 - [ ] 주문/재고 RPC 설계
+- [ ] 초기 store/owner onboarding 흐름 확정
 - [ ] Supabase JS client 설정
 - [ ] 로그인 구현 (OAuth 또는 이메일)
 - [ ] localStorage → Supabase 마이그레이션 스크립트
+- [ ] JS client 통합 테스트
+- [ ] 원격 Supabase 클라우드 환경 검증
 - [ ] GitHub Support 티켓 처리 완료 확인 (과거 SHA 접근 차단)
 
 ---
@@ -232,8 +257,9 @@
 | 항목 | 값 |
 |---|---|
 | 브랜치 | feature/supabase-cloud-migration |
-| 커밋 메시지 | `fix: harden supabase schema rls and test design` |
-| 커밋 SHA | (커밋 후 기록) |
+| 최신 커밋 메시지 | `test: fix local pgTAP execution and delete assertion` |
+| 최신 커밋 SHA | 6f99d79532bc7eda2353c90b7bfc507e8cee40a7 |
+| Phase 2 상태 | 로컬 DB 구조 + RLS 자동화 검증 통과 |
 
 ---
 
