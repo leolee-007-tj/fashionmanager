@@ -39,16 +39,20 @@ public.ensure_user_profile(
 Behavior:
 
 1. Validates `auth.uid()` is not NULL (raises exception if unauthenticated)
-2. Validates `p_preferred_language` is one of: ko, zh, en, ja
-3. Sanitizes `p_display_name`: trims whitespace, converts empty string to NULL
-4. Creates a new profile for `auth.uid()` if none exists
-5. If profile already exists:
+2. **Explicit NULL check** for `p_preferred_language` — fails with SQLSTATE 22023 if NULL
+3. Validates `p_preferred_language` is one of: ko, zh, en, ja (fails with SQLSTATE 22023 if invalid)
+4. Sanitizes `p_display_name`: trims whitespace, converts empty string to NULL
+5. `display_name` NULL or whitespace **preserves existing display_name** — never overwrites with NULL
+6. Creates a new profile for `auth.uid()` if none exists
+7. If profile already exists:
    - Updates `display_name` only if a non-NULL value is provided
    - Always updates `preferred_language`
    - Always updates `updated_at`
-6. Returns the user's complete profile row
+8. Returns the user's complete profile row
 
 This function is idempotent — calling it multiple times is safe and will not destroy existing data.
+
+> **Hardening (migration 00850):** The original migration 008 had a NULL bypass vulnerability where `lower(trim(NULL))` returns NULL, and `NULL NOT IN (...)` evaluates to NULL (not FALSE), skipping the IF guard. Migration 00850 adds an explicit `IS NULL` check before any trim/lower operation. All input validation errors now use SQLSTATE 22023.
 
 ## 4. create_initial_store
 
@@ -63,15 +67,19 @@ public.create_initial_store(
 Behavior:
 
 1. Validates `auth.uid()` is not NULL (raises exception if unauthenticated)
-2. Validates `p_name`: trimmed length must be 1–100 characters
-3. Sanitizes `p_subtitle`: trims whitespace, converts empty string to NULL
-4. Validates `p_default_language` is one of: ko, zh, en, ja
-5. Acquires advisory transaction lock per user to prevent concurrent duplicate creation
-6. Calls `ensure_user_profile()` to ensure profile exists
-7. Checks if user already has an active owner membership:
+2. **Explicit NULL check** for `p_name` — fails with SQLSTATE 22023 if NULL
+3. Validates `p_name`: trimmed length must be 1–100 characters (fails with SQLSTATE 22023)
+4. Sanitizes `p_subtitle`: trims whitespace, converts empty string to NULL (NULL allowed)
+5. **Explicit NULL check** for `p_default_language` — fails with SQLSTATE 22023 if NULL
+6. Validates `p_default_language` is one of: ko, zh, en, ja (fails with SQLSTATE 22023)
+7. Acquires advisory transaction lock per user (64-bit deterministic key via `hashtextextended(auth.uid()::text, 0)`)
+8. Calls `ensure_user_profile()` to ensure profile exists
+9. Checks if user already has an **active, non-deleted** owner membership:
    - If yes: returns the existing store_id (**idempotent onboarding**)
    - If no: creates new store, membership, and settings atomically
-8. Returns the store_id (uuid)
+10. Returns the store_id (uuid)
+
+> **Hardening (migration 00850):** The original migration 008 did not explicitly check for NULL `p_name` or `p_default_language`, and the idempotent owner-store query did not exclude soft-deleted stores. Migration 00850 adds explicit NULL checks (SQLSTATE 22023), JOINs `stores` with `deleted_at IS NULL` in the idempotent query, and changes the advisory lock seed from 54321 to 0 for a standard 64-bit deterministic key.
 
 ## 5. Atomic Transaction Flow
 
@@ -95,12 +103,13 @@ All operations occur within a single transaction. If any step fails, the entire 
 
 ## 6. Idempotent Onboarding
 
-If the user already has an active owner membership, `create_initial_store` returns the existing store_id without creating duplicates. This means:
+If the user already has an active owner membership for a **non-deleted** store, `create_initial_store` returns the existing store_id without creating duplicates. This means:
 
 - Calling the function multiple times is safe
 - No duplicate stores, memberships, or settings are created
 - The earliest created active owner store is returned (ordered by `created_at ASC`)
-- The advisory lock key is deterministic based on `auth.uid()`, ensuring consistent lock acquisition
+- **Deleted stores are excluded** — if the user's only store was soft-deleted, the function creates a new store instead of returning the deleted store_id
+- The advisory lock key is deterministic based on `auth.uid()` using a 64-bit hash (`hashtextextended` with seed 0), ensuring consistent lock acquisition
 
 This design supports scenarios where the client might retry onboarding due to network errors or page refreshes.
 
@@ -124,6 +133,15 @@ Both functions:
 - `REVOKE ALL ON FUNCTION ... FROM PUBLIC, anon`
 - `GRANT EXECUTE ON FUNCTION ... TO authenticated`
 - Advisory transaction lock prevents concurrent duplicate store creation
+- All input validation errors use SQLSTATE 22023
+- Explicit NULL checks prevent bypass of trim/lower/whitelist guards
+
+### Migrations
+
+| Migration | Lines | Content |
+|---|---|---|
+| `20260711000800_auth_onboarding.sql` | 199 | Initial onboarding RPC functions |
+| `20260711000850_auth_onboarding_hardening.sql` | 201 | NULL input checks, SQLSTATE 22023, deleted store exclusion, 64-bit advisory lock |
 
 ## 8. Client Usage Example
 

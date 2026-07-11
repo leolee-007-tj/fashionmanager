@@ -28,8 +28,8 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
--- Assertion count: 12
-SELECT plan(12);
+-- Assertion count: 20 (T1-T12 original + T13-T20 hardening)
+SELECT plan(20);
 
 -- ------------------------------------------------------------
 -- Helper: set_request_user
@@ -208,9 +208,116 @@ SELECT is(
 
 SELECT throws_ok(
     $$ SELECT public.create_initial_store('   ', NULL, 'ko') $$,
-    'P0001',
+    '22023',
     'Store name must be between 1 and 100 characters after trimming',
-    'T12: Empty store name fails with clear error'
+    'T12: Empty store name fails with SQLSTATE 22023'
+);
+
+-- ============================================================
+-- T13: ensure_user_profile with NULL language fails (22023)
+-- ============================================================
+
+SELECT throws_ok(
+    $$ SELECT public.ensure_user_profile(NULL, NULL) $$,
+    '22023',
+    'preferred_language is required',
+    'T13: ensure_user_profile with NULL language fails with 22023'
+);
+
+-- ============================================================
+-- T14: create_initial_store with NULL default_language fails (22023)
+-- ============================================================
+
+SELECT throws_ok(
+    $$ SELECT public.create_initial_store('Test', NULL, NULL) $$,
+    '22023',
+    'default_language is required',
+    'T14: create_initial_store with NULL default_language fails with 22023'
+);
+
+-- ============================================================
+-- T15: create_initial_store with NULL name fails (22023)
+-- ============================================================
+
+SELECT throws_ok(
+    $$ SELECT public.create_initial_store(NULL, NULL, 'ko') $$,
+    '22023',
+    'Store name is required',
+    'T15: create_initial_store with NULL name fails with 22023'
+);
+
+-- ============================================================
+-- T16: create_initial_store with empty string name fails (22023)
+-- ============================================================
+
+SELECT throws_ok(
+    $$ SELECT public.create_initial_store('', NULL, 'ko') $$,
+    '22023',
+    'Store name must be between 1 and 100 characters after trimming',
+    'T16: create_initial_store with empty name fails with 22023'
+);
+
+-- ============================================================
+-- T17: create_initial_store with 101-char name fails (22023)
+-- ============================================================
+
+SELECT throws_ok(
+    $$ SELECT public.create_initial_store(repeat('a', 101), NULL, 'ko') $$,
+    '22023',
+    'Store name must be between 1 and 100 characters after trimming',
+    'T17: create_initial_store with 101-char name fails with 22023'
+);
+
+-- ============================================================
+-- T18: Re-onboarding after store deletion returns new active store
+--      (deleted store_id is NOT returned)
+-- ============================================================
+
+-- Soft-delete the existing store
+UPDATE public.stores
+SET deleted_at = now()
+WHERE created_by = '88888888-8888-8888-8888-888888888888'
+  AND deleted_at IS NULL;
+
+-- create_initial_store should create a new active store
+-- The returned store_id must belong to a non-deleted store
+SELECT is(
+    (SELECT count(*)::integer FROM public.stores s
+     WHERE s.id = public.create_initial_store('New Store 2', NULL, 'ko')
+       AND s.deleted_at IS NULL),
+    1,
+    'T18: Re-onboarding after deletion returns new active store (not deleted store_id)'
+);
+
+-- ============================================================
+-- T19: Exactly 1 active store exists after re-onboarding
+-- ============================================================
+
+SELECT is(
+    (SELECT count(*)::integer FROM public.stores
+     WHERE created_by = '88888888-8888-8888-8888-888888888888'
+       AND deleted_at IS NULL),
+    1,
+    'T19: Exactly 1 active store after re-onboarding (deleted store excluded)'
+);
+
+-- ============================================================
+-- T20: EXECUTE granted only to authenticated (not anon) for both functions
+-- ============================================================
+
+RESET ROLE;
+SELECT set_config('request.jwt.claim.sub', '', true);
+SELECT set_config('request.jwt.claims', '', true);
+
+SELECT is(
+    (SELECT count(*)::integer FROM pg_proc p
+     JOIN pg_namespace n ON p.pronamespace = n.oid
+     WHERE n.nspname = 'public'
+       AND p.proname IN ('ensure_user_profile', 'create_initial_store')
+       AND has_function_privilege('authenticated', p.oid, 'EXECUTE') = true
+       AND has_function_privilege('anon', p.oid, 'EXECUTE') = false),
+    2,
+    'T20: EXECUTE granted only to authenticated (not anon) for both onboarding functions'
 );
 
 -- ============================================================

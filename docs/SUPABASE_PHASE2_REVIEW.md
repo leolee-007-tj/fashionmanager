@@ -5,7 +5,7 @@
 
 ## 완료된 산출물
 
-### SQL 파일 (7개)
+### SQL 파일 (9개)
 
 | 파일 | 내용 | 라인 |
 |---|---|---|
@@ -16,7 +16,8 @@
 | `20260711000500_private_helpers.sql` | private schema, RLS helper, 권한 | 83 |
 | `20260711000600_rls_policies.sql` | RLS 활성화, 정책, GRANT/REVOKE | 278 |
 | `20260711000700_audit_functions.sql` | audit 함수, 마스킹, trigger | 158 |
-| `20260711000800_auth_onboarding.sql` | 인증 부트스트랩 RPC (ensure_user_profile, create_initial_store) | 142 |
+| `20260711000800_auth_onboarding.sql` | 인증 부트스트랩 RPC (ensure_user_profile, create_initial_store) | 199 |
+| `20260711000850_auth_onboarding_hardening.sql` | 온보딩 검증 보완 (NULL 체크, 22023, 삭제 store 제외, 64-bit lock) | 201 |
 
 ### 문서 (9개)
 
@@ -32,12 +33,19 @@
 | `docs/RISK_ANALYSIS.md` | 위험 분석 (부분 해결) |
 | `docs/SUPABASE_AUTH_ONBOARDING.md` | 인증 부트스트랩 온보딩 설계 (3-1) |
 
-### 테스트 파일 (2개)
+### 테스트 파일
+
+#### 실행용 pgTAP 파일 (2개)
 
 | 파일 | 내용 |
 |---|---|
-| `supabase/tests/rls_access_matrix.test.sql` | pgTAP 실행 파일, 25 assertion (PASS) |
-| `supabase/tests/auth_onboarding.test.sql` | pgTAP 실행 파일, 12 assertion (온보딩 RPC) |
+| `supabase/tests/rls_access_matrix.test.sql` | pgTAP 실행 파일, 25 assertion (로컬 PASS) |
+| `supabase/tests/auth_onboarding.test.sql` | pgTAP 실행 파일, 20 assertion (온보딩 RPC + hardening) |
+
+#### 설명용 시나리오 문서 (1개)
+
+| 파일 | 내용 |
+|---|---|
 | `docs/RLS_ACCESS_MATRIX_SCENARIOS.sql` | 설명용 시나리오 문서, 30개 (미실행) |
 
 ---
@@ -65,7 +73,7 @@
 | audit 함수 | 3 |
 | security definer 함수 | 11 |
 | 테스트 시나리오 | 72개 (문서) + 30개 (SQL 시나리오 문서, 미실행) |
-| pgTAP 테스트 파일 | 2개 (25 + 12 = 37 assertion, **로컬 통과**) |
+| pgTAP 테스트 파일 | 2개 (25 + 20 = 45 assertion, **로컬 pgTAP 통과**) |
 
 ---
 
@@ -248,6 +256,16 @@
 - [x] idempotent onboarding (중복 호출 시 기존 store_id 반환)
 - [x] advisory transaction lock (동시성 제어)
 - [x] pgTAP onboarding 테스트 12개 추가
+
+### Phase 3-1.1 완료: Auth Onboarding Validation Hardening
+
+- [x] 00850 hardening migration 추가 (CREATE OR REPLACE FUNCTION)
+- [x] explicit NULL 입력 차단 (p_preferred_language, p_name, p_default_language)
+- [x] SQLSTATE 22023 적용 (모든 입력 검증 오류)
+- [x] 삭제된 store는 idempotent onboarding 대상에서 제외
+- [x] advisory lock 64-bit 결정적 키 (hashtextextended seed 0)
+- [x] pgTAP 테스트 8개 추가 (T13-T20: NULL 검증, 삭제 store, 권한 확인)
+- [x] 총 20 assertion (12 → 20)
 
 ### Phase 3 전 추가 준비 (미완료)
 
