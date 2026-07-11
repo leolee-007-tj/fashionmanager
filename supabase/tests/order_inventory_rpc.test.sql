@@ -126,12 +126,17 @@ SELECT set_config('request.jwt.claims', '', true);
 SELECT public.set_request_user('22222222-2222-2222-2222-222222222222');
 
 SELECT lives_ok(
-    $$ SELECT public.create_order(
-        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-        'cccccccc-cccc-cccc-cccc-cccccccccccc',
-        '10000000-0000-0000-0000-000000000001',
-        2, 100000, '2026-07-01'
-    ) $$,
+    $$
+    CREATE TEMP TABLE _test_order AS
+    SELECT (
+        public.create_order(
+            'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+            'cccccccc-cccc-cccc-cccc-cccccccccccc',
+            '10000000-0000-0000-0000-000000000001',
+            2, 100000, '2026-07-01'
+        )
+    ).id AS id
+    $$,
     'T3: manager create_order succeeds'
 );
 
@@ -140,7 +145,7 @@ SELECT lives_ok(
 -- ============================================================
 
 SELECT is(
-    (SELECT status::text FROM public.orders WHERE customer_id = 'cccccccc-cccc-cccc-cccc-cccccccccccc' ORDER BY created_at DESC LIMIT 1),
+    (SELECT status::text FROM public.orders WHERE id = (SELECT id FROM _test_order)),
     'PENDING',
     'T4: New order has PENDING status'
 );
@@ -150,7 +155,7 @@ SELECT is(
 -- ============================================================
 
 SELECT is(
-    (SELECT customer_name_snapshot FROM public.orders WHERE store_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' ORDER BY created_at DESC LIMIT 1),
+    (SELECT customer_name_snapshot FROM public.orders WHERE id = (SELECT id FROM _test_order)),
     'Test Customer',
     'T5: Order customer_name_snapshot matches customer name'
 );
@@ -297,12 +302,6 @@ SELECT throws_ok(
 -- ============================================================
 -- T16: Pending order quantity increase reserves more stock
 -- ============================================================
-
--- Get the order id first
-CREATE TEMP TABLE _test_order AS
-SELECT id FROM public.orders
-WHERE customer_id = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
-ORDER BY created_at DESC LIMIT 1;
 
 SELECT lives_ok(
     $$
@@ -463,16 +462,16 @@ SELECT throws_ok(
 -- T26: Cancel pending order succeeds and releases reservation
 -- ============================================================
 
--- Create a new pending order first
-SELECT public.create_order(
-    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-    'cccccccc-cccc-cccc-cccc-cccccccccccc',
-    '10000000-0000-0000-0000-000000000002',
-    1, 50000, '2026-07-10'
-);
-
+-- Create a new pending order and store the returned ID
 CREATE TEMP TABLE _cancel_order AS
-SELECT id FROM public.orders ORDER BY created_at DESC LIMIT 1;
+SELECT (
+    public.create_order(
+        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+        'cccccccc-cccc-cccc-cccc-cccccccccccc',
+        '10000000-0000-0000-0000-000000000002',
+        1, 50000, '2026-07-10'
+    )
+).id AS id;
 
 SELECT lives_ok(
     $$ SELECT public.cancel_order((SELECT id FROM _cancel_order)) $$,
@@ -495,10 +494,11 @@ SELECT is(
 
 SELECT is(
     (SELECT count(*)::integer FROM public.inventory_logs
-     WHERE product_id = '10000000-0000-0000-0000-000000000002'
+     WHERE order_id = (SELECT id FROM _cancel_order)
+       AND product_id = '10000000-0000-0000-0000-000000000002'
        AND change_type = 'RELEASE'),
     1,
-    'T28: RELEASE inventory log created on cancel'
+    'T28: One RELEASE log created for cancelled order'
 );
 
 -- ============================================================
@@ -617,15 +617,15 @@ SELECT set_config('request.jwt.claims', '', true);
 
 SELECT public.set_request_user('22222222-2222-2222-2222-222222222222');
 
-SELECT public.create_order(
-    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-    'cccccccc-cccc-cccc-cccc-cccccccccccc',
-    '10000000-0000-0000-0000-000000000001',
-    1, 50000, '2026-07-15'
-);
-
 CREATE TEMP TABLE _update_test_order AS
-SELECT id FROM public.orders ORDER BY created_at DESC LIMIT 1;
+SELECT (
+    public.create_order(
+        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+        'cccccccc-cccc-cccc-cccc-cccccccccccc',
+        '10000000-0000-0000-0000-000000000001',
+        1, 50000, '2026-07-15'
+    )
+).id AS id;
 
 SELECT throws_ok(
     $$
@@ -802,15 +802,15 @@ SELECT set_config('request.jwt.claims', '', true);
 
 SELECT public.set_request_user('22222222-2222-2222-2222-222222222222');
 
-SELECT public.create_order(
-    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-    'cccccccc-cccc-cccc-cccc-cccccccccccc',
-    '10000000-0000-0000-0000-000000000003',
-    1, 99, '2026-07-20'
-);
-
 CREATE TEMP TABLE _round_order AS
-SELECT id FROM public.orders ORDER BY created_at DESC LIMIT 1;
+SELECT (
+    public.create_order(
+        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+        'cccccccc-cccc-cccc-cccc-cccccccccccc',
+        '10000000-0000-0000-0000-000000000003',
+        1, 99, '2026-07-20'
+    )
+).id AS id;
 
 SELECT public.ship_order((SELECT id FROM _round_order), '2026-07-21');
 
@@ -879,18 +879,18 @@ SELECT public.set_request_user('22222222-2222-2222-2222-222222222222');
 
 SELECT lives_ok(
     $$
-    SELECT public.create_order(
-        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-        'cccccccc-cccc-cccc-cccc-cccccccccccc',
-        '10000000-0000-0000-0000-000000000002',
-        1, 70000, '2026-07-30'
-    )
+    CREATE TEMP TABLE _reg_order AS
+    SELECT (
+        public.create_order(
+            'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+            'cccccccc-cccc-cccc-cccc-cccccccccccc',
+            '10000000-0000-0000-0000-000000000002',
+            1, 70000, '2026-07-30'
+        )
+    ).id AS id
     $$,
     'T46a: create_order still works after hardening'
 );
-
-CREATE TEMP TABLE _reg_order AS
-SELECT id FROM public.orders ORDER BY created_at DESC LIMIT 1;
 
 SELECT lives_ok(
     $$ SELECT public.update_pending_order((SELECT id FROM _reg_order), 'cccccccc-cccc-cccc-cccc-cccccccccccc', '10000000-0000-0000-0000-000000000002', 2, 75000, '2026-07-30') $$,

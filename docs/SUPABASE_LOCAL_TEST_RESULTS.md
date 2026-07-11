@@ -6,9 +6,8 @@
 |---|---|
 | 실행 날짜 | 2026-07-11 |
 | OS | macOS Intel x86_64 |
-| Docker Desktop | 설치 및 실행 성공 |
+| Docker Desktop | 설치 및 실행 성공 (v29.6.1) |
 | Supabase CLI 버전 | v2.109.1 |
-| supabase init 결과 | 성공 (config.toml 생성됨) |
 | migration 파일명 | timestamp 형식 (`20260711000100_`~`20260711000950_`) |
 | 로컬 Supabase 실행 여부 | **성공** |
 
@@ -16,17 +15,13 @@
 
 로컬 Supabase DB와 pgTAP 테스트 검증 결과:
 
-- migration 001~007: 로컬 실행 PASS (이전 단계에서 검증)
-- migration 008~00950: 코드 작성 완료, 사용자 머신에서 `supabase db reset --local` 실행 필요
-- pgTAP 테스트: 코드 작성 완료, 사용자 머신에서 `supabase test db --local` 실행 필요
+- migration 001~00950: **로컬 적용 성공** (10개 전체)
+- db lint: **오류 0** (lint_exit=0)
+- pgTAP 테스트: **99/99 PASS** (Files=3, Tests=99, Result: PASS)
 
-> **주의**: 008~00950 migration과 관련 pgTAP 테스트는 이 작업 환경에 Supabase CLI/Docker가 설치되어 있지 않아 로컬에서 아직 실행되지 않았습니다. 사용자 머신에서 반드시 실행해야 합니다.
-
-단, 다음 사항은 아직 검증되지 않았습니다:
-- 원격 Supabase 프로젝트 검증 (실행 금지)
-- JS client / REST API 통합 테스트
-- 실제 Auth 로그인 사용자 기반 테스트
-- Supabase 부가 서비스 (Storage, Edge Functions 등) 운영 준비 검증
+> 이 결과는 로컬 Supabase 환경에서 검증되었습니다.
+> GitHub Actions CI는 없으므로 로컬 Supabase 검증만 해당합니다.
+> 원격 Supabase는 여전히 미연결 상태입니다.
 
 ## Migration 파일
 
@@ -39,42 +34,41 @@
 | `20260711000500_private_helpers.sql` | 로컬 적용 성공 |
 | `20260711000600_rls_policies.sql` | 로컬 적용 성공 |
 | `20260711000700_audit_functions.sql` | 로컬 적용 성공 |
-| `20260711000800_auth_onboarding.sql` | 사용자 머신 실행 필요 |
-| `20260711000850_auth_onboarding_hardening.sql` | 사용자 머신 실행 필요 |
-| `20260711000900_order_inventory_rpc.sql` | 사용자 머신 실행 필요 |
-| `20260711000950_order_inventory_hardening.sql` | 사용자 머신 실행 필요 |
+| `20260711000800_auth_onboarding.sql` | 로컬 적용 성공 |
+| `20260711000850_auth_onboarding_hardening.sql` | 로컬 적용 성공 |
+| `20260711000900_order_inventory_rpc.sql` | 로컬 적용 성공 |
+| `20260711000950_order_inventory_hardening.sql` | 로컬 적용 성공 |
 
 파일명은 Supabase CLI 표준 timestamp 형식(`YYYYMMDDHHMMSS_`)을 사용합니다.
-`supabase db reset --local`으로 10개 migration 전체 적용이 필요합니다.
+`supabase db reset --local`으로 10개 migration 전체 적용 성공했습니다.
 
 ## db lint 결과
 
-- 실행 명령: `supabase db lint --local`
+- 실행 명령: `supabase db lint --local --level error --fail-on error`
 - 검사 대상: extensions, private, public 스키마
-- 결과: migration 001~007은 **오류 없음** (이전 단계 검증)
-- migration 008~00950: 사용자 머신에서 재실행 필요
+- 결과: **오류 0** (lint_exit=0)
 
 ## pgTAP 테스트 결과
 
 - 실행 명령: `supabase test db --local`
 - 테스트 파일:
-  - `supabase/tests/rls_access_matrix.test.sql` (25 assertion)
-  - `supabase/tests/auth_onboarding.test.sql` (20 assertion)
-  - `supabase/tests/order_inventory_rpc.test.sql` (54 assertion)
+  - `supabase/tests/rls_access_matrix.test.sql` (25 assertion) — **25/25 PASS**
+  - `supabase/tests/auth_onboarding.test.sql` (20 assertion) — **20/20 PASS**
+  - `supabase/tests/order_inventory_rpc.test.sql` (54 assertion) — **54/54 PASS**
 - 설명용 시나리오 문서: `docs/RLS_ACCESS_MATRIX_SCENARIOS.sql`
 
 | 항목 | 값 |
 |---|---|
 | Files | 3 |
-| Tests | 99 (예상값, 사용자 머신 실행으로 확정 필요) |
-| Result | **사용자 머신 실행 필요** |
-| All tests successful | 사용자 머신 실행으로 확인 필요 |
+| Tests | 99 |
+| Result | **PASS** |
+| All tests successful | Yes |
+| 실행 시간 | 1 wallclock sec |
 
-> rls_access_matrix.test.sql의 25 assertion은 이전 단계에서 PASS 확인.
-> auth_onboarding.test.sql의 20 assertion과 order_inventory_rpc.test.sql의 54 assertion은 사용자 머신에서 실행해야 확정.
+> 이 결과는 로컬 Supabase 환경에서 검증되었습니다.
 > GitHub Actions CI는 없으므로 로컬 Supabase 검증만 해당합니다.
 
-### 테스트 상세 (rls_access_matrix.test.sql — 25 assertion, 이전 PASS)
+### 테스트 상세 (rls_access_matrix.test.sql — 25/25 PASS)
 
 | # | 테스트 | 결과 | 비고 |
 |---|---|---|---|
@@ -84,9 +78,9 @@
 | T4 | Staff products base table 0건 | PASS | is (0건) |
 | T5a | Manager store_members UPDATE 완료 | PASS | lives_ok (0행, RLS 차단) |
 | T5b | Staff role 유지 확인 | PASS | is |
-| T6 | Cross-store customer 주문 실패 | PASS | throws_ok 42501 |
-| T7 | Cross-store product 주문 실패 | PASS | throws_ok 42501 |
-| T8 | Cross-store inventory_log 실패 | PASS | throws_ok 42501 |
+| T6 | Cross-store customer rejected by create_order RPC | PASS | throws_ok 22023 |
+| T7 | Cross-store product rejected by create_order RPC | PASS | throws_ok 22023 |
+| T8 | Cross-store inventory_log 실패 | PASS | throws_ok P0001 |
 | T9 | Direct orders INSERT 차단 | PASS | throws_ok 42501 |
 | T10 | Direct orders UPDATE 차단 | PASS | throws_ok 42501 |
 | T11 | Direct current_stock UPDATE 차단 | PASS | throws_ok 42501 |
@@ -105,28 +99,48 @@
 | T24 | Stores update 성공 | PASS | lives_ok |
 | T25 | Physical DELETE 차단 | PASS | throws_ok 42501 |
 
-### Assertion 분류 (rls_access_matrix.test.sql)
+### 테스트 상세 (auth_onboarding.test.sql — 20/20 PASS)
 
-| 종류 | 수량 |
-|---|---|
-| lives_ok | 7 |
-| throws_ok | 10 |
-| is | 8 |
-| **총계** | **25** |
+| # | 테스트 | 결과 | 비고 |
+|---|---|---|---|
+| T1 | 미인증 ensure_user_profile 차단 | PASS | throws_ok 42501 |
+| T2 | 미인증 create_initial_store 차단 | PASS | throws_ok 42501 |
+| T3 | 인증 create_initial_store 성공 | PASS | lives_ok |
+| T4 | 스토어 1개 존재 | PASS | is |
+| T5 | created_by = auth.uid() | PASS | is |
+| T6 | 활성 owner 멤버십 1개 | PASS | is |
+| T7 | 멤버십 user_id = auth.uid() | PASS | is |
+| T8 | store_settings default_language = ko | PASS | is |
+| T9 | 프로필 존재 | PASS | is |
+| T10 | 재호출 동일 store_id (멱등) | PASS | is |
+| T11 | 중복 생성 없음 | PASS | is |
+| T12 | 빈 store 이름 실패 | PASS | throws_ok 22023 |
+| T13 | NULL language 실패 | PASS | throws_ok 22023 |
+| T14 | NULL default_language 실패 | PASS | throws_ok 22023 |
+| T15 | NULL name 실패 | PASS | throws_ok 22023 |
+| T16 | 빈 문자열 name 실패 | PASS | throws_ok 22023 |
+| T17 | 101자 name 실패 | PASS | throws_ok 22023 |
+| T18 | 삭제 후 재온보딩 새 활성 store 반환 | PASS | is |
+| T19 | 재온보딩 후 활성 store 1개 | PASS | is |
+| T20 | EXECUTE 권한 authenticated만 | PASS | is |
 
-### order_inventory_rpc.test.sql (54 assertion, 사용자 머신 실행 필요)
+### 테스트 상세 (order_inventory_rpc.test.sql — 54/54 PASS)
 
-| 범위 | 테스트 내용 |
-|---|---|
-| T1-T15 | create_order 권한, snapshot, 재고 예약, DML 차단 |
-| T16-T18 | update_pending_order 수량 증감, 상품 변경 |
-| T19-T24 | ship_order, 재고 차감, 수익 계산, 고객 집계 |
-| T25-T32 | 중복 ship/cancel/complete 차단, 상태 전환 검증 |
-| T33-T35 | inventory_logs DML 차단, cross-store RLS |
-| T36-T41 | NULL 입력 방어, soft-delete 검증, legacy 처리 |
-| T42-T44 | 정수 반올림 검증 (profit/margin/cost_ratio) |
-| T45 | 삭제 고객 집계 갱신 차단 |
-| T46 | 회귀 테스트 (create→update→ship→complete) |
+| 범위 | 테스트 내용 | 결과 |
+|---|---|---|
+| T1-T3 | create_order 권한 (anon/staff 차단, manager 성공) | PASS |
+| T4-T5 | 주문 PENDING 상태, snapshot 검증 | PASS |
+| T6-T8 | reserved_stock 증가, current_stock 불변, RESERVE log | PASS |
+| T9-T11 | 재고 부족, cross-store customer/product, deleted product 차단 | PASS |
+| T12-T15 | 직접 DML 차단 (orders INSERT/UPDATE, current_stock, customer aggregate) | PASS |
+| T16-T18 | update_pending_order 수량 증감, 상품 변경 | PASS |
+| T19-T24 | ship_order, 재고 차감, 수익 계산, 고객 집계 | PASS |
+| T25-T32 | 중복 ship/cancel/complete 차단, 상태 전환 검증 | PASS |
+| T33-T35 | inventory_logs DML 차단, cross-store RLS | PASS |
+| T36-T41 | NULL 입력 방어, soft-delete 검증, legacy 처리, 데이터 불일치 | PASS |
+| T42-T44 | 정수 반올림 검증 (profit=66, margin=67, cost_ratio=33) | PASS |
+| T45 | 삭제 고객 집계 갱신 차단 (sentinel 123 유지) | PASS |
+| T46 | 회귀 테스트 (create→update→ship→complete) | PASS |
 
 ## 보안 확인
 
@@ -138,10 +152,10 @@
 - [x] 앱 HTML/CSS/JS 미변경
 - [x] `auth.uid()` 재정의 없음
 - [x] psql `\set` 문법 없음
-- [x] config.toml에 실제 secret 없음 (모두 env 참조 또는 빈 값)
+- [x] config.toml에 실제 secret 없음
 - [x] migration 파일명 Supabase CLI 표준 timestamp 형식
-- [x] db lint 오류 없음 (migration 001~007)
-- [x] pgTAP 25/25 PASS (rls_access_matrix.test.sql)
+- [x] db lint 오류 없음 (migration 001~00950)
+- [x] pgTAP 99/99 PASS (로컬 Supabase)
 - [x] config.toml 커밋하지 않음
 - [x] data_export.json 미생성
 
@@ -155,22 +169,3 @@
 - 대량 데이터 성능 테스트
 - 동시성/race condition 통합 테스트
 - staff 제한 view/RPC 구현 및 검증
-- migration 008~00950 로컬 실행 (사용자 머신 필요)
-
-## 다음 단계
-
-사용자 머신에서 다음 명령을 실행하여 검증:
-
-```bash
-cd github-pages-version
-supabase db reset --local
-supabase db lint --local --level error --fail-on error
-supabase test db --local
-```
-
-성공 조건:
-1. migration 001~00950 전체 적용 성공
-2. lint 오류 0
-3. Files=3, Tests=99
-4. All tests successful
-5. Result: PASS

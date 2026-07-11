@@ -239,45 +239,43 @@ SELECT is(
 );
 
 -- ============================================================
--- T6: Cross-store customer order creation fails (trigger P0001)
+-- T6: Cross-store customer order creation fails (22023)
+-- Direct INSERT is blocked by permission (42501), so we test
+-- via the protected create_order RPC which validates store membership.
 -- ============================================================
 
 SELECT public.set_request_user('11111111-1111-1111-1111-111111111111');
 
 SELECT throws_ok(
     $$
-    INSERT INTO public.orders (store_id, order_number, customer_id, product_id, quantity, selling_price)
-    VALUES (
+    SELECT public.create_order(
         'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-        'TEST-XSTORE-CUST',
         '66666666-6666-6666-6666-666666666666',
         'cccccccc-cccc-cccc-cccc-cccccccccccc',
-        1, 10000
-    );
+        1, 10000, '2026-07-01'
+    )
     $$,
-    'P0001',
-    'customer_id must be active and belong to the same store',
-    'T6: Cross-store customer order creation fails with trigger error'
+    '22023',
+    'Customer not found or is deleted in this store',
+    'T6: Cross-store customer rejected by create_order RPC'
 );
 
 -- ============================================================
--- T7: Cross-store product order creation fails (trigger P0001)
+-- T7: Cross-store product order creation fails (22023)
 -- ============================================================
 
 SELECT throws_ok(
     $$
-    INSERT INTO public.orders (store_id, order_number, customer_id, product_id, quantity, selling_price)
-    VALUES (
+    SELECT public.create_order(
         'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-        'TEST-XSTORE-PROD',
         'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
         '55555555-5555-5555-5555-555555555555',
-        1, 10000
-    );
+        1, 10000, '2026-07-01'
+    )
     $$,
-    'P0001',
-    'product_id must be active and belong to the same store',
-    'T7: Cross-store product order creation fails with trigger error'
+    '22023',
+    'Product not found or is deleted in this store',
+    'T7: Cross-store product rejected by create_order RPC'
 );
 
 -- ============================================================

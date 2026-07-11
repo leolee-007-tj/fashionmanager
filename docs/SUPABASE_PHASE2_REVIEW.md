@@ -43,8 +43,8 @@
 | 파일 | 내용 |
 |---|---|
 | `supabase/tests/rls_access_matrix.test.sql` | pgTAP 실행 파일, 25 assertion (로컬 PASS) |
-| `supabase/tests/auth_onboarding.test.sql` | pgTAP 실행 파일, 20 assertion (온보딩 RPC + hardening, 사용자 머신 실행 필요) |
-| `supabase/tests/order_inventory_rpc.test.sql` | pgTAP 실행 파일, 54 assertion (주문/재고 RPC + hardening, 사용자 머신 실행 필요) |
+| `supabase/tests/auth_onboarding.test.sql` | pgTAP 실행 파일, 20 assertion (온보딩 RPC + hardening, 로컬 PASS) |
+| `supabase/tests/order_inventory_rpc.test.sql` | pgTAP 실행 파일, 54 assertion (주문/재고 RPC + hardening, 로컬 PASS) |
 
 #### 설명용 시나리오 문서 (1개)
 
@@ -77,7 +77,7 @@
 | audit 함수 | 3 |
 | security definer 함수 | 16 | (009: 5개 주문 lifecycle RPC 추가) |
 | 테스트 시나리오 | 72개 (문서) + 30개 (SQL 시나리오 문서, 미실행) |
-| pgTAP 테스트 파일 | 3개 (25 + 20 + 54 = 99 assertion, rls_access_matrix 25개 로컬 PASS, 나머지 사용자 머신 실행 필요) |
+| pgTAP 테스트 파일 | 3개 (25 + 20 + 54 = 99 assertion, **로컬 Supabase 전체 PASS**) |
 
 ---
 
@@ -194,9 +194,9 @@
 |---|---|
 | 자동 parser 검사 | ❌ 미수행 (별도 parser 도구 없음) |
 | 수동 정적 검사 | ✅ 수행 |
-| 로컬 Supabase migration 적용 | ✅ 7개 성공 (001~007), 008~00950 사용자 머신 실행 필요 |
-| supabase db lint | ✅ 오류 없음 (001~007), 008~00950 사용자 머신 실행 필요 |
-| pgTAP 로컬 실행 | ✅ 25/25 PASS (rls_access_matrix), 20+54 assertion 사용자 머신 실행 필요 |
+| 로컬 Supabase migration 적용 | ✅ 10개 전체 성공 (001~00950) |
+| supabase db lint | ✅ 오류 없음 (001~00950, lint_exit=0) |
+| pgTAP 로컬 실행 | ✅ 99/99 PASS (Files=3, Tests=99, Result: PASS) |
 | 원격 Supabase 검증 | ❌ 미실행 (금지됨) |
 | JS client 통합 테스트 | ❌ 미실행 |
 | REST API 통합 테스트 | ❌ 미실행 |
@@ -245,7 +245,7 @@
 
 - [x] 001~007 migration 로컬 적용 성공
 - [x] supabase db lint 오류 없음
-- [x] pgTAP 25/25 PASS (로컬)
+- [x] pgTAP 99/99 PASS (로컬 Supabase — 25 RLS + 20 onboarding + 54 order/inventory)
 - [x] 로컬 DB 구조 + RLS 자동화 검증 통과
 - [x] trigger runtime 오류 해결
 - [x] soft delete SELECT 정책
@@ -303,7 +303,15 @@
 - [x] T41 FK 위반 fixture 수정 (session_replication_role = replica로 우회 후 origin 복원)
 - [x] T45 삭제 고객 테스트 수정 (create_order 호출 제거, helper 직접 호출로 sentinel 검증)
 - [x] pgTAP plan 수 수정 (46 → 54, 실제 assertion 수와 일치)
-- [x] 총 99 assertion (25 + 20 + 54), 사용자 머신 실행 필요
+- [x] 총 99 assertion (25 + 20 + 54), 로컬 Supabase 전체 PASS
+
+### Phase 3-2.3 완료: Deterministic pgTAP Fixtures and Local Validation
+
+- [x] auth_onboarding T18/T19 수정: create_initial_store 반환 ID를 temp table에 저장
+- [x] order_inventory_rpc T3/T26/T36/T42/T46 수정: create_order 반환 ID를 직접 저장 (created_at 정렬 제거)
+- [x] order_inventory_rpc T28 수정: order_id 기준 RELEASE log 검사
+- [x] rls_access_matrix T6/T7 수정: 직접 INSERT 대신 create_order RPC로 cross-store 검증 (22023)
+- [x] 로컬 Supabase 전체 검증 성공: migration 10개 적용, lint 오류 0, Files=3, Tests=99, Result: PASS
 
 ### Phase 3 전 추가 준비 (미완료)
 
@@ -322,8 +330,8 @@
 | 항목 | 값 |
 |---|---|
 | 브랜치 | feature/supabase-cloud-migration |
-| 최신 커밋 메시지 | `test: fix executable order inventory pgTAP suite` |
-| 최신 커밋 SHA | ba01138dc0eefd7d84de9f845f614f3f71060b74 |
+| 최신 커밋 메시지 | `test: make supabase pgTAP fixtures deterministic` |
+| 최신 커밋 SHA | a5bd3286b163f3ae23d821d980d41bcbe0a07a13 |
 | Phase 2 상태 | 로컬 DB 구조 + RLS 자동화 검증 통과 |
 
 ---

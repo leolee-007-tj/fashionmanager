@@ -279,14 +279,20 @@ SET deleted_at = now()
 WHERE created_by = '88888888-8888-8888-8888-888888888888'
   AND deleted_at IS NULL;
 
--- create_initial_store should create a new active store
+-- Call create_initial_store separately and store the returned store_id
+CREATE TEMP TABLE _re_onboard_store AS
+SELECT public.create_initial_store('New Store 2', NULL, 'ko') AS id;
+
 -- The returned store_id must belong to a non-deleted store
 SELECT is(
-    (SELECT count(*)::integer FROM public.stores s
-     WHERE s.id = public.create_initial_store('New Store 2', NULL, 'ko')
-       AND s.deleted_at IS NULL),
+    (
+        SELECT count(*)::integer
+        FROM public.stores s
+        JOIN _re_onboard_store r ON r.id = s.id
+        WHERE s.deleted_at IS NULL
+    ),
     1,
-    'T18: Re-onboarding after deletion returns new active store (not deleted store_id)'
+    'T18: Re-onboarding returns a new active store'
 );
 
 -- ============================================================
@@ -294,11 +300,14 @@ SELECT is(
 -- ============================================================
 
 SELECT is(
-    (SELECT count(*)::integer FROM public.stores
-     WHERE created_by = '88888888-8888-8888-8888-888888888888'
-       AND deleted_at IS NULL),
+    (
+        SELECT count(*)::integer
+        FROM public.stores
+        WHERE created_by = '88888888-8888-8888-8888-888888888888'
+          AND deleted_at IS NULL
+    ),
     1,
-    'T19: Exactly 1 active store after re-onboarding (deleted store excluded)'
+    'T19: Exactly 1 active store after re-onboarding'
 );
 
 -- ============================================================
@@ -329,6 +338,7 @@ SELECT set_config('request.jwt.claim.sub', '', true);
 SELECT set_config('request.jwt.claims', '', true);
 
 DROP FUNCTION IF EXISTS public.set_request_user(uuid);
+DROP TABLE IF EXISTS _re_onboard_store;
 
 -- ============================================================
 -- Finish
