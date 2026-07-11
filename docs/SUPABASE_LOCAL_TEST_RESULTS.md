@@ -203,7 +203,7 @@
 
 ## JavaScript Foundation Unit Tests
 
-3-4A 단계에서 추가된 Supabase JS 클라이언트와 인증 서비스 기반 코드에 대한
+3-4A 및 3-4A.1 단계에서 추가된 Supabase JS 클라이언트와 인증 서비스 기반 코드에 대한
 단위 테스트 결과입니다. **mock 기반이며 실제 네트워크 호출은 없습니다.**
 
 ### 실행 환경
@@ -227,15 +227,16 @@ node --test tests/supabase-client.test.js tests/auth-service.test.js
 | 항목 | 값 |
 |---|---|
 | 테스트 파일 | 2 |
-| 총 테스트 수 | 15 |
-| pass | **15** |
+| 총 테스트 수 | 22 |
+| pass | **22** |
 | fail | **0** |
 | 실제 Supabase 호출 | 0 |
 | 실제 URL/key 사용 | 0 |
+| 실행 시간 | ~1.1s |
 
 ### 테스트 상세
 
-**supabase-client.test.js (6/6 PASS)**
+**supabase-client.test.js (7/7 PASS)**
 
 | # | 테스트 | 결과 |
 |---|---|---|
@@ -245,8 +246,9 @@ node --test tests/supabase-client.test.js tests/auth-service.test.js
 | T4 | sb_secret_ key와 service_role JWT 차단 | PASS |
 | T5 | 정상 mock config에서 client 정확히 1회 생성 | PASS |
 | T6 | createClient에 auth persistence 옵션 전달 확인 | PASS |
+| T22 | 브라우저 atob 경로에서 service_role JWT 차단 | PASS |
 
-**auth-service.test.js (9/9 PASS)**
+**auth-service.test.js (15/15 PASS)**
 
 | # | 테스트 | 결과 |
 |---|---|---|
@@ -259,6 +261,24 @@ node --test tests/supabase-client.test.js tests/auth-service.test.js
 | T13 | bootstrapAuthenticatedUser가 세션 없을 때 signed_out 반환 | PASS |
 | T14 | 세션은 있지만 membership이 없으면 needs_store_onboarding 반환 | PASS |
 | T15 | createInitialStore가 정확한 RPC 이름과 인자 사용 | PASS |
+| T16 | subscribe가 data.subscription.unsubscribe를 호출 | PASS |
+| T17 | unsubscribe를 두 번 호출해도 실제 해제는 한 번만 실행 (idempotent) | PASS |
+| T18 | 함수가 아닌 callback 차단 — AUTH_CALLBACK_INVALID | PASS |
+| T19 | getSession 반환 error 차단 — AUTH_SESSION_FAILED | PASS |
+| T20 | signOut 반환 error 차단 — AUTH_SIGN_OUT_FAILED | PASS |
+| T21 | LESOULAuth.init이 초기화되지 않은 client를 차단 | PASS |
+
+### 3-4A.1 단계 보완 사항
+
+- `subscribe` 반환 구조를 Supabase JS v2 실제 구조(`data.subscription.unsubscribe`)로 수정
+- `unsubscribe` idempotent 처리 (여러 번 호출해도 안전)
+- `getSession` 오류 정규화 (`AUTH_SESSION_FAILED`)
+- `signOut` 오류 정규화 (`AUTH_SIGN_OUT_FAILED`)
+- `subscribe` callback 검증 (`AUTH_CALLBACK_INVALID`)
+- `LESOULAuth.init` 4가지 조건 검사 강화 (`SUPABASE_NOT_INITIALIZED`)
+- 브라우저 JWT decode base64url 패딩 명시적 보완
+- T22: `atob` 경로만 활성화한 상태로 service_role JWT 차단 검증
+- mock 구조를 `data.subscription.unsubscribe` 형태로 수정
 
 ### 주요 사항
 
@@ -267,6 +287,8 @@ node --test tests/supabase-client.test.js tests/auth-service.test.js
 - index.html 미변경 (새 JS 파일 로드 안 함)
 - 기존 localStorage 앱 미변경
 - 기존 DB migration 11개, pgTAP 131개 회귀 없음
+- `global.atob`를 mock한 테스트는 `finally` 블록에서 원래 상태로 복원
+- 테스트 간 global 상태 누출 없음 (`resetGlobals()` 호출)
 
 ## 아직 검증되지 않은 항목
 

@@ -18,6 +18,14 @@
             if (parts.length !== 3) return null;
             var payload = parts[1];
             var base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+            var remainder = base64.length % 4;
+            if (remainder === 2) {
+                base64 += '==';
+            } else if (remainder === 3) {
+                base64 += '=';
+            } else if (remainder === 1) {
+                return null;
+            }
             var decoded;
             if (typeof atob === 'function') {
                 decoded = atob(base64);

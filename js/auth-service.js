@@ -18,8 +18,11 @@
     }
 
     function init() {
-        if (!global.LESOULSupabase) {
-            throw _makeError('SUPABASE_NOT_INITIALIZED', 'Supabase client module not loaded');
+        if (!global.LESOULSupabase ||
+            typeof global.LESOULSupabase.isInitialized !== 'function' ||
+            !global.LESOULSupabase.isInitialized() ||
+            typeof global.LESOULSupabase.getClient !== 'function') {
+            throw _makeError('SUPABASE_NOT_INITIALIZED', 'Supabase client is not initialized');
         }
         _initialized = true;
         return true;
@@ -27,10 +30,40 @@
 
     async function getSession() {
         var client = _getClient();
-        var result = await client.auth.getSession();
-        var session = (result && result.data && result.data.session) || null;
-        var user = (session && session.user) || null;
-        return { session: session, user: user };
+
+        try {
+            var result = await client.auth.getSession();
+
+            if (result && result.error) {
+                throw _makeError(
+                    'AUTH_SESSION_FAILED',
+                    'Failed to read authentication session'
+                );
+            }
+
+            var session =
+                result &&
+                result.data &&
+                result.data.session
+                    ? result.data.session
+                    : null;
+
+            return {
+                session: session,
+                user: session && session.user
+                    ? session.user
+                    : null
+            };
+        } catch (error) {
+            if (error && error.code === 'AUTH_SESSION_FAILED') {
+                throw error;
+            }
+
+            throw _makeError(
+                'AUTH_SESSION_FAILED',
+                'Failed to read authentication session'
+            );
+        }
     }
 
     async function getCurrentUser() {
@@ -72,17 +105,37 @@
 
     async function signOut() {
         var client = _getClient();
+
         try {
-            await client.auth.signOut();
-        } catch (e) {
-            // ignore sign out errors
+            var result = await client.auth.signOut();
+
+            if (result && result.error) {
+                throw _makeError(
+                    'AUTH_SIGN_OUT_FAILED',
+                    'Sign out failed'
+                );
+            }
+
+            return true;
+        } catch (error) {
+            if (error && error.code === 'AUTH_SIGN_OUT_FAILED') {
+                throw error;
+            }
+
+            throw _makeError(
+                'AUTH_SIGN_OUT_FAILED',
+                'Sign out failed'
+            );
         }
-        return true;
     }
 
     function subscribe(callback) {
+        if (typeof callback !== 'function') {
+            throw _makeError('AUTH_CALLBACK_INVALID', 'Auth callback must be a function');
+        }
+
         var client = _getClient();
-        var subscription = client.auth.onAuthStateChange(function (event, session) {
+        var result = client.auth.onAuthStateChange(function (event, session) {
             try {
                 callback({
                     event: event,
@@ -94,16 +147,19 @@
             }
         });
 
+        var authSubscription =
+            result &&
+            result.data &&
+            result.data.subscription;
+
         return function unsubscribe() {
-            try {
-                if (subscription && typeof subscription.data === 'object' &&
-                    typeof subscription.data.unsubscribe === 'function') {
-                    subscription.data.unsubscribe();
-                } else if (subscription && typeof subscription.unsubscribe === 'function') {
-                    subscription.unsubscribe();
+            if (authSubscription) {
+                try {
+                    authSubscription.unsubscribe();
+                } catch (e) {
+                    // ignore
                 }
-            } catch (e) {
-                // ignore
+                authSubscription = null;
             }
         };
     }

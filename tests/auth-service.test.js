@@ -23,7 +23,13 @@ function setupMockSupabase(overrides) {
             getSession: () => Promise.resolve({ data: { session: null } }),
             signInWithPassword: () => Promise.resolve({ data: {}, error: null }),
             signOut: () => Promise.resolve({ error: null }),
-            onAuthStateChange: (cb) => ({ data: { unsubscribe: () => {} } })
+            onAuthStateChange: (cb) => ({
+                data: {
+                    subscription: {
+                        unsubscribe: () => {}
+                    }
+                }
+            })
         },
         rpc: () => Promise.resolve({ data: null, error: null }),
         from: () => ({
@@ -163,8 +169,10 @@ test('T11: subscribe가 auth 이벤트 전달하고 unsubscribe 가능', async (
                 callback = cb;
                 return {
                     data: {
-                        unsubscribe: () => {
-                            unsubscribeCalled = true;
+                        subscription: {
+                            unsubscribe: () => {
+                                unsubscribeCalled = true;
+                            }
                         }
                     }
                 };
@@ -301,4 +309,113 @@ test('T15: createInitialStore가 정확한 RPC 이름과 인자 사용', async (
     assert.strictEqual(capturedParams.p_subtitle, 'Sub');
     assert.strictEqual(capturedParams.p_default_language, 'en');
     assert.strictEqual(result, mockStoreId);
+});
+
+test('T16: subscribe가 data.subscription.unsubscribe를 호출', () => {
+    resetGlobals();
+    let unsubscribeCallCount = 0;
+
+    setupMockSupabase({
+        auth: {
+            onAuthStateChange: (cb) => ({
+                data: {
+                    subscription: {
+                        unsubscribe: () => {
+                            unsubscribeCallCount++;
+                        }
+                    }
+                }
+            })
+        }
+    });
+
+    const unsub = globalThis.LESOULAuth.subscribe(() => {});
+    unsub();
+
+    assert.strictEqual(unsubscribeCallCount, 1, 'subscription.unsubscribe should be called exactly once');
+});
+
+test('T17: unsubscribe를 두 번 호출해도 실제 해제는 한 번만 실행', () => {
+    resetGlobals();
+    let unsubscribeCallCount = 0;
+
+    setupMockSupabase({
+        auth: {
+            onAuthStateChange: (cb) => ({
+                data: {
+                    subscription: {
+                        unsubscribe: () => {
+                            unsubscribeCallCount++;
+                        }
+                    }
+                }
+            })
+        }
+    });
+
+    const unsub = globalThis.LESOULAuth.subscribe(() => {});
+    unsub();
+    unsub();
+    unsub();
+
+    assert.strictEqual(unsubscribeCallCount, 1, 'unsubscribe should only execute once (idempotent)');
+});
+
+test('T18: 함수가 아닌 callback 차단 — AUTH_CALLBACK_INVALID', () => {
+    resetGlobals();
+    setupMockSupabase();
+
+    assert.throws(() => {
+        globalThis.LESOULAuth.subscribe('not-a-function');
+    }, (err) => err.code === 'AUTH_CALLBACK_INVALID');
+
+    assert.throws(() => {
+        globalThis.LESOULAuth.subscribe(null);
+    }, (err) => err.code === 'AUTH_CALLBACK_INVALID');
+
+    assert.throws(() => {
+        globalThis.LESOULAuth.subscribe(undefined);
+    }, (err) => err.code === 'AUTH_CALLBACK_INVALID');
+});
+
+test('T19: getSession 반환 error 차단 — AUTH_SESSION_FAILED', async () => {
+    resetGlobals();
+    setupMockSupabase({
+        auth: {
+            getSession: () => Promise.resolve({
+                data: { session: null },
+                error: { message: 'session error' }
+            })
+        }
+    });
+
+    await assert.rejects(async () => {
+        await globalThis.LESOULAuth.getSession();
+    }, (err) => err.code === 'AUTH_SESSION_FAILED');
+});
+
+test('T20: signOut 반환 error 차단 — AUTH_SIGN_OUT_FAILED', async () => {
+    resetGlobals();
+    setupMockSupabase({
+        auth: {
+            signOut: () => Promise.resolve({
+                error: { message: 'signout error' }
+            })
+        }
+    });
+
+    await assert.rejects(async () => {
+        await globalThis.LESOULAuth.signOut();
+    }, (err) => err.code === 'AUTH_SIGN_OUT_FAILED');
+});
+
+test('T21: LESOULAuth.init이 초기화되지 않은 client를 차단', () => {
+    resetGlobals();
+    // Load auth-service without initializing supabase-client
+    const src = fs.readFileSync(path.join(__dirname, '..', 'js', 'auth-service.js'), 'utf-8');
+    eval(src);
+
+    assert.throws(() => {
+        globalThis.LESOULAuth.init();
+    }, (err) => err.code === 'SUPABASE_NOT_INITIALIZED');
 });

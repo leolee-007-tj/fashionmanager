@@ -178,3 +178,49 @@ test('T6: createClient에 auth persistence 옵션 전달 확인', () => {
     assert.strictEqual(capturedOpts.auth.persistSession, true);
     assert.strictEqual(capturedOpts.auth.detectSessionInUrl, true);
 });
+
+test('T22: 브라우저 atob 경로에서 service_role JWT 차단', () => {
+    resetGlobals();
+
+    // Generate JWT before hiding Buffer
+    const serviceJwt = makeServiceRoleJwt();
+
+    // Simulate browser environment: atob exists, Buffer hidden
+    const originalBuffer = globalThis.Buffer;
+    const originalAtob = globalThis.atob;
+    globalThis.atob = function (b64) {
+        return originalBuffer.from(b64, 'base64').toString('utf-8');
+    };
+    // Temporarily hide Buffer so the atob path is used
+    Object.defineProperty(globalThis, 'Buffer', {
+        value: undefined,
+        configurable: true,
+        writable: true
+    });
+
+    globalThis.supabase = {
+        createClient: () => ({})
+    };
+
+    try {
+        loadSupabaseClient();
+
+        assert.throws(() => {
+            globalThis.LESOULSupabase.init({
+                SUPABASE_ENABLED: true,
+                SUPABASE_URL: 'https://test.supabase.co',
+                SUPABASE_CLIENT_KEY: serviceJwt
+            });
+        }, (err) => {
+            return err.code === 'SUPABASE_SECRET_KEY_FORBIDDEN';
+        });
+    } finally {
+        // Restore original state
+        globalThis.Buffer = originalBuffer;
+        if (originalAtob !== undefined) {
+            globalThis.atob = originalAtob;
+        } else {
+            delete globalThis.atob;
+        }
+    }
+});
