@@ -309,7 +309,8 @@ SELECT throws_ok(
 SELECT public.set_request_user('11111111-1111-1111-1111-111111111111');
 
 -- ============================================================
--- T9: Soft-deleted product new order fails (trigger P0001)
+-- T9: Direct orders INSERT blocked by permission (42501)
+-- Order creation must go through protected RPC (create_order).
 -- ============================================================
 
 SELECT throws_ok(
@@ -323,26 +324,29 @@ SELECT throws_ok(
         1, 5000
     );
     $$,
-    'P0001',
-    'product_id must be active and belong to the same store',
-    'T9: Cannot create new order with soft-deleted product'
+    '42501',
+    NULL,
+    'T9: Direct orders INSERT blocked (permission denied) - must use RPC'
 );
 
 -- ============================================================
--- T10: Historical order notes update succeeds (product_id unchanged)
+-- T10: Direct orders UPDATE blocked by permission (42501)
+-- Order modifications must go through protected RPC.
 -- ============================================================
 
-SELECT lives_ok(
+SELECT throws_ok(
     $$
     UPDATE public.orders
     SET notes = 'Updated historical notes'
     WHERE id = '10101010-1010-1010-1010-101010101010';
     $$,
-    'T10: Can update notes on historical order with deleted product'
+    '42501',
+    NULL,
+    'T10: Direct orders UPDATE blocked (permission denied) - must use RPC'
 );
 
 -- ============================================================
--- T11: Historical order product_id change to deleted product fails
+-- T11: Direct orders product_id UPDATE blocked by permission (42501)
 -- ============================================================
 
 SELECT throws_ok(
@@ -351,22 +355,24 @@ SELECT throws_ok(
     SET product_id = 'd0d0d0d0-d0d0-d0d0-d0d0-d0d0d0d0d0d0'
     WHERE id = '10101010-1010-1010-1010-101010101010';
     $$,
-    'P0001',
-    'product_id must be active and belong to the same store',
-    'T11: Cannot change product_id to another soft-deleted product'
+    '42501',
+    NULL,
+    'T11: Direct orders product_id UPDATE blocked (permission denied)'
 );
 
 -- ============================================================
--- T12: Historical order product_id change to active product succeeds
+-- T12: Direct orders UPDATE blocked (status change attempt) - 42501
 -- ============================================================
 
-SELECT lives_ok(
+SELECT throws_ok(
     $$
     UPDATE public.orders
-    SET product_id = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
+    SET status = 'SHIPPED'
     WHERE id = '10101010-1010-1010-1010-101010101010';
     $$,
-    'T12: Can change product_id to active product'
+    '42501',
+    NULL,
+    'T12: Direct orders status UPDATE blocked (permission denied)'
 );
 
 -- ============================================================

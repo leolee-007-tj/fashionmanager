@@ -1,24 +1,24 @@
-# Supabase Schema (Phase 2 Final)
+# Supabase Schema
 
-> 본 문서는 2단계 최종 확정본이다.
+> 본 문서는 스키마의 현재 상태를 문서화한다.
 > 초안: `docs/SUPABASE_SCHEMA_DRAFT.md`
 > 개인정보는 포함하지 않는다.
 
 ## 개요
 
-| 항목 | 수량 |
-|---|---|
-| 테이블 | 12 |
-| enum 타입 | 5 |
-| CHECK 제약조건 | 31 |
-| UNIQUE 제약조건 | 5 |
-| partial unique index | 6 |
-| 일반 인덱스 | 48 |
-| RLS 정책 | 36 |
-| trigger | 28 |
-| helper 함수 | 3 |
-| audit 함수 | 3 |
-| security definer 함수 | 9 |
+| 항목 | 수량 | 비고 |
+|---|---|---|
+| 테이블 | 12 | |
+| enum 타입 | 5 | |
+| CHECK 제약조건 | 33 | orders 배송필드 2개 추가 |
+| UNIQUE 제약조건 | 5 | |
+| partial unique index | 6 | |
+| 일반 인덱스 | 48 | |
+| RLS 정책 | 34 | orders INSERT/UPDATE 정책 제거 |
+| trigger | 28 | |
+| helper 함수 | 5 | recalculate_customer_aggregates, generate_order_number 추가 |
+| audit 함수 | 3 | |
+| security definer 함수 | 16 | 5개 주문 lifecycle RPC + 2개 온보딩 RPC + 기존 9개 |
 
 ---
 
@@ -124,7 +124,8 @@
 | version | integer | ✅ | 1 | - | trigger |
 
 **인덱스**: store_id, store_id+brand, store_id+category, store_id+stock_year+month, store_id+deleted_at, updated_at
-**RLS**: active member 조회, owner/manager insert/update
+**RLS**: active member 조회, owner/manager insert, column-level update
+**직접 DML**: current_stock, reserved_stock, id, store_id, created_by, created_at, updated_by, updated_at, version은 직접 수정 불가 (column-level grant로 제한). 나머지 상품 필드는 owner/manager가 직접 수정 가능. 재고 변경은 inventory_log 관련 RPC를 통해야 함.
 
 ---
 
@@ -155,7 +156,8 @@
 | version | integer | ✅ | 1 | - | trigger |
 
 **인덱스**: store_id, store_id+lower(name), phone, wechat_nickname, deleted_at, updated_at
-**RLS**: active member 조회, owner/manager insert/update
+**RLS**: active member 조회, owner/manager insert, column-level update
+**직접 DML**: 집계 필드(total_amount, total_profit, order_count, total_quantity, last_order_date)는 직접 수정 불가 (column-level grant로 제한). 이름, 연락처, 주소, 메모 등 일반 정보는 owner/manager가 직접 수정 가능. 집계는 private.recalculate_customer_aggregates를 통해 RPC에서 갱신.
 
 ---
 
@@ -187,6 +189,8 @@
 | status | order_status | ✅ | 'PENDING' | - | - |
 | order_date | date | - | - | - | - |
 | ship_date | date | - | - | - | - |
+| shipping_company | text | - | - | ≤100자 | 009 migration 추가 |
+| tracking_number | text | - | - | ≤100자 | 009 migration 추가 |
 | notes | text | - | - | - | - |
 | created_by | uuid | - | - | - | - |
 | updated_by | uuid | - | - | - | - |
@@ -196,8 +200,9 @@
 | version | integer | ✅ | 1 | - | trigger |
 
 **인덱스**: store_id, customer_id, product_id, status, order_date, ship_date, store_id+status+order_date, deleted_at, updated_at
-**RLS**: active member 조회, owner/manager insert/update
+**RLS**: active member 조회만 가능. INSERT/UPDATE는 보호된 RPC를 통해서만 가능.
 **Cross-store 검증**: trigger (customer_id, product_id가 같은 store에 속하는지)
+**직접 DML**: INSERT/UPDATE 권한 revoke. 주문 변경은 create_order, update_pending_order, ship_order, cancel_order, complete_order RPC 사용.
 
 ---
 

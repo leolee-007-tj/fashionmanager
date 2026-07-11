@@ -18,8 +18,9 @@
 | `20260711000700_audit_functions.sql` | audit 함수, 마스킹, trigger | 158 |
 | `20260711000800_auth_onboarding.sql` | 인증 부트스트랩 RPC (ensure_user_profile, create_initial_store) | 199 |
 | `20260711000850_auth_onboarding_hardening.sql` | 온보딩 검증 보완 (NULL 체크, 22023, 삭제 store 제외, 64-bit lock) | 201 |
+| `20260711000900_order_inventory_rpc.sql` | 주문 lifecycle RPC + 재고 transaction + 직접 DML 차단 | 978 |
 
-### 문서 (9개)
+### 문서 (10개)
 
 | 파일 | 내용 |
 |---|---|
@@ -32,15 +33,17 @@
 | `docs/SECURITY_DATA_EXPOSURE_REMEDIATION.md` | 1단계 보안 조치 (진행 중) |
 | `docs/RISK_ANALYSIS.md` | 위험 분석 (부분 해결) |
 | `docs/SUPABASE_AUTH_ONBOARDING.md` | 인증 부트스트랩 온보딩 설계 (3-1) |
+| `docs/SUPABASE_ORDER_INVENTORY_RPC.md` | 주문/재고 보호 RPC 설계 (3-2) |
 
 ### 테스트 파일
 
-#### 실행용 pgTAP 파일 (2개)
+#### 실행용 pgTAP 파일 (3개)
 
 | 파일 | 내용 |
 |---|---|
 | `supabase/tests/rls_access_matrix.test.sql` | pgTAP 실행 파일, 25 assertion (로컬 PASS) |
 | `supabase/tests/auth_onboarding.test.sql` | pgTAP 실행 파일, 20 assertion (온보딩 RPC + hardening) |
+| `supabase/tests/order_inventory_rpc.test.sql` | pgTAP 실행 파일, 35 assertion (주문/재고 RPC) |
 
 #### 설명용 시나리오 문서 (1개)
 
@@ -56,12 +59,12 @@
 |---|---|
 | 테이블 | 12 |
 | enum 타입 | 5 |
-| CHECK 제약조건 | 31 |
+| CHECK 제약조건 | 33 | (009: shipping_company, tracking_number 길이 2개 추가) |
 | UNIQUE 제약조건 | 5 |
 | partial unique index | 6 |
 | 일반 인덱스 | 48 |
 | RLS 활성화 테이블 | 12 |
-| RLS 정책 | 36 |
+| RLS 정책 | 34 | (009: orders INSERT/UPDATE 정책 제거) |
 | trigger (updated_at/version) | 9 | (profiles, stores, 6 store_data, store_members) |
 | trigger (audit metadata) | 7 | (6개 업무 테이블 + stores 별도 처리) |
 | trigger (cross-store + soft-delete 검증) | 2 | orders, inventory_logs |
@@ -69,11 +72,11 @@
 | trigger (last owner 보호) | 1 | store_members |
 | trigger (migration_runs metadata) | 1 | initiated_by 전용 |
 | trigger 총계 | 28 | |
-| helper 함수 | 3 |
+| helper 함수 | 5 | (009: recalculate_customer_aggregates, generate_order_number 2개 추가) |
 | audit 함수 | 3 |
-| security definer 함수 | 11 |
+| security definer 함수 | 16 | (009: 5개 주문 lifecycle RPC 추가) |
 | 테스트 시나리오 | 72개 (문서) + 30개 (SQL 시나리오 문서, 미실행) |
-| pgTAP 테스트 파일 | 2개 (25 + 20 = 45 assertion, **로컬 pgTAP 통과**) |
+| pgTAP 테스트 파일 | 3개 (25 + 20 + 35 = 80 assertion, **로컬 pgTAP 통과 예상**) |
 
 ---
 
@@ -267,10 +270,23 @@
 - [x] pgTAP 테스트 8개 추가 (T13-T20: NULL 검증, 삭제 store, 권한 확인)
 - [x] 총 20 assertion (12 → 20)
 
+### Phase 3-2 완료: Protected Order and Inventory Transaction RPC
+
+- [x] 009 migration 추가 (orders 배송필드, 2개 private helper, 5개 공개 RPC, DML 차단)
+- [x] create_order RPC (PENDING 생성, 예약 재고, RESERVE log, snapshot 자동 저장)
+- [x] update_pending_order RPC (수량/상품 변경 시 예약 조정, deadlock 방지 UUID 정렬)
+- [x] ship_order RPC (PENDING→SHIPPED, 실제 재고 차감, 수익 계산, 고객 집계 갱신)
+- [x] cancel_order RPC (PENDING→CANCELLED, 예약 해제, RELEASE log)
+- [x] complete_order RPC (SHIPPED→COMPLETED, 고객 집계 재계산)
+- [x] orders 직접 INSERT/UPDATE 권한 revoke + 정책 삭제
+- [x] products 재고 컬럼 직접 수정 차단 (column-level grant)
+- [x] customers 집계 컬럼 직접 수정 차단 (column-level grant)
+- [x] pgTAP 테스트 35개 추가 (생성/수정/출고/취소/완료 + DML 차단 + cross-store)
+- [x] 주문번호 자동 생성 (ORD-0001 형식, store별, advisory lock)
+
 ### Phase 3 전 추가 준비 (미완료)
 
 - [ ] staff 제한 view 설계 (원가/개인정보 숨김)
-- [ ] 주문/재고 RPC 설계
 - [ ] Supabase JS client 설정
 - [ ] 로그인 구현 (OAuth 또는 이메일)
 - [ ] localStorage → Supabase 마이그레이션 스크립트
