@@ -297,10 +297,18 @@ RLS 정책 실패 시 다음을 확인:
 - 파일: `supabase/tests/rls_access_matrix.test.sql`
 - plan(25): 25개 assertion (lives_ok 7 + throws_ok 9 + is 9)
 - BEGIN/ROLLBACK으로 트랜잭션 격리
-- `set_request_user(uuid)` 헬퍼 함수로 `SET LOCAL ROLE authenticated` + `request.jwt.claim.sub` 설정
+- `public.set_request_user(uuid)` 헬퍼 함수로 `SET LOCAL ROLE authenticated` + `request.jwt.claim.sub` 설정
 - auth.uid() 재정의 없음
 - psql \set 없음
-- historical order setup 순서: active product 생성 → order 생성 → product soft delete → notes 수정 테스트
+- setup: 관리자 역할 유지 + JWT claim만 설정 (SET ROLE authenticated 없이)
+- store A 데이터: owner claim으로 생성
+- store B 데이터: other owner claim으로 생성
+- setup 완료 후 claim 초기화
+- inventory enum: `ADJUSTMENT` (실제 enum 값 사용)
+- throws_ok: SQLSTATE `P0001` + 정확한 오류 메시지로 검증
+- historical order setup 순서: active product 생성 → order 생성 → product soft delete → notes 수정
 - cross-store 테스트: store B UUID 명시적 사용 (product: 55555555-5555-5555-5555-555555555555, customer: 66666666-6666-6666-6666-666666666666)
 - manager store_members UPDATE: lives_ok (0 rows) + is (role unchanged) 방식
-- cleanup: RESET ROLE + JWT claim 초기화 + DROP FUNCTION IF EXISTS
+- cleanup: RESET ROLE + SELECT set_config (JWT claim 초기화) + DROP FUNCTION IF EXISTS public.set_request_user(uuid)
+- auth.users fixture: id, email 최소 필드만, 실패 시 테스트 전체 실패 (예외 삼키지 않음)
+- 미실행 상태: Supabase CLI + Docker 필요

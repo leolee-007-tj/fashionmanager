@@ -7,16 +7,18 @@
 --
 -- EXECUTION:
 --   supabase test db
---   (Requires Supabase CLI with local Supabase instance)
+--   (Requires Supabase CLI with local Supabase instance and Docker)
 --
 -- STATUS: NOT EXECUTED. File written but not run against any database.
 --
 -- CONVENTIONS:
---   - Uses pgTAP functions (plan, lives_ok, throws_ok, is, finish)
---   - Sets authenticated role + request.jwt.claim.sub to simulate user context
---   - All data is created inside the transaction and rolled back
---   - auth.uid() is NEVER overridden with CREATE OR REPLACE
+--   - Uses pgTAP functions: plan, lives_ok, throws_ok, is, finish
+--   - SET LOCAL ROLE authenticated + request.jwt.claim.sub for user simulation
+--   - All data inside transaction, rolled back at end
+--   - auth.uid() is NEVER overridden
 --   - No psql-only \set syntax
+--   - Setup runs in admin/postgres role with JWT claims set only
+--   - Cleanup: RESET ROLE, clear JWT claims, DROP helper
 --
 -- ============================================================
 
@@ -28,16 +30,16 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
--- Assertion count: 25 (lives_ok + throws_ok + is calls below)
+-- Assertion count: 25 (lives_ok 7 + throws_ok 9 + is 9)
 SELECT plan(25);
 
 -- ------------------------------------------------------------
 -- Helper: set_request_user
--- Sets the authenticated role and JWT claim to simulate a logged-in user.
+-- Sets authenticated role and JWT claim to simulate a logged-in user.
 -- Does NOT override auth.uid().
 -- ------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION set_request_user(p_user_id uuid)
+CREATE OR REPLACE FUNCTION public.set_request_user(p_user_id uuid)
 RETURNS void AS $$
 BEGIN
     SET LOCAL ROLE authenticated;
@@ -48,122 +50,130 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ------------------------------------------------------------
--- Setup: Set owner context BEFORE creating test data
--- This ensures triggers (handle_audit_metadata etc.) set created_by correctly.
+-- Setup: JWT claims for owner (store A)
+-- Role stays as superuser/admin. Only JWT claim is set so that
+-- auth.uid() returns the owner UUID for trigger created_by assignment.
 -- ------------------------------------------------------------
 
-SELECT set_request_user('11111111-1111-1111-1111-111111111111');
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
+SELECT set_config('request.jwt.claims',
+    json_build_object(
+        'sub', '11111111-1111-1111-1111-111111111111',
+        'role', 'authenticated'
+    )::text,
+    true
+);
 
 -- ------------------------------------------------------------
--- Setup: test data
+-- Setup: auth.users test fixtures
 -- ------------------------------------------------------------
--- UUIDs:
---   owner:    11111111-1111-1111-1111-111111111111
---   manager:  22222222-2222-2222-2222-222222222222
---   staff:    33333333-3333-3333-3333-333333333333
---   other:    44444444-4444-4444-4444-444444444444
---   store_a:  aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
---   store_b:  bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
+-- Minimal fields only.
+-- On failure, test will fail (no exception swallowing).
 
-DO $$
-DECLARE
-    v_user_owner uuid     := '11111111-1111-1111-1111-111111111111';
-    v_user_manager uuid   := '22222222-2222-2222-2222-222222222222';
-    v_user_staff uuid     := '33333333-3333-3333-3333-333333333333';
-    v_user_other uuid     := '44444444-4444-4444-4444-444444444444';
-    v_store_a uuid        := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
-    v_store_b uuid        := 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
-    v_prod_active uuid    := 'cccccccc-cccc-cccc-cccc-cccccccccccc';
-    v_prod_to_delete uuid := 'dddddddd-dddd-dddd-dddd-dddddddddddd';
-    v_prod_deleted_2 uuid := 'd0d0d0d0-d0d0-d0d0-d0d0-d0d0d0d0d0d0';
-    v_prod_store_b uuid   := '55555555-5555-5555-5555-555555555555';
-    v_cust_active uuid    := 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
-    v_cust_store_b uuid   := '66666666-6666-6666-6666-666666666666';
-    v_order_hist uuid     := '10101010-1010-1010-1010-101010101010';
-BEGIN
-    -- Insert test users into auth.users
-    BEGIN
-        INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at, created_at)
-        VALUES
-            (v_user_owner,   'owner@test.local',   '$2a$10$test', now(), now()),
-            (v_user_manager, 'manager@test.local', '$2a$10$test', now(), now()),
-            (v_user_staff,   'staff@test.local',   '$2a$10$test', now(), now()),
-            (v_user_other,   'other@test.local',   '$2a$10$test', now(), now())
-        ON CONFLICT (id) DO NOTHING;
-    EXCEPTION
-        WHEN insufficient_privilege THEN
-            RAISE NOTICE 'Cannot insert into auth.users: %', SQLERRM;
-    END;
+INSERT INTO auth.users (id, email)
+VALUES
+    ('11111111-1111-1111-1111-111111111111', 'owner@test.local'),
+    ('22222222-2222-2222-2222-222222222222', 'manager@test.local'),
+    ('33333333-3333-3333-3333-333333333333', 'staff@test.local'),
+    ('44444444-4444-4444-4444-444444444444', 'other@test.local')
+ON CONFLICT (id) DO NOTHING;
 
-    -- Create store A (owned by owner)
-    INSERT INTO public.stores (id, name, created_by)
-    VALUES (v_store_a, 'Test Store A', v_user_owner);
+-- ------------------------------------------------------------
+-- Setup: store A + its members + products + customers
+-- (current JWT claim = owner user)
+-- ------------------------------------------------------------
 
-    -- Create store B (owned by other)
-    INSERT INTO public.stores (id, name, created_by)
-    VALUES (v_store_b, 'Test Store B', v_user_other);
+-- Store A
+INSERT INTO public.stores (id, name, created_by)
+VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Test Store A', '11111111-1111-1111-1111-111111111111');
 
-    -- Create store_members for store A
-    INSERT INTO public.store_members (id, store_id, user_id, role, is_active)
-    VALUES
-        ('aaaa1111-aaaa-aaaa-aaaa-aaaaaaaaaaaa', v_store_a, v_user_owner,   'owner',   true),
-        ('aaaa2222-aaaa-aaaa-aaaa-aaaaaaaaaaaa', v_store_a, v_user_manager, 'manager', true),
-        ('aaaa3333-aaaa-aaaa-aaaa-aaaaaaaaaaaa', v_store_a, v_user_staff,   'staff',   true);
+-- Store members for store A
+INSERT INTO public.store_members (id, store_id, user_id, role, is_active)
+VALUES
+    ('aaaa1111-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111', 'owner',   true),
+    ('aaaa2222-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '22222222-2222-2222-2222-222222222222', 'manager', true),
+    ('aaaa3333-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '33333333-3333-3333-3333-333333333333', 'staff',   true);
 
-    -- Create store_members for store B
-    INSERT INTO public.store_members (id, store_id, user_id, role, is_active)
-    VALUES
-        ('bbbb1111-bbbb-bbbb-bbbb-bbbbbbbbbbbb', v_store_b, v_user_other, 'owner', true);
+-- Active product in store A
+INSERT INTO public.products (id, store_id, product_code, original_title, brand, current_stock, created_by)
+VALUES ('cccccccc-cccc-cccc-cccc-cccccccccccc', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'ACT-001', 'Active Product', 'TestBrand', 100, '11111111-1111-1111-1111-111111111111');
 
-    -- Create active product in store A (for general use and order product_id change test)
-    INSERT INTO public.products (id, store_id, product_code, original_title, brand, current_stock, created_by)
-    VALUES (v_prod_active, v_store_a, 'ACT-001', 'Active Product', 'TestBrand', 100, v_user_owner);
+-- Product to be soft-deleted AFTER order creation (for historical order test)
+INSERT INTO public.products (id, store_id, product_code, original_title, brand, current_stock, created_by)
+VALUES ('dddddddd-dddd-dddd-dddd-dddddddddddd', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'HIST-001', 'Historical Product', 'TestBrand', 50, '11111111-1111-1111-1111-111111111111');
 
-    -- Create product in store A that will be soft-deleted AFTER order creation
-    -- Step 1: Create as active
-    INSERT INTO public.products (id, store_id, product_code, original_title, brand, current_stock, created_by)
-    VALUES (v_prod_to_delete, v_store_a, 'HIST-001', 'Historical Product', 'TestBrand', 50, v_user_owner);
+-- Another soft-deleted product (for product_id change failure test)
+-- No order references it, so deleted_at can be set at creation.
+INSERT INTO public.products (id, store_id, product_code, original_title, brand, current_stock, deleted_at, created_by)
+VALUES ('d0d0d0d0-d0d0-d0d0-d0d0-d0d0d0d0d0d0', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'DEL-002', 'Deleted Product 2', 'TestBrand', 30, now(), '11111111-1111-1111-1111-111111111111');
 
-    -- Create another soft-deleted product in store A (for product_id change failure test)
-    -- This product is deleted at creation time; no order references it so no trigger conflict
-    INSERT INTO public.products (id, store_id, product_code, original_title, brand, current_stock, deleted_at, created_by)
-    VALUES (v_prod_deleted_2, v_store_a, 'DEL-002', 'Deleted Product 2', 'TestBrand', 30, now(), v_user_owner);
+-- Active customer in store A
+INSERT INTO public.customers (id, store_id, name, created_by)
+VALUES ('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Active Customer', '11111111-1111-1111-1111-111111111111');
 
-    -- Create active product in store B (for cross-store test)
-    INSERT INTO public.products (id, store_id, product_code, original_title, brand, current_stock, created_by)
-    VALUES (v_prod_store_b, v_store_b, 'STB-001', 'Store B Product', 'TestBrand', 80, v_user_other);
+-- Historical order linked to active product dddddddd (will be deleted later)
+INSERT INTO public.orders (
+    id, store_id, order_number, customer_id, product_id,
+    customer_name_snapshot, product_title_snapshot, brand_snapshot,
+    quantity, selling_price, status, order_date, created_by
+) VALUES (
+    '10101010-1010-1010-1010-101010101010',
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    'ORD-HIST-001',
+    'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
+    'dddddddd-dddd-dddd-dddd-dddddddddddd',
+    'Active Customer', 'Historical Product', 'TestBrand',
+    1, 10000, 'COMPLETED', '2026-01-15',
+    '11111111-1111-1111-1111-111111111111'
+);
 
-    -- Create active customer in store A
-    INSERT INTO public.customers (id, store_id, name, created_by)
-    VALUES (v_cust_active, v_store_a, 'Active Customer', v_user_owner);
+-- Soft-delete the product AFTER order creation
+UPDATE public.products
+SET deleted_at = now()
+WHERE id = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
 
-    -- Create active customer in store B (for cross-store test)
-    INSERT INTO public.customers (id, store_id, name, created_by)
-    VALUES (v_cust_store_b, v_store_b, 'Store B Customer', v_user_other);
+-- ------------------------------------------------------------
+-- Setup: store B + its owner + products + customers
+-- Switch JWT claim to other owner for store B data
+-- ------------------------------------------------------------
 
-    -- Step 2: Create historical order linked to active v_prod_to_delete
-    -- Product is still active, so validate_order_store_consistency trigger passes
-    INSERT INTO public.orders (
-        id, store_id, order_number, customer_id, product_id,
-        customer_name_snapshot, product_title_snapshot, brand_snapshot,
-        quantity, selling_price, status, order_date, created_by
-    ) VALUES (
-        v_order_hist, v_store_a, 'ORD-HIST-001', v_cust_active, v_prod_to_delete,
-        'Active Customer', 'Historical Product', 'TestBrand',
-        1, 10000, 'COMPLETED', '2026-01-15', v_user_owner
-    );
+SELECT set_config('request.jwt.claim.sub', '44444444-4444-4444-4444-444444444444', true);
+SELECT set_config('request.jwt.claims',
+    json_build_object(
+        'sub', '44444444-4444-4444-4444-444444444444',
+        'role', 'authenticated'
+    )::text,
+    true
+);
 
-    -- Step 3: Soft-delete v_prod_to_delete AFTER order creation
-    -- The order still references this product; future notes updates should succeed
-    -- because product_id is not being changed.
-    UPDATE public.products
-    SET deleted_at = now()
-    WHERE id = v_prod_to_delete;
-END $$;
+-- Store B
+INSERT INTO public.stores (id, name, created_by)
+VALUES ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'Test Store B', '44444444-4444-4444-4444-444444444444');
+
+-- Store member for store B
+INSERT INTO public.store_members (id, store_id, user_id, role, is_active)
+VALUES ('bbbb1111-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '44444444-4444-4444-4444-444444444444', 'owner', true);
+
+-- Active product in store B (for cross-store test)
+INSERT INTO public.products (id, store_id, product_code, original_title, brand, current_stock, created_by)
+VALUES ('55555555-5555-5555-5555-555555555555', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'STB-001', 'Store B Product', 'TestBrand', 80, '44444444-4444-4444-4444-444444444444');
+
+-- Active customer in store B (for cross-store test)
+INSERT INTO public.customers (id, store_id, name, created_by)
+VALUES ('66666666-6666-6666-6666-666666666666', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'Store B Customer', '44444444-4444-4444-4444-444444444444');
+
+-- ------------------------------------------------------------
+-- Setup: Clear JWT claims, keep admin role
+-- ------------------------------------------------------------
+
+SELECT set_config('request.jwt.claim.sub', '', true);
+SELECT set_config('request.jwt.claims', '', true);
 
 -- ============================================================
 -- T1: Owner can view their own store
 -- ============================================================
+
+SELECT public.set_request_user('11111111-1111-1111-1111-111111111111');
 
 SELECT is(
     (SELECT count(*)::integer FROM public.stores WHERE id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'),
@@ -185,7 +195,7 @@ SELECT is(
 -- T3: Manager can insert product
 -- ============================================================
 
-SELECT set_request_user('22222222-2222-2222-2222-222222222222');
+SELECT public.set_request_user('22222222-2222-2222-2222-222222222222');
 
 SELECT lives_ok(
     $$
@@ -199,7 +209,7 @@ SELECT lives_ok(
 -- T4: Staff gets 0 rows from products base table
 -- ============================================================
 
-SELECT set_request_user('33333333-3333-3333-3333-333333333333');
+SELECT public.set_request_user('33333333-3333-3333-3333-333333333333');
 
 SELECT is(
     (SELECT count(*)::integer FROM public.products),
@@ -208,23 +218,20 @@ SELECT is(
 );
 
 -- ============================================================
--- T5: Manager cannot update store_members (RLS blocks, 0 rows affected)
+-- T5: Manager cannot update store_members (RLS blocks = 0 rows)
 -- ============================================================
 
-SELECT set_request_user('22222222-2222-2222-2222-222222222222');
+SELECT public.set_request_user('22222222-2222-2222-2222-222222222222');
 
--- RLS policy allows only owners to UPDATE store_members.
--- Manager gets 0 rows updated (no exception, just silently blocked).
 SELECT lives_ok(
     $$
     UPDATE public.store_members
     SET role = 'manager'
     WHERE id = 'aaaa3333-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
     $$,
-    'T5a: Manager store_members UPDATE completes (0 rows affected, no error)'
+    'T5a: Manager store_members UPDATE completes (0 rows, RLS blocked)'
 );
 
--- Verify the staff role is unchanged
 SELECT is(
     (SELECT role::text FROM public.store_members WHERE id = 'aaaa3333-aaaa-aaaa-aaaa-aaaaaaaaaaaa'),
     'staff',
@@ -232,12 +239,11 @@ SELECT is(
 );
 
 -- ============================================================
--- T6: Cross-store customer order creation fails (trigger)
+-- T6: Cross-store customer order creation fails (trigger P0001)
 -- ============================================================
 
-SELECT set_request_user('11111111-1111-1111-1111-111111111111');
+SELECT public.set_request_user('11111111-1111-1111-1111-111111111111');
 
--- Store A order with Store B customer
 SELECT throws_ok(
     $$
     INSERT INTO public.orders (store_id, order_number, customer_id, product_id, quantity, selling_price)
@@ -249,14 +255,15 @@ SELECT throws_ok(
         1, 10000
     );
     $$,
-    'T6: Cross-store customer order creation fails'
+    'P0001',
+    'customer_id must be active and belong to the same store',
+    'T6: Cross-store customer order creation fails with trigger error'
 );
 
 -- ============================================================
--- T7: Cross-store product order creation fails (trigger)
+-- T7: Cross-store product order creation fails (trigger P0001)
 -- ============================================================
 
--- Store A order with Store B product
 SELECT throws_ok(
     $$
     INSERT INTO public.orders (store_id, order_number, customer_id, product_id, quantity, selling_price)
@@ -268,16 +275,20 @@ SELECT throws_ok(
         1, 10000
     );
     $$,
-    'T7: Cross-store product order creation fails'
+    'P0001',
+    'product_id must be active and belong to the same store',
+    'T7: Cross-store product order creation fails with trigger error'
 );
 
 -- ============================================================
--- T8: Cross-store inventory_log creation fails (trigger)
+-- T8: Cross-store inventory_log creation fails (trigger P0001)
+-- inventory_logs has no INSERT RLS for authenticated, so we test
+-- the trigger logic directly in admin role.
 -- ============================================================
--- inventory_logs has no INSERT policy for authenticated, so RLS blocks first.
--- To test the trigger itself, we bypass RLS by resetting to superuser.
 
 RESET ROLE;
+SELECT set_config('request.jwt.claim.sub', '', true);
+SELECT set_config('request.jwt.claims', '', true);
 
 SELECT throws_ok(
     $$
@@ -285,18 +296,20 @@ SELECT throws_ok(
     VALUES (
         'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
         '55555555-5555-5555-5555-555555555555',
-        'RESTOCK',
+        'ADJUSTMENT',
         10
     );
     $$,
-    'T8: Cross-store inventory_log product connection fails'
+    'P0001',
+    'product_id must be active and belong to the same store',
+    'T8: Cross-store inventory_log product connection fails with trigger error'
 );
 
 -- Restore owner context
-SELECT set_request_user('11111111-1111-1111-1111-111111111111');
+SELECT public.set_request_user('11111111-1111-1111-1111-111111111111');
 
 -- ============================================================
--- T9: Soft-deleted product new order connection fails (trigger)
+-- T9: Soft-deleted product new order fails (trigger P0001)
 -- ============================================================
 
 SELECT throws_ok(
@@ -310,6 +323,8 @@ SELECT throws_ok(
         1, 5000
     );
     $$,
+    'P0001',
+    'product_id must be active and belong to the same store',
     'T9: Cannot create new order with soft-deleted product'
 );
 
@@ -336,6 +351,8 @@ SELECT throws_ok(
     SET product_id = 'd0d0d0d0-d0d0-d0d0-d0d0-d0d0d0d0d0d0'
     WHERE id = '10101010-1010-1010-1010-101010101010';
     $$,
+    'P0001',
+    'product_id must be active and belong to the same store',
     'T11: Cannot change product_id to another soft-deleted product'
 );
 
@@ -353,7 +370,7 @@ SELECT lives_ok(
 );
 
 -- ============================================================
--- T13: Last owner deactivation fails
+-- T13: Last owner deactivation fails (trigger P0001)
 -- ============================================================
 
 SELECT throws_ok(
@@ -363,11 +380,13 @@ SELECT throws_ok(
     WHERE user_id = '11111111-1111-1111-1111-111111111111'
       AND store_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
     $$,
+    'P0001',
+    'Cannot remove the last active owner of a store',
     'T13: Cannot deactivate last active owner'
 );
 
 -- ============================================================
--- T14: Last owner role change fails
+-- T14: Last owner role change fails (trigger P0001)
 -- ============================================================
 
 SELECT throws_ok(
@@ -377,14 +396,14 @@ SELECT throws_ok(
     WHERE user_id = '11111111-1111-1111-1111-111111111111'
       AND store_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
     $$,
+    'P0001',
+    'Cannot remove the last active owner of a store',
     'T14: Cannot change last owner role to manager'
 );
 
 -- ============================================================
--- T15: Staff membership user_id change fails (trigger)
+-- T15: store_members user_id change fails (trigger P0001)
 -- ============================================================
--- Use staff membership (not owner) to test user_id protection.
--- Owner can UPDATE store_members (RLS allows), but trigger blocks user_id change.
 
 SELECT throws_ok(
     $$
@@ -392,6 +411,8 @@ SELECT throws_ok(
     SET user_id = '22222222-2222-2222-2222-222222222222'
     WHERE id = 'aaaa3333-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
     $$,
+    'P0001',
+    'Changing user_id is not allowed. Deactivate existing membership and create a new one instead.',
     'T15: Cannot change store_members user_id'
 );
 
@@ -417,6 +438,10 @@ SELECT lives_ok(
     'T17: Owner can insert migration_runs'
 );
 
+-- ============================================================
+-- T18: migration_runs initiated_by matches auth.uid()
+-- ============================================================
+
 SELECT is(
     (SELECT initiated_by::text FROM public.migration_runs WHERE source_type = 'test_migration' LIMIT 1),
     '11111111-1111-1111-1111-111111111111',
@@ -437,7 +462,7 @@ SELECT lives_ok(
 );
 
 -- ============================================================
--- T20: migration_runs version incremented after update
+-- T20: migration_runs version incremented
 -- ============================================================
 
 SELECT is(
@@ -460,14 +485,14 @@ SELECT lives_ok(
 );
 
 -- ============================================================
--- T22: Physical DELETE fails (no policy / no grant)
+-- T22: Physical DELETE fails (permission denied / no policy)
 -- ============================================================
 
 SELECT throws_ok(
     $$
     DELETE FROM public.products WHERE product_code = 'MGR-TEST-1';
     $$,
-    'T22: Physical DELETE is blocked'
+    'T22: Physical DELETE is blocked (permission or policy)'
 );
 
 -- ============================================================
@@ -477,14 +502,14 @@ SELECT throws_ok(
 SELECT is(
     (SELECT count(*)::integer FROM public.products WHERE deleted_at IS NOT NULL),
     2,
-    'T23: Owner can view soft-deleted products (2 deleted: HIST-001, DEL-002)'
+    'T23: Owner can view soft-deleted products (HIST-001, DEL-002)'
 );
 
 -- ============================================================
 -- T24: Manager cannot view soft-deleted products
 -- ============================================================
 
-SELECT set_request_user('22222222-2222-2222-2222-222222222222');
+SELECT public.set_request_user('22222222-2222-2222-2222-222222222222');
 
 SELECT is(
     (SELECT count(*)::integer FROM public.products WHERE deleted_at IS NOT NULL),
@@ -497,10 +522,10 @@ SELECT is(
 -- ============================================================
 
 RESET ROLE;
-PERFORM set_config('request.jwt.claim.sub', '', true);
-PERFORM set_config('request.jwt.claims', '', true);
+SELECT set_config('request.jwt.claim.sub', '', true);
+SELECT set_config('request.jwt.claims', '', true);
 
-DROP FUNCTION IF EXISTS set_request_user(uuid);
+DROP FUNCTION IF EXISTS public.set_request_user(uuid);
 
 -- ============================================================
 -- Finish
