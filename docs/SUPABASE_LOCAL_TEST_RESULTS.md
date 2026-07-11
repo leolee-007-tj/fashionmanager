@@ -201,6 +201,73 @@
 - [x] config.toml 커밋하지 않음
 - [x] data_export.json 미생성
 
+## JavaScript Foundation Unit Tests
+
+3-4A 단계에서 추가된 Supabase JS 클라이언트와 인증 서비스 기반 코드에 대한
+단위 테스트 결과입니다. **mock 기반이며 실제 네트워크 호출은 없습니다.**
+
+### 실행 환경
+
+| 항목 | 값 |
+|---|---|
+| 테스트 러너 | Node.js 내장 `node:test` |
+| Node 버전 | v20.x (Docker node:20-alpine) |
+| 외부 의존성 | 없음 (npm install 불필요) |
+| mock 방식 | global.supabase에 mock client 주입 |
+| 실제 네트워크 호출 | 0 |
+
+### 실행 명령
+
+```bash
+node --test tests/supabase-client.test.js tests/auth-service.test.js
+```
+
+### 테스트 결과
+
+| 항목 | 값 |
+|---|---|
+| 테스트 파일 | 2 |
+| 총 테스트 수 | 15 |
+| pass | **15** |
+| fail | **0** |
+| 실제 Supabase 호출 | 0 |
+| 실제 URL/key 사용 | 0 |
+
+### 테스트 상세
+
+**supabase-client.test.js (6/6 PASS)**
+
+| # | 테스트 | 결과 |
+|---|---|---|
+| T1 | disabled config에서 client를 생성하지 않음 | PASS |
+| T2 | enabled 상태의 잘못된 URL 차단 | PASS |
+| T3 | enabled 상태의 빈 client key 차단 | PASS |
+| T4 | sb_secret_ key와 service_role JWT 차단 | PASS |
+| T5 | 정상 mock config에서 client 정확히 1회 생성 | PASS |
+| T6 | createClient에 auth persistence 옵션 전달 확인 | PASS |
+
+**auth-service.test.js (9/9 PASS)**
+
+| # | 테스트 | 결과 |
+|---|---|---|
+| T7 | 빈 email/password 로그인 차단 | PASS |
+| T8 | signInWithPassword에 정제된 email과 password 전달 | PASS |
+| T9 | getSession이 session/user 반환 | PASS |
+| T10 | signOut 호출 및 true 반환 | PASS |
+| T11 | subscribe가 auth 이벤트 전달하고 unsubscribe 가능 | PASS |
+| T12 | ensureUserProfile이 정확한 RPC 이름과 인자 사용 | PASS |
+| T13 | bootstrapAuthenticatedUser가 세션 없을 때 signed_out 반환 | PASS |
+| T14 | 세션은 있지만 membership이 없으면 needs_store_onboarding 반환 | PASS |
+| T15 | createInitialStore가 정확한 RPC 이름과 인자 사용 | PASS |
+
+### 주요 사항
+
+- 실제 Auth / REST 네트워크 통합 테스트는 아직 미실행
+- 실제 원격 Supabase 미연결
+- index.html 미변경 (새 JS 파일 로드 안 함)
+- 기존 localStorage 앱 미변경
+- 기존 DB migration 11개, pgTAP 131개 회귀 없음
+
 ## 아직 검증되지 않은 항목
 
 - 원격 Supabase 클라우드 환경에서의 migration 적용

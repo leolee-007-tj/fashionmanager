@@ -1,8 +1,10 @@
 # 현재 아키텍처 분석서
 
-> 본 문서는 `feature/supabase-cloud-migration` 브랜치 기준 main 커밋 `9890548`의 실제 코드를 기반으로 작성됐다.
+> 본 문서는 `feature/supabase-cloud-migration` 브랜치 기준으로 작성됐다.
 > 추정 내용은 "추정"으로 명시하고, 확인하지 못한 내용은 "확인 필요"로 표시한다.
 > 개인정보(고객명, 전화번호, 주소, 이메일)는 포함하지 않는다.
+>
+> **업데이트: 3-4 단계 Supabase JS Client & Auth Foundation 추가 (미로드·미연결 상태)
 
 ## 1. 앱 구조 개요
 
@@ -11,6 +13,7 @@
 | 앱 유형 | 정적 HTML/JS/CSS 단일 페이지 애플리케이션 (서버 백엔드 없음) |
 | 호스팅 | GitHub Pages (`https://{username}.github.io/{repo}/`) |
 | 데이터 저장 | 브라우저 localStorage (prefix: `lesoul_gh_`) |
+| Supabase | **기반 코드만 있음 (미로드·미연결·미사용)** |
 | 라우팅 | Hash 기반 (`#/dashboard`, `#/products` 등) |
 | 렌더링 | 동기식 HTML 문자열 반환 → `innerHTML` 주입 |
 | 다국어 | 4개 언어 (ko, zh, en, ja), `i18n.js`에서 관리 |
@@ -36,13 +39,22 @@ github-pages-version/
 │   ├── excel.js            # Excel 가져오기/내보내기 (XLSX 라이브러리)
 │   ├── settings.js         # 설정 (언어/매장/가격계산/백업)
 │   ├── app.js              # 메인 앱 (라우터/렌더러/대시보드/분류키워드)
-│   └── app_backup.js       # ★ 사용되지 않음 (index.html에서 로드 안 함, 백업 파일)
+│   ├── app_backup.js       # ★ 사용되지 않음 (index.html에서 로드 안 함, 백업 파일)
+│   ├── config.example.js   # ★ Supabase 설정 예제 (git tracked, 미로드)
+│   ├── supabase-client.js  # ★ Supabase 클라이언트 어댑터 (미로드·미사용)
+│   └── auth-service.js     # ★ 인증 서비스 (미로드·미사용)
+├── tests/
+│   ├── supabase-client.test.js  # ★ Supabase 클라이언트 단위 테스트
+│   └── auth-service.test.js     # ★ 인증 서비스 단위 테스트
 ├── data_export.json        # ★ 운영 데이터 덤프 (추정: Flask 원본 앱에서 내보낸 데이터)
 ├── docs/
 │   ├── BASELINE_STATUS.md  # 0단계 기준 상태 문서
 │   └── (본 문서들)
 └── .gitignore              # 0단계에서 추가됨
 ```
+
+**참고**: `config.js`는 `.gitignore`에 포함되어 있어 git에 추적되지 않는다.
+실제 Supabase URL/key는 로컬에서 `js/config.js`에만 저장한다.
 
 ## 2. 파일별 역할
 
@@ -338,7 +350,49 @@ product.reserved_stock -= quantity
 상태만 변경 (재고 변동 없음, Customers.recalculateAll() 호출)
 ```
 
-## 7. 확인 필요 항목
+## 7. Supabase JS 기반 (미로드·미연결)
+
+3-4 단계에서 추가된 Supabase 브라우저 클라이언트와 인증 서비스 기반 코드.
+**현재 index.html에서 로드하지 않으므로 앱 동작에 영향이 없다.**
+
+### `js/config.example.js`
+- Supabase 설정 예제 파일 (git tracked)
+- 실제 값 없이 빈 문자열로 구성
+- `SUPABASE_ENABLED` 기본값 `false`
+- 실제 설정은 `js/config.js`에 로컬로 저장 (git ignored)
+
+### `js/supabase-client.js` — `LESOULSupabase` 전역 객체
+- Supabase 클라이언트 어댑터
+- `init()`, `isEnabled()`, `isInitialized()`, `getClient()`, `getStatus()`
+- `SUPABASE_ENABLED=false`이면 client 생성 안 함
+- secret/service_role key 명시적 차단
+- `SECURITY DEFINER` RPC와 함께 사용
+
+### `js/auth-service.js` — `LESOULAuth` 전역 객체
+- 인증 서비스 래퍼
+- `signInWithPassword`, `signOut`, `getSession`, `getCurrentUser`, `subscribe`
+- `ensureUserProfile`, `getActiveMemberships`, `bootstrapAuthenticatedUser`, `createInitialStore`
+- 자동 매장 생성 없음 (명시적 호출로만)
+
+### `tests/supabase-client.test.js` / `tests/auth-service.test.js`
+- Node 내장 test runner 사용
+- mock 기반 단위 테스트
+- 실제 네트워크 호출 없음
+- 총 15개 test case, 전부 PASS
+
+### 향후 로딩 순서 (예정)
+```
+supabase-js CDN → config.js → supabase-client.js → auth-service.js → (기존 스크립트들)
+```
+
+### 현재 상태 요약
+- 데이터 저장: 여전히 localStorage
+- index.html 스크립트 순서: 아직 변경되지 않음
+- 앱 기능 전환: 아직 이뤄지지 않음
+- Supabase 원격 연결: 아직 안 함
+- 로그인 화면: 아직 표시되지 않음
+
+## 8. 확인 필요 항목
 
 - `data_export.json`의 정확한 출처 (Flask 앱에서 내보낸 것인지, 수동 생성인지) - "확인 필요"
 - `app_backup.js`가 언제 생성됐는지 (Git 히스토리 추적 가능하지만 이번 분석 범위 외) - "확인 필요"
