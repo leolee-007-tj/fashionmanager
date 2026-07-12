@@ -390,3 +390,87 @@ UI에는 다음 안전 문구만 표시한다.
 - 인증 게이트만 추가
 - 상품·주문·고객 데이터는 여전히 `js/db.js`의 localStorage 기반
 - 기존 업무 모듈 변경 0건
+
+## 3-4B.2 업데이트: Auth Error Recovery & CDN Retry
+
+### 오류 Retry Button 렌더링 수정
+
+- `showError()`에서 `buttonRow`를 `panel`에 추가하지 않던 버그 수정
+- `onRetry`가 있을 때만 `buttonRow`를 생성하고 `panel`에 `appendChild`
+- `onRetry`가 없으면 빈 `buttonRow`를 만들지 않음
+- retry button listener는 화면 전환 시 `_clear()`에서 해제
+
+### Retry Listener Cleanup
+
+- `_clear()` 호출 시 모든 추적 listener를 `removeEventListener`로 해제
+- 화면 전환(예: `showError` → `showLoading`) 시 이전 retry listener 제거
+- listener 누적 방지
+
+### CDN Load-State 관리
+
+- `<script>`에 `data-load-state` 속성 추가: `loading` | `loaded` | `failed`
+- `data-supabase-cdn="true"` 속성으로 CDN script 식별
+
+### Failed Script 제거
+
+- `data-load-state="failed"`인 script를 DOM에서 제거
+- retry 시 실패한 script를 재사용하지 않음
+- 새 script를 생성하여 재시도
+
+### 기존 Loading Script Timeout
+
+- `data-load-state="loading"`인 기존 script에도 timeout/error listener 등록
+- 15초 timeout 적용 (테스트 시 `cdnTimeoutMs`로 주입 가능)
+- timeout 또는 error 발생 시:
+  - `data-load-state`를 `failed`로 설정
+  - listener와 timer 정리
+  - 해당 script를 DOM에서 제거
+  - `SUPABASE_LIBRARY_LOAD_FAILED` reject
+
+### Retry Dependency 보존
+
+- `retry()`에서 `start({ deps })`에 `getLogoutElement` 포함
+- retry 후에도 동일한 logout element 사용
+- logout listener 중복 없음
+- default document lookup으로 의도치 않게 변경되지 않음
+
+### signOut 실패 시 실제 signOut 재시도
+
+- 로그아웃 실패 → error 화면의 retry 버튼이 `signOut()`을 다시 호출
+- retry 클릭만으로 `signed_out` 상태를 만들지 않음
+- 로그아웃 성공 후에만 context 초기화
+- 성공 후에만 로그인 화면 표시
+- 실패 상태에서는 앱을 숨긴 상태로 유지
+
+### Null/Unknown Bootstrap 안전 차단
+
+- `result`가 `null`/`undefined`인 경우:
+  - 앱 숨김, auth root 표시, logout button 숨김
+  - 안전 오류 화면 표시, `state=error`
+  - legacy fallback 금지
+- 알 수 없는 `status`인 경우도 동일하게 처리
+- 공통 `_safeErrorState()` helper 사용
+
+### Membership Canonical 검증
+
+- `selectMembership()` 검증 추가:
+  1. 현재 state가 `needs_store_selection`이어야 함
+  2. `membership`과 `membership.storeId`가 존재해야 함
+  3. `_context.memberships`에서 동일한 `storeId`를 찾음
+  4. 전달 객체가 아닌 context에 저장된 canonical membership 사용
+  5. 목록에 없는 storeId이면 앱에 진입하지 않음
+  6. 잘못된 선택 시 안전 오류 화면, `state=error`
+  7. storeId를 URL/hash/localStorage에 저장하지 않음
+
+### 원격 Supabase 미연결
+
+- 여전히 로컬 테스트만 진행
+- 실제 URL/key 없음
+- `js/config.js` 없음
+- 원격 Supabase 연결 안 됨
+
+### 업무 데이터는 계속 localStorage
+
+- 인증 게이트 오류 복구만 수정
+- 상품·주문·고객 데이터는 여전히 `js/db.js`의 localStorage 기반
+- 기존 업무 모듈 변경 0건

@@ -4,7 +4,7 @@
 
 | 항목 | 값 |
 |---|---|
-| 실행 날짜 | 2026-07-12 (3-4B 단계 업데이트) |
+| 실행 날짜 | 2026-07-12 (3-4B.2 단계 업데이트) |
 | OS | macOS Intel x86_64 |
 | Docker Desktop | 설치 및 실행 성공 (v29.6.1) |
 | Supabase CLI 버전 | v2.109.1 |
@@ -227,6 +227,19 @@
 - [x] **3-4B.1**: 기존 업무 모듈 변경 0 (db.js, products.js 등)
 - [x] **3-4B.1**: 신규 migration 없음
 - [x] **3-4B.1**: 실제 네트워크 호출 0
+- [x] **3-4B.2**: showError retry button 패널 추가 수정
+- [x] **3-4B.2**: retry listener cleanup (누적 0)
+- [x] **3-4B.2**: CDN load-state 관리 (loading/loaded/failed)
+- [x] **3-4B.2**: failed script 제거 후 retry에서 새 script 생성
+- [x] **3-4B.2**: 기존 loading script timeout/error cleanup
+- [x] **3-4B.2**: retry dependency 보존 (getLogoutElement 유지)
+- [x] **3-4B.2**: signOut 실패 시 실제 signOut 재시도
+- [x] **3-4B.2**: null/unknown bootstrap 안전 차단
+- [x] **3-4B.2**: forged membership 차단 (canonical 검증)
+- [x] **3-4B.2**: CDN script 중복 0
+- [x] **3-4B.2**: 기존 업무 모듈 변경 0
+- [x] **3-4B.2**: 신규 migration 없음
+- [x] **3-4B.2**: 실제 네트워크 호출 0
 
 ## JavaScript Foundation Unit Tests
 
@@ -249,6 +262,7 @@
 node --test \
 tests/supabase-client.test.js \
 tests/auth-service.test.js \
+tests/auth-ui.test.js \
 tests/app-bootstrap.test.js
 ```
 
@@ -256,13 +270,13 @@ tests/app-bootstrap.test.js
 
 | 항목 | 값 |
 |---|---|
-| 테스트 파일 | 3 |
-| 총 테스트 수 | 43 |
-| pass | **43** |
+| 테스트 파일 | 4 |
+| 총 테스트 수 | 57 |
+| pass | **57** |
 | fail | **0** |
 | 실제 Supabase 호출 | 0 |
 | 실제 URL/key 사용 | 0 |
-| 실행 시간 | ~2.0s |
+| 실행 시간 | ~1.3s |
 
 ### 테스트 상세
 
@@ -298,7 +312,17 @@ tests/app-bootstrap.test.js
 | T20 | signOut 반환 error 차단 — AUTH_SIGN_OUT_FAILED | PASS |
 | T21 | LESOULAuth.init이 초기화되지 않은 client를 차단 | PASS |
 
-**app-bootstrap.test.js (21/21 PASS) — 3-4B + 3-4B.1 신규**
+**auth-ui.test.js (5/5 PASS) — 3-4B.2 신규**
+
+| # | 테스트 | 결과 |
+|---|---|---|
+| T44 | showError가 오류 panel을 auth-root에 추가 | PASS |
+| T45 | onRetry가 있으면 "다시 시도" 버튼이 실제 panel에 추가 | PASS |
+| T46 | retry button click 시 onRetry 정확히 1회 호출 | PASS |
+| T47 | onRetry가 없으면 retry button을 생성하지 않음 | PASS |
+| T48 | 다른 화면으로 전환하면 이전 retry listener가 제거됨 | PASS |
+
+**app-bootstrap.test.js (30/30 PASS) — 3-4B + 3-4B.1 + 3-4B.2 신규**
 
 | # | 테스트 | 결과 |
 |---|---|---|
@@ -323,6 +347,15 @@ tests/app-bootstrap.test.js
 | T41 | bootstrap 진행 중 INITIAL_SESSION 이벤트가 발생해도 최초 결과가 stale 처리되지 않음 | PASS |
 | T42 | bootstrap 진행 중 SIGNED_OUT 이벤트가 발생하면 늦게 도착한 ready 결과가 무시됨 | PASS |
 | T43 | 이전 bootstrap 완료 후 새로운 SIGNED_IN 이벤트로 bootstrap 재실행 가능 | PASS |
+| T49 | retry 후에도 injected getLogoutElement가 유지됨 | PASS |
+| T50 | signOut 실패 retry 클릭 시 auth.signOut을 다시 호출 | PASS |
+| T51 | signOut 실패 retry만으로 signed_out UI를 표시하지 않음 | PASS |
+| T52 | null bootstrap 결과에서 앱이 숨겨지고 error 상태 | PASS |
+| T53 | unknown bootstrap status에서 앱이 숨겨지고 error 상태 | PASS |
+| T54 | membership 목록에 없는 storeId 선택 차단 | PASS |
+| T55 | membership 선택 시 외부 객체가 아닌 canonical membership 사용 | PASS |
+| T56 | failed CDN script 제거 후 retry에서 새 script 생성 가능 | PASS |
+| T57 | 기존 loading CDN script 경로에도 timeout/error cleanup 적용 | PASS |
 
 ### 3-4B 단계 보완 사항
 
@@ -357,6 +390,21 @@ tests/app-bootstrap.test.js
 - localStorage 접근 0 검증
 - 실제 네트워크 호출 0 검증
 
+### 3-4B.2 단계 보완 사항 (Error Recovery & CDN Retry)
+
+- showError retry button 패널 추가 버그 수정
+- retry listener cleanup (화면 전환 시 이전 listener 제거)
+- CDN load-state 관리 (loading/loaded/failed)
+- failed script 제거 후 retry에서 새 script 생성
+- 기존 loading script timeout/error cleanup 적용
+- retry dependency 보존 (getLogoutElement 유지)
+- signOut 실패 시 실제 signOut 재시도 (signed_out UI 표시 금지)
+- null/unknown bootstrap 결과 안전 차단 (앱 숨김, logout 숨김, error 상태)
+- membership canonical 검증 (forged membership 차단)
+- auth-ui.test.js 신규 5개 (T44-T48)
+- app-bootstrap.test.js 신규 9개 (T49-T57)
+- cdnTimeoutMs 주입 가능 (production 기본값 15000ms 유지)
+
 ### 주요 사항
 
 - 실제 Auth / REST 네트워크 통합 테스트는 아직 미실행
@@ -387,3 +435,5 @@ tests/app-bootstrap.test.js
 - **3-4B**: 브라우저 통합 테스트 (실제 DOM 렌더링)
 - **3-4B**: config.js 로딩 및 활성화
 - **3-4B**: 업무 데이터 계층의 Supabase 전환
+- **3-4B.2**: 실제 CDN 로드 통합 테스트 (브라우저 환경)
+- **3-4B.2**: 실제 signOut 실패/복구 시나리오 (원격 Supabase)

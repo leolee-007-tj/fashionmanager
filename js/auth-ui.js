@@ -344,13 +344,14 @@
         var safeMsg = message || '일시적인 오류가 발생했습니다.';
         _appendError(panel, safeMsg);
 
-        var buttonRow = _el('div', 'auth-button-row');
         if (handlers && typeof handlers.onRetry === 'function') {
+            var buttonRow = _el('div', 'auth-button-row');
             var retryBtn = _button('다시 시도', 'auth-button', function () {
                 if (_busy) return;
                 handlers.onRetry();
             });
             buttonRow.appendChild(retryBtn);
+            panel.appendChild(buttonRow);
         }
         _root.appendChild(panel);
         showAuth();

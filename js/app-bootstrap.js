@@ -84,40 +84,94 @@
         return document.getElementById('auth-logout-button');
     }
 
-    function _defaultLoadSupabaseLibrary() {
+    function _defaultLoadSupabaseLibrary(timeoutMs) {
         return new Promise(function (resolve, reject) {
             if (global.supabase && typeof global.supabase.createClient === 'function') {
                 resolve();
                 return;
             }
+            var timeout = (typeof timeoutMs === 'number' && timeoutMs > 0) ? timeoutMs : CDN_TIMEOUT_MS;
             var existing = document.querySelector('script[data-supabase-cdn="true"]');
             if (existing) {
-                // Already loading; wait for load event.
-                existing.addEventListener('load', function () { resolve(); });
-                existing.addEventListener('error', function () {
-                    reject(_makeError('SUPABASE_LIBRARY_LOAD_FAILED', 'Supabase library load failed'));
-                });
-                return;
+                var existingState = existing.getAttribute('data-load-state');
+                if (existingState === 'loading') {
+                    var settledExisting = false;
+                    var timerExisting = setTimeout(function () {
+                        if (settledExisting) return;
+                        settledExisting = true;
+                        existing.setAttribute('data-load-state', 'failed');
+                        try { existing.parentNode && existing.parentNode.removeChild(existing); } catch (e) { /* ignore */ }
+                        reject(_makeError('SUPABASE_LIBRARY_LOAD_FAILED', 'Supabase library load failed'));
+                    }, timeout);
+                    existing.addEventListener('load', function () {
+                        if (settledExisting) return;
+                        settledExisting = true;
+                        clearTimeout(timerExisting);
+                        if (global.supabase && typeof global.supabase.createClient === 'function') {
+                            existing.setAttribute('data-load-state', 'loaded');
+                            resolve();
+                        } else {
+                            existing.setAttribute('data-load-state', 'failed');
+                            try { existing.parentNode && existing.parentNode.removeChild(existing); } catch (e) { /* ignore */ }
+                            reject(_makeError('SUPABASE_LIBRARY_LOAD_FAILED', 'Supabase library load failed'));
+                        }
+                    });
+                    existing.addEventListener('error', function () {
+                        if (settledExisting) return;
+                        settledExisting = true;
+                        clearTimeout(timerExisting);
+                        existing.setAttribute('data-load-state', 'failed');
+                        try { existing.parentNode && existing.parentNode.removeChild(existing); } catch (e) { /* ignore */ }
+                        reject(_makeError('SUPABASE_LIBRARY_LOAD_FAILED', 'Supabase library load failed'));
+                    });
+                    return;
+                }
+                if (existingState === 'loaded') {
+                    if (global.supabase && typeof global.supabase.createClient === 'function') {
+                        resolve();
+                        return;
+                    }
+                    // loaded but no global.supabase — remove and create new.
+                    try { existing.parentNode && existing.parentNode.removeChild(existing); } catch (e) { /* ignore */ }
+                } else if (existingState === 'failed') {
+                    // Remove failed script and create new.
+                    try { existing.parentNode && existing.parentNode.removeChild(existing); } catch (e) { /* ignore */ }
+                }
             }
             var script = document.createElement('script');
             script.src = CDN_URL;
             script.setAttribute('data-supabase-cdn', 'true');
+            script.setAttribute('data-load-state', 'loading');
             script.async = true;
 
+            var settled = false;
             var timer = setTimeout(function () {
+                if (settled) return;
+                settled = true;
+                script.setAttribute('data-load-state', 'failed');
+                try { script.parentNode && script.parentNode.removeChild(script); } catch (e) { /* ignore */ }
                 reject(_makeError('SUPABASE_LIBRARY_LOAD_FAILED', 'Supabase library load failed'));
-            }, CDN_TIMEOUT_MS);
+            }, timeout);
 
             script.onload = function () {
+                if (settled) return;
+                settled = true;
                 clearTimeout(timer);
                 if (global.supabase && typeof global.supabase.createClient === 'function') {
+                    script.setAttribute('data-load-state', 'loaded');
                     resolve();
                 } else {
+                    script.setAttribute('data-load-state', 'failed');
+                    try { script.parentNode && script.parentNode.removeChild(script); } catch (e) { /* ignore */ }
                     reject(_makeError('SUPABASE_LIBRARY_LOAD_FAILED', 'Supabase library load failed'));
                 }
             };
             script.onerror = function () {
+                if (settled) return;
+                settled = true;
                 clearTimeout(timer);
+                script.setAttribute('data-load-state', 'failed');
+                try { script.parentNode && script.parentNode.removeChild(script); } catch (e) { /* ignore */ }
                 reject(_makeError('SUPABASE_LIBRARY_LOAD_FAILED', 'Supabase library load failed'));
             };
             document.head.appendChild(script);
@@ -126,17 +180,18 @@
 
     function _resolveDeps(options) {
         var deps = (options && options.deps) || {};
-        return {
+        var resolved = {
             config: deps.config || _defaultGetConfig,
             app: deps.app || _defaultGetApp,
             auth: deps.auth || _defaultGetAuth,
             supabaseAdapter: deps.supabaseAdapter || _defaultGetSupabaseAdapter,
             ui: deps.ui || _defaultGetUI,
-            loadSupabaseLibrary: deps.loadSupabaseLibrary || _defaultLoadSupabaseLibrary,
+            loadSupabaseLibrary: deps.loadSupabaseLibrary || function () { return _defaultLoadSupabaseLibrary(deps.cdnTimeoutMs); },
             getRootElement: deps.getRootElement || _defaultGetRootElement,
             getAppElement: deps.getAppElement || _defaultGetAppElement,
             getLogoutElement: deps.getLogoutElement || _defaultGetLogoutElement
         };
+        return resolved;
     }
 
     function _resetContext() {
@@ -228,10 +283,18 @@
         }
     }
 
+    function _safeErrorState(message) {
+        _hideApp();
+        _showAuth();
+        var logoutEl = _deps.getLogoutElement();
+        if (logoutEl) logoutEl.hidden = true;
+        _showUI('showError', [message, { onRetry: function () { retry(); } }]);
+        _state = 'error';
+    }
+
     function _handleBootstrapResult(result) {
         if (!result) {
-            _showUI('showError', ['일시적인 오류가 발생했습니다.', { onRetry: function () { retry(); } }]);
-            _state = 'error';
+            _safeErrorState('일시적인 오류가 발생했습니다.');
             return;
         }
         var status = result.status;
@@ -290,8 +353,7 @@
         }
 
         // Unknown status.
-        _showUI('showError', ['일시적인 오류가 발생했습니다.', { onRetry: function () { retry(); } }]);
-        _state = 'error';
+        _safeErrorState('일시적인 오류가 발생했습니다.');
     }
 
     function _runBootstrap() {
@@ -429,7 +491,8 @@
             ui: _deps.ui,
             loadSupabaseLibrary: _deps.loadSupabaseLibrary,
             getRootElement: _deps.getRootElement,
-            getAppElement: _deps.getAppElement
+            getAppElement: _deps.getAppElement,
+            getLogoutElement: _deps.getLogoutElement
         } : undefined });
     }
 
@@ -497,9 +560,7 @@
                 _showAuth();
                 _showUI('showError', ['로그아웃할 수 없습니다.', {
                     onRetry: function () {
-                        _showUI('showSignedOut', [{
-                            onSignIn: function (c) { signIn(c); }
-                        }]);
+                        signOut();
                     }
                 }]);
                 _state = 'error';
@@ -540,8 +601,23 @@
     }
 
     function selectMembership(membership) {
-        if (!membership) return;
-        _context.activeMembership = membership;
+        if (_state !== 'needs_store_selection') return;
+        if (!membership || !membership.storeId) {
+            _safeErrorState('일시적인 오류가 발생했습니다.');
+            return;
+        }
+        var canonical = null;
+        for (var i = 0; i < _context.memberships.length; i++) {
+            if (_context.memberships[i].storeId === membership.storeId) {
+                canonical = _context.memberships[i];
+                break;
+            }
+        }
+        if (!canonical) {
+            _safeErrorState('일시적인 오류가 발생했습니다.');
+            return;
+        }
+        _context.activeMembership = canonical;
         _enterApp();
     }
 
