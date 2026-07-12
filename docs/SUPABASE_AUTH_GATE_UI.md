@@ -306,3 +306,87 @@ UI에는 다음 안전 문구만 표시한다.
 - 브라우저 통합 테스트 (실제 Auth / REST)
 - 업무 데이터 계층의 점진적 Supabase 전환
 - `js/config.js` 로딩으로 실제 프로젝트 연결
+
+## 3-4B.1 업데이트: Logout Binding & Bootstrap Concurrency
+
+### 헤더 Logout 버튼 실제 연결
+
+- `js/app-bootstrap.js`에 `_bindLogoutButton()` / `_unbindLogoutButton()` 추가
+- `getLogoutElement()` 기본값: `document.getElementById('auth-logout-button')`
+- `start()`의 enabled 경로에서 정확히 한 번 바인딩
+- `destroy()`에서 반드시 언바인딩
+- disabled legacy 경로에서는 listener 등록하지 않음
+- 버튼 중복 바인딩 방지: 같은 element면 재등록하지 않고, 다른 element면 먼저 제거 후 등록
+- click 이벤트에서 `preventDefault()` 호출
+- `state === 'ready'`일 때만 `signOut()` 호출
+
+### Logout Listener 단일 등록
+
+- `_logoutElement`와 `_logoutClickHandler` 상태 변수로 추적
+- `start()` 두 번 호출해도 listener 개수 유지
+- `destroy()` 호출 시 listener 완전 제거
+
+### signOut Single-flight
+
+- `_signOutInFlight` 변수로 진행 중인 Promise 추적
+- 동시 여러 번 호출해도 같은 Promise 반환
+- 실제 `auth.signOut()`은 한 번만 호출
+- 성공/실패 후 `_signOutInFlight`를 null로 복원
+- Promise identity 검사로 다른 Promise를 지우지 않음
+
+### Bootstrap Single-flight & Revision 순서 수정
+
+- 기존: revision 증가 후 in-flight 검사 (잘못된 순서)
+- 수정: in-flight 검사 후 revision 증가
+  - 기존 bootstrap 실행 중 새 이벤트가 들어오면 기존 Promise 그대로 반환
+  - revision을 증가시키지 않음
+  - 기존 결과를 stale로 만들지 않음
+  - `bootstrapAuthenticatedUser`를 동시에 두 번 실행하지 않음
+- Promise 종료 시 identity 검사로 정확히 정리
+  - `if (_bootstrapInFlight === trackedPromise) { _bootstrapInFlight = null; }`
+  - 성공과 실패 모두에서 정리
+  - unhandled rejection 발생하지 않음
+
+### SIGNED_OUT Bootstrap Invalidation
+
+- `_invalidateBootstrap()` 함수 추가
+  - `_bootstrapRevision += 1`
+  - `_bootstrapInFlight = null`
+- 다음 경우에 호출:
+  1. SIGNED_OUT 이벤트 수신 직후
+  2. 명시적인 signOut 성공 직후
+  3. `destroy()` 호출 시
+- 목적:
+  - 로그아웃 전에 시작된 bootstrap 결과가 나중에 ready 상태를 만들지 못하게 함
+  - 로그아웃 후 App.init을 호출하지 못하게 함
+  - 로그아웃 후 context를 다시 채우지 못하게 함
+- Promise 자체는 취소할 수 없으므로, 완료 시 revision 불일치로 결과를 무시
+
+### 늦은 Ready 결과 무시
+
+- SIGNED_OUT 후 기존 bootstrap이 완료되어도:
+  - `myRevision !== _bootstrapRevision`이므로 결과 무시
+  - state는 `signed_out` 유지
+  - context는 초기화된 상태 유지
+  - `App.init` 호출 0건
+  - `activeMembership`은 null 유지
+
+### Destroy Listener 정리
+
+- `destroy()`에서 `_unbindLogoutButton()` 호출
+- `destroy()`에서 `_invalidateBootstrap()` 호출
+- 진행 중인 모든 bootstrap 결과를 무효화
+- `_signOutInFlight`도 null로 복원
+
+### 실제 원격 Supabase는 아직 미연결
+
+- 여전히 로컬 테스트만 진행
+- 실제 URL/key 없음
+- `js/config.js` 없음
+- 원격 Supabase 연결 안 됨
+
+### 업무 데이터는 여전히 localStorage
+
+- 인증 게이트만 추가
+- 상품·주문·고객 데이터는 여전히 `js/db.js`의 localStorage 기반
+- 기존 업무 모듈 변경 0건

@@ -215,6 +215,18 @@
 - [x] **3-4B**: legacy fallback 금지 (인증 오류 시 error 화면만)
 - [x] **3-4B**: token을 context에 저장하지 않음
 - [x] **3-4B**: 실제 네트워크 호출 0 (mock 기반 테스트)
+- [x] **3-4B.1**: 헤더 logout 버튼 signOut lifecycle에 연결
+- [x] **3-4B.1**: logout listener 단일 등록 (중복 0)
+- [x] **3-4B.1**: signOut single-flight (중복 호출 0)
+- [x] **3-4B.1**: bootstrap single-flight (동시 실행 최대 1)
+- [x] **3-4B.1**: bootstrap revision 순서 수정 (in-flight 체크 우선)
+- [x] **3-4B.1**: SIGNED_OUT bootstrap invalidation
+- [x] **3-4B.1**: 늦은 ready 결과 무시 (App.init 0 유지)
+- [x] **3-4B.1**: SIGNED_OUT 후 activeMembership null
+- [x] **3-4B.1**: destroy 시 listener 정리 + bootstrap 무효화
+- [x] **3-4B.1**: 기존 업무 모듈 변경 0 (db.js, products.js 등)
+- [x] **3-4B.1**: 신규 migration 없음
+- [x] **3-4B.1**: 실제 네트워크 호출 0
 
 ## JavaScript Foundation Unit Tests
 
@@ -245,12 +257,12 @@ tests/app-bootstrap.test.js
 | 항목 | 값 |
 |---|---|
 | 테스트 파일 | 3 |
-| 총 테스트 수 | 36 |
-| pass | **36** |
+| 총 테스트 수 | 43 |
+| pass | **43** |
 | fail | **0** |
 | 실제 Supabase 호출 | 0 |
 | 실제 URL/key 사용 | 0 |
-| 실행 시간 | ~2.3s |
+| 실행 시간 | ~2.0s |
 
 ### 테스트 상세
 
@@ -286,7 +298,7 @@ tests/app-bootstrap.test.js
 | T20 | signOut 반환 error 차단 — AUTH_SIGN_OUT_FAILED | PASS |
 | T21 | LESOULAuth.init이 초기화되지 않은 client를 차단 | PASS |
 
-**app-bootstrap.test.js (14/14 PASS) — 3-4B 신규**
+**app-bootstrap.test.js (21/21 PASS) — 3-4B + 3-4B.1 신규**
 
 | # | 테스트 | 결과 |
 |---|---|---|
@@ -304,6 +316,13 @@ tests/app-bootstrap.test.js
 | T34 | signOut 성공 후 context 초기화 및 signed_out | PASS |
 | T35 | library load 실패 시 error이며 legacy fallback 없음 | PASS |
 | T36 | SIGNED_OUT 이벤트 수신 시 앱을 숨기고 context 초기화 | PASS |
+| T37 | ready 상태에서 헤더 logout 클릭 시 auth.signOut 1회 호출 | PASS |
+| T38 | logout 버튼 연속 클릭 시 signOut은 한 번만 호출 | PASS |
+| T39 | start를 두 번 호출해도 logout listener는 하나만 등록 | PASS |
+| T40 | destroy 후 logout listener 제거 | PASS |
+| T41 | bootstrap 진행 중 INITIAL_SESSION 이벤트가 발생해도 최초 결과가 stale 처리되지 않음 | PASS |
+| T42 | bootstrap 진행 중 SIGNED_OUT 이벤트가 발생하면 늦게 도착한 ready 결과가 무시됨 | PASS |
+| T43 | 이전 bootstrap 완료 후 새로운 SIGNED_IN 이벤트로 bootstrap 재실행 가능 | PASS |
 
 ### 3-4B 단계 보완 사항
 
@@ -319,6 +338,24 @@ tests/app-bootstrap.test.js
 - 모든 동적 값은 `createElement` + `textContent` (innerHTML 금지)
 - 비밀번호 submit 후 입력 필드 즉시 비움
 - 한국어 안전 오류 문구만 사용
+
+### 3-4B.1 단계 보완 사항 (Logout & Concurrency)
+
+- 헤더 logout 버튼 실제 signOut lifecycle에 연결
+- logout listener 단일 등록 (중복 바인딩 방지)
+- signOut single-flight 구현 (동시 호출 시 1회만 실행)
+- bootstrap single-flight 구현
+- bootstrap revision 증가 순서 수정 (in-flight 체크 우선)
+- SIGNED_OUT bootstrap invalidation 구현
+- 늦은 ready 결과 차단 (stale 결과 무시)
+- destroy 시 listener 정리 + bootstrap 무효화
+- SIGNED_OUT 후 App.init 호출 0 검증
+- SIGNED_OUT 후 activeMembership null 검증
+- concurrent bootstrap 최대 1개 검증
+- 종료된 bootstrap 이후 다음 bootstrap 재실행 가능 검증
+- logout listener 중복 0 검증
+- localStorage 접근 0 검증
+- 실제 네트워크 호출 0 검증
 
 ### 주요 사항
 

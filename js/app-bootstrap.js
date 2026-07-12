@@ -39,6 +39,9 @@
     var _started = false;
     var _bootstrapRevision = 0;
     var _bootstrapInFlight = null;
+    var _logoutElement = null;
+    var _logoutClickHandler = null;
+    var _signOutInFlight = null;
 
     // Default dependency providers (overridable via start({ deps })).
     var _deps = null;
@@ -75,6 +78,10 @@
 
     function _defaultGetAppElement() {
         return document.getElementById('app');
+    }
+
+    function _defaultGetLogoutElement() {
+        return document.getElementById('auth-logout-button');
     }
 
     function _defaultLoadSupabaseLibrary() {
@@ -127,7 +134,8 @@
             ui: deps.ui || _defaultGetUI,
             loadSupabaseLibrary: deps.loadSupabaseLibrary || _defaultLoadSupabaseLibrary,
             getRootElement: deps.getRootElement || _defaultGetRootElement,
-            getAppElement: deps.getAppElement || _defaultGetAppElement
+            getAppElement: deps.getAppElement || _defaultGetAppElement,
+            getLogoutElement: deps.getLogoutElement || _defaultGetLogoutElement
         };
     }
 
@@ -166,7 +174,38 @@
         _callAppInitOnce();
         var ui = _deps.ui();
         if (ui) ui.showAppContext(_context);
+        var logoutEl = _deps.getLogoutElement();
+        if (logoutEl) logoutEl.hidden = false;
         _state = 'ready';
+    }
+
+    function _invalidateBootstrap() {
+        _bootstrapRevision += 1;
+        _bootstrapInFlight = null;
+    }
+
+    function _bindLogoutButton() {
+        var btn = _deps.getLogoutElement();
+        if (!btn) return;
+        if (_logoutElement === btn && _logoutClickHandler) return;
+        _unbindLogoutButton();
+        _logoutClickHandler = function (e) {
+            if (e && typeof e.preventDefault === 'function') e.preventDefault();
+            if (_state !== 'ready') return;
+            signOut();
+        };
+        btn.addEventListener('click', _logoutClickHandler);
+        _logoutElement = btn;
+    }
+
+    function _unbindLogoutButton() {
+        if (_logoutElement && _logoutClickHandler) {
+            try {
+                _logoutElement.removeEventListener('click', _logoutClickHandler);
+            } catch (e) { /* ignore */ }
+        }
+        _logoutElement = null;
+        _logoutClickHandler = null;
     }
 
     function _hideApp() {
@@ -256,34 +295,33 @@
     }
 
     function _runBootstrap() {
-        var myRevision = ++_bootstrapRevision;
         if (_bootstrapInFlight) {
             return _bootstrapInFlight;
         }
+        var myRevision = ++_bootstrapRevision;
         var auth = _deps.auth();
-        var p = Promise.resolve()
+        var trackedPromise = Promise.resolve()
             .then(function () {
                 return auth.bootstrapAuthenticatedUser();
             })
             .then(function (result) {
-                // Guard against stale bootstrap overwriting a newer one.
                 if (myRevision !== _bootstrapRevision) return;
                 _handleBootstrapResult(result);
+            })
+            ['catch'](function () {
+                if (myRevision !== _bootstrapRevision) return;
+                _hideApp();
+                _showAuth();
+                _showUI('showError', ['인증 서비스를 시작할 수 없습니다.', { onRetry: function () { retry(); } }]);
+                _state = 'error';
+            })
+            .then(function () {
+                if (_bootstrapInFlight === trackedPromise) {
+                    _bootstrapInFlight = null;
+                }
             });
-        _bootstrapInFlight = p;
-        p['catch'](function () {
-            if (myRevision !== _bootstrapRevision) return;
-            _hideApp();
-            _showAuth();
-            _showUI('showError', ['인증 서비스를 시작할 수 없습니다.', { onRetry: function () { retry(); } }]);
-            _state = 'error';
-        });
-        p.then(function () {
-            if (myRevision === _bootstrapRevision) {
-                _bootstrapInFlight = null;
-            }
-        });
-        return p;
+        _bootstrapInFlight = trackedPromise;
+        return trackedPromise;
     }
 
     function _subscribeAuthEvents() {
@@ -294,8 +332,11 @@
             _unsubAuth = auth.subscribe(function (payload) {
                 var ev = payload && payload.event;
                 if (ev === 'SIGNED_OUT') {
+                    _invalidateBootstrap();
                     _resetContext();
                     _hideApp();
+                    var logoutEl = _deps.getLogoutElement();
+                    if (logoutEl) logoutEl.hidden = true;
                     _showAuth();
                     _showUI('showSignedOut', [{
                         onSignIn: function (credentials) { signIn(credentials); }
@@ -364,6 +405,7 @@
                 }
                 auth.init();
                 _subscribeAuthEvents();
+                _bindLogoutButton();
                 return _runBootstrap();
             })
             .catch(function (err) {
@@ -423,18 +465,24 @@
     }
 
     function signOut() {
+        if (_signOutInFlight) {
+            return _signOutInFlight;
+        }
         var auth = _deps && _deps.auth();
         var ui = _deps.ui();
         if (ui) ui.setBusy(true);
-        return Promise.resolve()
+        var tracked = Promise.resolve()
             .then(function () {
                 if (!auth) return;
                 return auth.signOut();
             })
             .then(function () {
                 if (ui) ui.setBusy(false);
+                _invalidateBootstrap();
                 _resetContext();
                 _hideApp();
+                var logoutEl = _deps.getLogoutElement();
+                if (logoutEl) logoutEl.hidden = true;
                 _showAuth();
                 _showUI('showSignedOut', [{
                     onSignIn: function (c) { signIn(c); }
@@ -444,6 +492,8 @@
             .catch(function () {
                 if (ui) ui.setBusy(false);
                 _hideApp();
+                var logoutEl = _deps.getLogoutElement();
+                if (logoutEl) logoutEl.hidden = true;
                 _showAuth();
                 _showUI('showError', ['로그아웃할 수 없습니다.', {
                     onRetry: function () {
@@ -453,7 +503,14 @@
                     }
                 }]);
                 _state = 'error';
+            })
+            .then(function () {
+                if (_signOutInFlight === tracked) {
+                    _signOutInFlight = null;
+                }
             });
+        _signOutInFlight = tracked;
+        return tracked;
     }
 
     function createInitialStore(opts) {
@@ -507,6 +564,8 @@
             try { _unsubAuth(); } catch (e) { /* ignore */ }
             _unsubAuth = null;
         }
+        _unbindLogoutButton();
+        _invalidateBootstrap();
         if (_deps) {
             var ui = _deps.ui();
             if (ui && typeof ui.destroy === 'function') ui.destroy();
@@ -515,8 +574,7 @@
         _appInitCalled = false;
         _started = false;
         _state = 'idle';
-        _bootstrapRevision = 0;
-        _bootstrapInFlight = null;
+        _signOutInFlight = null;
     }
 
     global.LESOULAppBootstrap = Object.freeze({
