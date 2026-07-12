@@ -4,7 +4,7 @@
 
 | 항목 | 값 |
 |---|---|
-| 실행 날짜 | 2026-07-12 (3-4B.2 단계 업데이트) |
+| 실행 날짜 | 2026-07-12 (3-4C1 단계 업데이트) |
 | OS | macOS Intel x86_64 |
 | Docker Desktop | 설치 및 실행 성공 (v29.6.1) |
 | Supabase CLI 버전 | v2.109.1 |
@@ -240,6 +240,24 @@
 - [x] **3-4B.2**: 기존 업무 모듈 변경 0
 - [x] **3-4B.2**: 신규 migration 없음
 - [x] **3-4B.2**: 실제 네트워크 호출 0
+- [x] **3-4C1**: 로컬 Supabase 실제 HTTP 통합 테스트 실행 (localhost only)
+- [x] **3-4C1**: 원격 Supabase 미연결 (recordedHostnames 1개, localhost만)
+- [x] **3-4C1**: API_URL http 프로토콜 강제
+- [x] **3-4C1**: API_URL username/password 미포함
+- [x] **3-4C1**: ANON_KEY ≠ SERVICE_ROLE_KEY 검증
+- [x] **3-4C1**: service_role key는 I1(테스트 사용자 생성)에서만 사용
+- [x] **3-4C1**: 이후 모든 요청은 anon key + access_token
+- [x] **3-4C1**: 더미 자격 증명 (crypto.randomUUID 이메일, 25자 randomBytes 비밀번호)
+- [x] **3-4C1**: secret/access_token/refresh_token/service_role_key stdout/stderr/docs 출력 0
+- [x] **3-4C1**: AbortController 10초 타임아웃 적용
+- [x] **3-4C1**: 테스트 전후 db reset으로 테스트 데이터 정리
+- [x] **3-4C1**: 기존 업무 모듈 변경 0
+- [x] **3-4C1**: 기존 migration/supabase/tests 변경 0
+- [x] **3-4C1**: index.html/css/style.css/js/* 변경 0
+- [x] **3-4C1**: 외부 npm 패키지 사용 0 (Node 내장 fetch, crypto, test만)
+- [x] **3-4C1**: GitHub Actions 아님 (로컬 실행)
+- [x] **3-4C1**: 브라우저 UI 통합 미실행 (HTTP 통합만)
+- [x] **3-4C1**: env 파일 권한 600, EXIT trap으로 삭제
 
 ## JavaScript Foundation Unit Tests
 
@@ -407,7 +425,7 @@ tests/app-bootstrap.test.js
 
 ### 주요 사항
 
-- 실제 Auth / REST 네트워크 통합 테스트는 아직 미실행
+- 실제 Auth / REST 네트워크 통합 테스트: **3-4C1에서 로컬 Supabase 대상 실행 완료** (아래 "Local Auth and RPC Integration Tests" 섹션 참조)
 - 실제 원격 Supabase 미연결
 - index.html에 auth gate 연결 (config.example.js, supabase-client.js, auth-service.js, auth-ui.js, app.js, app-bootstrap.js 로드)
 - 기존 localStorage 앱 미변경 (db.js, products.js, orders.js, customers.js, analytics.js, expenses.js, excel.js, settings.js diff 0)
@@ -422,9 +440,7 @@ tests/app-bootstrap.test.js
 ## 아직 검증되지 않은 항목
 
 - 원격 Supabase 클라우드 환경에서의 migration 적용
-- JS client (@supabase/supabase-js) 통합 테스트
-- REST API / PostgREST 동작 검증
-- 실제 Auth 로그인 사용자 기반 테스트
+- JS client (@supabase/supabase-js) 통합 테스트 (3-4C1은 순수 fetch 기반)
 - Storage, Edge Functions, Realtime 등 부가 서비스
 - 대량 데이터 성능 테스트
 - 동시성/race condition 통합 테스트
@@ -437,3 +453,100 @@ tests/app-bootstrap.test.js
 - **3-4B**: 업무 데이터 계층의 Supabase 전환
 - **3-4B.2**: 실제 CDN 로드 통합 테스트 (브라우저 환경)
 - **3-4B.2**: 실제 signOut 실패/복구 시나리오 (원격 Supabase)
+- **3-4C1**: 브라우저 UI 통합 테스트 (DOM 렌더링 + 실제 Supabase)
+- **3-4C1**: @supabase/supabase-js 클라이언트 라이브러리 통합
+- **3-4C1**: 원격 Supabase 클라우드 환경 통합 테스트
+
+## Local Auth and RPC Integration Tests
+
+3-4C1 단계에서 추가된 **로컬 Supabase 실제 HTTP 통합 테스트** 결과입니다.
+mock이 아닌 실제 localhost Supabase 서비스에 HTTP 요청을 실행했습니다.
+
+### 실행 환경
+
+| 항목 | 값 |
+|---|---|
+| 테스트 러너 | Node.js 내장 `node:test` |
+| Node 버전 | v20.x (Docker node:20-alpine) |
+| HTTP 클라이언트 | Node 내장 `fetch` (외부 패키지 0) |
+| 난수 생성 | Node 내장 `crypto.randomUUID` / `crypto.randomBytes` |
+| 외부 의존성 | 없음 (npm install 불필요) |
+| 대상 Supabase | 로컬 Supabase (localhost only) |
+| 원격 네트워크 요청 | 0 |
+| GitHub Actions | 아님 (로컬 실행) |
+| 브라우저 UI 통합 | 미실행 (HTTP 통합만) |
+
+### 실행 명령
+
+```bash
+bash scripts/run-local-auth-rpc-integration.sh
+```
+
+wrapper script 동작:
+1. 브랜치 검증 (`feature/supabase-cloud-migration`)
+2. `supabase` / `node`(또는 Docker) 명령 확인
+3. `supabase status -o env`로 API_URL/ANON_KEY/SERVICE_ROLE_KEY 추출
+4. API_URL http 프로토콜 및 localhost hostname 강제 검사
+5. `supabase db reset --local` 후 10초 대기
+6. Docker node 사용 시 `host.docker.internal`로 URL 변환
+7. `RUN_LOCAL_SUPABASE_INTEGRATION=1` 환경변수로 `node --test` 실행
+8. 테스트 후 `supabase db reset --local`로 테스트 데이터 정리
+9. env 파일 권한 600, EXIT trap으로 삭제
+
+### 테스트 결과
+
+| 항목 | 값 |
+|---|---|
+| 테스트 파일 | 1 (`tests/local-auth-rpc.integration.mjs`) |
+| subtest 수 | 14 (12 시나리오 + 1 부모 + 1 보안 검증) |
+| pass | **14** |
+| fail | **0** |
+| localhost 실제 네트워크 사용 | Yes |
+| 원격 요청 | 0 |
+| secret 출력 (stdout/stderr) | 0 |
+| db reset (전/후) | 성공 |
+| GitHub Actions | 아님 |
+| 브라우저 UI 통합 | 미실행 |
+
+### 시나리오 결과 (12개 + 보안 1개)
+
+| # | 시나리오 | 결과 | 비고 |
+|---|---|---|---|
+| I1 | admin API로 confirmed 테스트 사용자 생성 | PASS | service_role key 사용 (유일), UUID 형식 검증 |
+| I2 | anon key로 password 로그인 | PASS | access_token, refresh_token, user.id 반환 |
+| I3 | ensure_user_profile RPC 호출 | PASS | profile.id = auth.uid(), preferred_language=ko |
+| I4 | 초기 membership count = 0 | PASS | store_members 빈 배열 |
+| I5 | create_initial_store RPC | PASS | store UUID 반환 |
+| I6 | 재호출 동일 store UUID (멱등) | PASS | store_id 동일 |
+| I7 | owner membership 정확히 1개 | PASS | role=owner, is_active=true |
+| I8 | store RLS 조회 | PASS | stores 테이블 1행 반환 |
+| I9 | store_settings default_language=ko | PASS | store_settings 1행 |
+| I10 | list_staff_products RPC 빈 배열 | PASS | fixture 없음, 0건 |
+| I11 | refresh token으로 새 session | PASS | 새 access_token, refresh_token 발급 |
+| I12 | signOut 후 동일 자격으로 재로그인 | PASS | logout 204, 재로그인 성공 |
+| 보안 | recordedHostnames 1개 (localhost만) | PASS | 원격 hostname 0 |
+
+### service_role key 사용 범위
+
+- **I1에서만 사용**: 테스트 사용자 생성 (`/auth/v1/admin/users`)
+- I2~I12: anon key + access_token만 사용
+- ANON_KEY ≠ SERVICE_ROLE_KEY 검증 포함
+
+### 보안 조치
+
+- `crypto.randomUUID()`로 고유 더미 이메일 생성
+- `crypto.randomBytes(25)`로 25자 더미 비밀번호 생성
+- secret/access_token/refresh_token/service_role_key를 stdout/stderr/docs에 출력하지 않음
+- `requestJson()` helper는 HTTP status와 URL만 에러 메시지에 포함 (body 미출력)
+- env 파일 권한 600, EXIT trap으로 삭제
+- AbortController 10초 타임아웃 적용
+- 테스트 전후 `supabase db reset --local`로 테스트 데이터 제거
+- 실제 운영 데이터 미사용 (더미 자격 증명만)
+
+### 회귀 검증
+
+- 기존 JS 단위 테스트: **57/57 PASS** (회귀 없음)
+- 기존 pgTAP 테스트: **131/131 PASS** (회귀 없음)
+- 기존 migration 11개: 변경 없음
+- 기존 업무 모듈 (db.js, products.js 등): 변경 없음
+- index.html, css/style.css, js/*: 변경 없음
