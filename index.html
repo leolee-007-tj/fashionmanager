@@ -4,12 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LES SOUL - Store Management</title>
-    <link rel="stylesheet" href="css/style.css?v=20260710b">
+    <link rel="stylesheet" href="css/style.css?v=20260712a">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
+    <div id="auth-root" class="auth-root" hidden></div>
+
     <div id="app">
         <header class="header">
             <div class="header-inner">
@@ -21,6 +23,13 @@
                     <span class="store-subtitle">Store Management</span>
                 </div>
                 <div class="header-right">
+                    <span id="auth-context-badge" class="auth-context-badge" hidden></span>
+                    <button
+                        type="button"
+                        id="auth-logout-button"
+                        class="auth-logout-button"
+                        hidden
+                    >로그아웃</button>
                     <div class="lang-selector">
                         <button class="lang-btn active" data-lang="ko" onclick="setLanguage('ko'); App.render();" title="한국어">🇰🇷</button>
                         <button class="lang-btn" data-lang="zh" onclick="setLanguage('zh'); App.render();" title="中文">🇨🇳</button>
@@ -96,17 +105,29 @@
         </main>
     </div>
 
-    <script src="js/i18n.js?v=20260710b"></script>
-    <script src="js/db.js?v=20260710b"></script>
-    <script src="js/price-calculator.js?v=20260710b"></script>
-    <script src="js/classification.js?v=20260710b"></script>
-    <script src="js/products.js?v=20260710b"></script>
-    <script src="js/orders.js?v=20260710b"></script>
-    <script src="js/customers.js?v=20260710b"></script>
-    <script src="js/analytics.js?v=20260710b"></script>
-    <script src="js/expenses.js?v=20260710b"></script>
-    <script src="js/excel.js?v=20260710b"></script>
-    <script src="js/settings.js?v=20260710b"></script>
-    <script src="js/app.js?v=20260710b"></script>
+    <script src="js/i18n.js?v=20260712a"></script>
+    <script src="js/db.js?v=20260712a"></script>
+    <script src="js/price-calculator.js?v=20260712a"></script>
+    <script src="js/classification.js?v=20260712a"></script>
+    <script src="js/products.js?v=20260712a"></script>
+    <script src="js/orders.js?v=20260712a"></script>
+    <script src="js/customers.js?v=20260712a"></script>
+    <script src="js/analytics.js?v=20260712a"></script>
+    <script src="js/expenses.js?v=20260712a"></script>
+    <script src="js/excel.js?v=20260712a"></script>
+    <script src="js/settings.js?v=20260712a"></script>
+    <script src="js/config.example.js?v=20260712a"></script>
+    <script src="js/supabase-client.js?v=20260712a"></script>
+    <script src="js/auth-service.js?v=20260712a"></script>
+    <script src="js/auth-ui.js?v=20260712a"></script>
+    <script src="js/app.js?v=20260712a"></script>
+    <script src="js/app-bootstrap.js?v=20260712a"></script>
+    <script>
+        // Boot the application through the feature-flagged auth gate.
+        // Default SUPABASE_ENABLED=false -> legacy mode (existing app behavior).
+        if (typeof window !== 'undefined' && window.LESOULAppBootstrap) {
+            window.LESOULAppBootstrap.start({});
+        }
+    </script>
 </body>
 </html>

@@ -4,12 +4,13 @@
 
 | 항목 | 값 |
 |---|---|
-| 실행 날짜 | 2026-07-11 |
+| 실행 날짜 | 2026-07-12 (3-4B 단계 업데이트) |
 | OS | macOS Intel x86_64 |
 | Docker Desktop | 설치 및 실행 성공 (v29.6.1) |
 | Supabase CLI 버전 | v2.109.1 |
 | migration 파일명 | timestamp 형식 (`20260711000100_`~`20260711001000_`) |
 | 로컬 Supabase 실행 여부 | **성공** |
+| Node.js (JS 테스트) | v20.x (Docker node:20-alpine) |
 
 ## 실행 상태
 
@@ -188,7 +189,7 @@
 - [x] `supabase login` / `supabase link` 미실행
 - [x] `supabase db push` 미실행
 - [x] service_role key / JWT 미기록
-- [x] 앱 HTML/CSS/JS 미변경
+- [x] 앱 HTML/CSS/JS 변경: index.html, css/style.css, js/app.js, js/config.example.js만 (업무 모듈 미변경)
 - [x] `auth.uid()` 재정의 없음
 - [x] psql `\set` 문법 없음
 - [x] config.toml에 실제 secret 없음
@@ -200,10 +201,24 @@
 - [x] staff 쓰기 권한 없음
 - [x] config.toml 커밋하지 않음
 - [x] data_export.json 미생성
+- [x] **3-4B**: feature flag 기본값 `SUPABASE_ENABLED=false`
+- [x] **3-4B**: 실제 URL/key 포함 0
+- [x] **3-4B**: index.html에 Supabase CDN 직접 태그 없음
+- [x] **3-4B**: disabled 경로에서 CDN loader 미호출
+- [x] **3-4B**: App.init 정확히 한 번 (disabled mode)
+- [x] **3-4B**: auth-root 기본 hidden
+- [x] **3-4B**: logout 및 badge 기본 hidden
+- [x] **3-4B**: 기존 메뉴·라우터·localStorage 기능 유지
+- [x] **3-4B**: js/config.js commit 없음
+- [x] **3-4B**: 신규 migration 없음
+- [x] **3-4B**: secret/service_role key 포함 0
+- [x] **3-4B**: legacy fallback 금지 (인증 오류 시 error 화면만)
+- [x] **3-4B**: token을 context에 저장하지 않음
+- [x] **3-4B**: 실제 네트워크 호출 0 (mock 기반 테스트)
 
 ## JavaScript Foundation Unit Tests
 
-3-4A 및 3-4A.1 단계에서 추가된 Supabase JS 클라이언트와 인증 서비스 기반 코드에 대한
+3-4A, 3-4A.1, 3-4B 단계에서 추가된 Supabase JS 클라이언트, 인증 서비스, 인증 게이트 부트스트랩에 대한
 단위 테스트 결과입니다. **mock 기반이며 실제 네트워크 호출은 없습니다.**
 
 ### 실행 환경
@@ -213,26 +228,29 @@
 | 테스트 러너 | Node.js 내장 `node:test` |
 | Node 버전 | v20.x (Docker node:20-alpine) |
 | 외부 의존성 | 없음 (npm install 불필요) |
-| mock 방식 | global.supabase에 mock client 주입 |
+| mock 방식 | global.supabase에 mock client 주입 + 의존성 주입 |
 | 실제 네트워크 호출 | 0 |
 
 ### 실행 명령
 
 ```bash
-node --test tests/supabase-client.test.js tests/auth-service.test.js
+node --test \
+tests/supabase-client.test.js \
+tests/auth-service.test.js \
+tests/app-bootstrap.test.js
 ```
 
 ### 테스트 결과
 
 | 항목 | 값 |
 |---|---|
-| 테스트 파일 | 2 |
-| 총 테스트 수 | 22 |
-| pass | **22** |
+| 테스트 파일 | 3 |
+| 총 테스트 수 | 36 |
+| pass | **36** |
 | fail | **0** |
 | 실제 Supabase 호출 | 0 |
 | 실제 URL/key 사용 | 0 |
-| 실행 시간 | ~1.1s |
+| 실행 시간 | ~2.3s |
 
 ### 테스트 상세
 
@@ -268,27 +286,53 @@ node --test tests/supabase-client.test.js tests/auth-service.test.js
 | T20 | signOut 반환 error 차단 — AUTH_SIGN_OUT_FAILED | PASS |
 | T21 | LESOULAuth.init이 초기화되지 않은 client를 차단 | PASS |
 
-### 3-4A.1 단계 보완 사항
+**app-bootstrap.test.js (14/14 PASS) — 3-4B 신규**
 
-- `subscribe` 반환 구조를 Supabase JS v2 실제 구조(`data.subscription.unsubscribe`)로 수정
-- `unsubscribe` idempotent 처리 (여러 번 호출해도 안전)
-- `getSession` 오류 정규화 (`AUTH_SESSION_FAILED`)
-- `signOut` 오류 정규화 (`AUTH_SIGN_OUT_FAILED`)
-- `subscribe` callback 검증 (`AUTH_CALLBACK_INVALID`)
-- `LESOULAuth.init` 4가지 조건 검사 강화 (`SUPABASE_NOT_INITIALIZED`)
-- 브라우저 JWT decode base64url 패딩 명시적 보완
-- T22: `atob` 경로만 활성화한 상태로 service_role JWT 차단 검증
-- mock 구조를 `data.subscription.unsubscribe` 형태로 수정
+| # | 테스트 | 결과 |
+|---|---|---|
+| T23 | feature disabled면 App.init 정확히 1회 | PASS |
+| T24 | feature disabled면 Supabase library 로드 0회 | PASS |
+| T25 | start 두 번 호출해도 App.init 중복 없음 | PASS |
+| T26 | enabled + signed_out이면 로그인 UI 표시 | PASS |
+| T27 | signed_out 상태에서 App.init 호출 없음 | PASS |
+| T28 | enabled + needs_store_onboarding이면 매장 생성 UI 표시 | PASS |
+| T29 | ready + membership 1개면 App.init 1회 및 ready | PASS |
+| T30 | ready + membership 2개면 store selection UI 표시 | PASS |
+| T31 | membership 선택 후 activeMembership 설정 및 앱 진입 | PASS |
+| T32 | signIn 성공 후 bootstrap 재실행 | PASS |
+| T33 | signIn 실패 시 안전한 로그인 오류 표시 | PASS |
+| T34 | signOut 성공 후 context 초기화 및 signed_out | PASS |
+| T35 | library load 실패 시 error이며 legacy fallback 없음 | PASS |
+| T36 | SIGNED_OUT 이벤트 수신 시 앱을 숨기고 context 초기화 | PASS |
+
+### 3-4B 단계 보완 사항
+
+- `LESOULAuthUI` 전역 객체 (IIFE) — 인증 UI 렌더러
+- `LESOULAppBootstrap` 전역 객체 (IIFE) — 인증 게이트 부트스트랩
+- 의존성 주입 패턴 (`start({ deps })`)으로 mock 기반 단위 테스트
+- App.init 단일 실행 보장 (`_appInitCalled` 플래그)
+- Bootstrap revision guard (stale 결과 방지)
+- 동적 CDN 로드 (15초 timeout, `SUPABASE_LIBRARY_LOAD_FAILED`)
+- Legacy fallback 금지 (인증 오류 시 error 화면만)
+- Context 메모리 전용 (token/session을 context에 저장하지 않음)
+- `#auth-root`에만 인증 화면 렌더링
+- 모든 동적 값은 `createElement` + `textContent` (innerHTML 금지)
+- 비밀번호 submit 후 입력 필드 즉시 비움
+- 한국어 안전 오류 문구만 사용
 
 ### 주요 사항
 
 - 실제 Auth / REST 네트워크 통합 테스트는 아직 미실행
 - 실제 원격 Supabase 미연결
-- index.html 미변경 (새 JS 파일 로드 안 함)
-- 기존 localStorage 앱 미변경
+- index.html에 auth gate 연결 (config.example.js, supabase-client.js, auth-service.js, auth-ui.js, app.js, app-bootstrap.js 로드)
+- 기존 localStorage 앱 미변경 (db.js, products.js, orders.js, customers.js, analytics.js, expenses.js, excel.js, settings.js diff 0)
 - 기존 DB migration 11개, pgTAP 131개 회귀 없음
 - `global.atob`를 mock한 테스트는 `finally` 블록에서 원래 상태로 복원
 - 테스트 간 global 상태 누출 없음 (`resetGlobals()` 호출)
+- feature flag disabled 검증: App.init 1회, CDN 요청 0건
+- token을 context에 저장하지 않음 검증 완료
+- localStorage 접근 0 (테스트 환경)
+- App.init은 lifecycle 전체에서 최대 1회 검증 완료
 
 ## 아직 검증되지 않은 항목
 
@@ -302,3 +346,7 @@ node --test tests/supabase-client.test.js tests/auth-service.test.js
 - staff용 대시보드 집계 RPC
 - staff용 반품/교환 처리
 - staff용 제한된 주문 상태 변경
+- **3-4B**: 실제 Supabase 프로젝트 연결 (URL/key 입력)
+- **3-4B**: 브라우저 통합 테스트 (실제 DOM 렌더링)
+- **3-4B**: config.js 로딩 및 활성화
+- **3-4B**: 업무 데이터 계층의 Supabase 전환

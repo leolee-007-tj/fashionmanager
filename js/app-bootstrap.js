@@ -1,0 +1,533 @@
+(function (global) {
+    'use strict';
+
+    // Feature-flagged authentication gate bootstrap.
+    //
+    // Default path (SUPABASE_ENABLED !== true):
+    //   - No Supabase CDN request.
+    //   - No LESOULSupabase / LESOULAuth init.
+    //   - #auth-root hidden, #app shown.
+    //   - App.init() called exactly once.
+    //   - State: 'legacy'.
+    //
+    // Enabled path:
+    //   - #app hidden, #auth-root shown, loading UI.
+    //   - Dynamically load Supabase CDN if not already present.
+    //   - LESOULSupabase.init(config) -> LESOULAuth.init() -> bootstrapAuthenticatedUser().
+    //   - Route to signed_out / needs_store_onboarding / needs_store_selection / ready.
+    //   - App.init() called exactly once when entering the app.
+    //   - On any library load failure: error UI, NO legacy fallback.
+    //
+    // Security rules:
+    //   - Context is memory-only; never written to localStorage.
+    //   - access_token / refresh_token / session object never copied into long-lived context.
+    //   - No console logging of tokens, events, or Supabase raw errors.
+    //   - No automatic legacy fallback on auth failures.
+
+    var CDN_URL = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+    var CDN_TIMEOUT_MS = 15000;
+
+    var _state = 'idle';
+    var _context = {
+        user: null,
+        profile: null,
+        memberships: [],
+        activeMembership: null
+    };
+    var _appInitCalled = false;
+    var _unsubAuth = null;
+    var _started = false;
+    var _bootstrapRevision = 0;
+    var _bootstrapInFlight = null;
+
+    // Default dependency providers (overridable via start({ deps })).
+    var _deps = null;
+
+    function _makeError(code, message) {
+        var err = new Error(message);
+        err.code = code;
+        return err;
+    }
+
+    function _defaultGetConfig() {
+        return (global.LESOUL_CONFIG || {});
+    }
+
+    function _defaultGetApp() {
+        return global.App;
+    }
+
+    function _defaultGetAuth() {
+        return global.LESOULAuth;
+    }
+
+    function _defaultGetSupabaseAdapter() {
+        return global.LESOULSupabase;
+    }
+
+    function _defaultGetUI() {
+        return global.LESOULAuthUI;
+    }
+
+    function _defaultGetRootElement() {
+        return document.getElementById('auth-root');
+    }
+
+    function _defaultGetAppElement() {
+        return document.getElementById('app');
+    }
+
+    function _defaultLoadSupabaseLibrary() {
+        return new Promise(function (resolve, reject) {
+            if (global.supabase && typeof global.supabase.createClient === 'function') {
+                resolve();
+                return;
+            }
+            var existing = document.querySelector('script[data-supabase-cdn="true"]');
+            if (existing) {
+                // Already loading; wait for load event.
+                existing.addEventListener('load', function () { resolve(); });
+                existing.addEventListener('error', function () {
+                    reject(_makeError('SUPABASE_LIBRARY_LOAD_FAILED', 'Supabase library load failed'));
+                });
+                return;
+            }
+            var script = document.createElement('script');
+            script.src = CDN_URL;
+            script.setAttribute('data-supabase-cdn', 'true');
+            script.async = true;
+
+            var timer = setTimeout(function () {
+                reject(_makeError('SUPABASE_LIBRARY_LOAD_FAILED', 'Supabase library load failed'));
+            }, CDN_TIMEOUT_MS);
+
+            script.onload = function () {
+                clearTimeout(timer);
+                if (global.supabase && typeof global.supabase.createClient === 'function') {
+                    resolve();
+                } else {
+                    reject(_makeError('SUPABASE_LIBRARY_LOAD_FAILED', 'Supabase library load failed'));
+                }
+            };
+            script.onerror = function () {
+                clearTimeout(timer);
+                reject(_makeError('SUPABASE_LIBRARY_LOAD_FAILED', 'Supabase library load failed'));
+            };
+            document.head.appendChild(script);
+        });
+    }
+
+    function _resolveDeps(options) {
+        var deps = (options && options.deps) || {};
+        return {
+            config: deps.config || _defaultGetConfig,
+            app: deps.app || _defaultGetApp,
+            auth: deps.auth || _defaultGetAuth,
+            supabaseAdapter: deps.supabaseAdapter || _defaultGetSupabaseAdapter,
+            ui: deps.ui || _defaultGetUI,
+            loadSupabaseLibrary: deps.loadSupabaseLibrary || _defaultLoadSupabaseLibrary,
+            getRootElement: deps.getRootElement || _defaultGetRootElement,
+            getAppElement: deps.getAppElement || _defaultGetAppElement
+        };
+    }
+
+    function _resetContext() {
+        _context.user = null;
+        _context.profile = null;
+        _context.memberships = [];
+        _context.activeMembership = null;
+    }
+
+    function _enterLegacyMode() {
+        var appEl = _deps.getAppElement();
+        var rootEl = _deps.getRootElement();
+        if (appEl) appEl.style.display = '';
+        if (rootEl) rootEl.hidden = true;
+        var ui = _deps.ui();
+        if (ui) ui.hideAuth();
+        _callAppInitOnce();
+        _state = 'legacy';
+    }
+
+    function _callAppInitOnce() {
+        if (_appInitCalled) return;
+        var app = _deps.app();
+        if (app && typeof app.init === 'function') {
+            app.init();
+            _appInitCalled = true;
+        }
+    }
+
+    function _enterApp() {
+        var rootEl = _deps.getRootElement();
+        var appEl = _deps.getAppElement();
+        if (rootEl) rootEl.hidden = true;
+        if (appEl) appEl.style.display = '';
+        _callAppInitOnce();
+        var ui = _deps.ui();
+        if (ui) ui.showAppContext(_context);
+        _state = 'ready';
+    }
+
+    function _hideApp() {
+        var appEl = _deps.getAppElement();
+        if (appEl) appEl.style.display = 'none';
+    }
+
+    function _showAuth() {
+        var rootEl = _deps.getRootElement();
+        if (rootEl) rootEl.hidden = false;
+    }
+
+    function _showUI(method, args) {
+        var ui = _deps.ui();
+        if (!ui || typeof ui[method] !== 'function') return;
+        if (Array.isArray(args)) {
+            ui[method].apply(ui, args);
+        } else {
+            ui[method](args);
+        }
+    }
+
+    function _handleBootstrapResult(result) {
+        if (!result) {
+            _showUI('showError', ['일시적인 오류가 발생했습니다.', { onRetry: function () { retry(); } }]);
+            _state = 'error';
+            return;
+        }
+        var status = result.status;
+        _context.user = result.user || null;
+        _context.profile = result.profile || null;
+        _context.memberships = Array.isArray(result.memberships) ? result.memberships : [];
+        _context.activeMembership = null;
+
+        if (status === 'signed_out') {
+            _hideApp();
+            _showAuth();
+            _showUI('showSignedOut', [{
+                onSignIn: function (credentials) { signIn(credentials); }
+            }]);
+            _state = 'signed_out';
+            return;
+        }
+
+        if (status === 'needs_store_onboarding') {
+            _hideApp();
+            _showAuth();
+            _showUI('showStoreOnboarding', [{
+                onCreateStore: function (opts) { createInitialStore(opts); },
+                onSignOut: function () { signOut(); }
+            }]);
+            _state = 'needs_store_onboarding';
+            return;
+        }
+
+        if (status === 'ready') {
+            if (_context.memberships.length === 0) {
+                // Treat as needs_store_onboarding per spec.
+                _hideApp();
+                _showAuth();
+                _showUI('showStoreOnboarding', [{
+                    onCreateStore: function (opts) { createInitialStore(opts); },
+                    onSignOut: function () { signOut(); }
+                }]);
+                _state = 'needs_store_onboarding';
+                return;
+            }
+            if (_context.memberships.length === 1) {
+                _context.activeMembership = _context.memberships[0];
+                _enterApp();
+                return;
+            }
+            // 2+ memberships: needs_store_selection
+            _hideApp();
+            _showAuth();
+            _showUI('showStoreSelection', [_context.memberships, {
+                onSelectMembership: function (membership) { selectMembership(membership); },
+                onSignOut: function () { signOut(); }
+            }]);
+            _state = 'needs_store_selection';
+            return;
+        }
+
+        // Unknown status.
+        _showUI('showError', ['일시적인 오류가 발생했습니다.', { onRetry: function () { retry(); } }]);
+        _state = 'error';
+    }
+
+    function _runBootstrap() {
+        var myRevision = ++_bootstrapRevision;
+        if (_bootstrapInFlight) {
+            return _bootstrapInFlight;
+        }
+        var auth = _deps.auth();
+        var p = Promise.resolve()
+            .then(function () {
+                return auth.bootstrapAuthenticatedUser();
+            })
+            .then(function (result) {
+                // Guard against stale bootstrap overwriting a newer one.
+                if (myRevision !== _bootstrapRevision) return;
+                _handleBootstrapResult(result);
+            });
+        _bootstrapInFlight = p;
+        p['catch'](function () {
+            if (myRevision !== _bootstrapRevision) return;
+            _hideApp();
+            _showAuth();
+            _showUI('showError', ['인증 서비스를 시작할 수 없습니다.', { onRetry: function () { retry(); } }]);
+            _state = 'error';
+        });
+        p.then(function () {
+            if (myRevision === _bootstrapRevision) {
+                _bootstrapInFlight = null;
+            }
+        });
+        return p;
+    }
+
+    function _subscribeAuthEvents() {
+        if (_unsubAuth) return;
+        var auth = _deps.auth();
+        if (!auth || typeof auth.subscribe !== 'function') return;
+        try {
+            _unsubAuth = auth.subscribe(function (payload) {
+                var ev = payload && payload.event;
+                if (ev === 'SIGNED_OUT') {
+                    _resetContext();
+                    _hideApp();
+                    _showAuth();
+                    _showUI('showSignedOut', [{
+                        onSignIn: function (credentials) { signIn(credentials); }
+                    }]);
+                    _state = 'signed_out';
+                    return;
+                }
+                if (ev === 'INITIAL_SESSION' || ev === 'SIGNED_IN') {
+                    _runBootstrap();
+                    return;
+                }
+                if (ev === 'USER_UPDATED') {
+                    _runBootstrap();
+                    return;
+                }
+                if (ev === 'TOKEN_REFRESHED') {
+                    // No re-render needed.
+                    return;
+                }
+            });
+        } catch (e) {
+            // subscribe failure is non-fatal.
+        }
+    }
+
+    function start(options) {
+        if (_started) {
+            // Idempotent: do not double-register listeners or double-init App.
+            return Promise.resolve();
+        }
+        _started = true;
+        _deps = _resolveDeps(options);
+
+        var config = _deps.config() || {};
+        if (config.SUPABASE_ENABLED !== true) {
+            // Legacy mode — existing app behavior.
+            _enterLegacyMode();
+            return Promise.resolve();
+        }
+
+        // Enabled mode.
+        var rootEl = _deps.getRootElement();
+        var ui = _deps.ui();
+        if (ui && rootEl) {
+            ui.init({ root: rootEl });
+        }
+        _hideApp();
+        _showAuth();
+        ui.showLoading('로딩 중...');
+        _state = 'loading';
+
+        return _deps.loadSupabaseLibrary()
+            .then(function () {
+                var adapter = _deps.supabaseAdapter();
+                if (!adapter || typeof adapter.init !== 'function') {
+                    throw _makeError('SUPABASE_LIBRARY_LOAD_FAILED', 'Supabase adapter missing');
+                }
+                adapter.init({
+                    SUPABASE_ENABLED: true,
+                    SUPABASE_URL: config.SUPABASE_URL,
+                    SUPABASE_CLIENT_KEY: config.SUPABASE_CLIENT_KEY
+                });
+                var auth = _deps.auth();
+                if (!auth || typeof auth.init !== 'function') {
+                    throw _makeError('SUPABASE_LIBRARY_LOAD_FAILED', 'Auth service missing');
+                }
+                auth.init();
+                _subscribeAuthEvents();
+                return _runBootstrap();
+            })
+            .catch(function (err) {
+                // No legacy fallback on enabled-mode failure.
+                _hideApp();
+                _showAuth();
+                _showUI('showError', ['인증 서비스를 시작할 수 없습니다.', { onRetry: function () { retry(); } }]);
+                _state = 'error';
+            });
+    }
+
+    function retry() {
+        if (_state !== 'error') return Promise.resolve();
+        // Reset started flag so start() runs again.
+        _started = false;
+        return start({ deps: _deps ? {
+            config: _deps.config,
+            app: _deps.app,
+            auth: _deps.auth,
+            supabaseAdapter: _deps.supabaseAdapter,
+            ui: _deps.ui,
+            loadSupabaseLibrary: _deps.loadSupabaseLibrary,
+            getRootElement: _deps.getRootElement,
+            getAppElement: _deps.getAppElement
+        } : undefined });
+    }
+
+    function signIn(credentials) {
+        var auth = _deps && _deps.auth();
+        if (!auth) return Promise.resolve();
+        var ui = _deps.ui();
+        if (ui) ui.setBusy(true);
+        return Promise.resolve()
+            .then(function () {
+                return auth.signInWithPassword(credentials.email, credentials.password);
+            })
+            .then(function () {
+                if (ui) ui.setBusy(false);
+                return _runBootstrap();
+            })
+            .catch(function () {
+                if (ui) ui.setBusy(false);
+                _showUI('showSignedOut', [{
+                    onSignIn: function (c) { signIn(c); }
+                }]);
+                // Show generic error message via UI error box inside signed-out screen.
+                // Re-render with error: use showError-like inline message by re-rendering signed-out.
+                _showUI('showError', ['로그인할 수 없습니다. 이메일과 비밀번호를 확인해 주세요.', {
+                    onRetry: function () {
+                        _showUI('showSignedOut', [{
+                            onSignIn: function (c) { signIn(c); }
+                        }]);
+                    }
+                }]);
+                _state = 'signed_out';
+            });
+    }
+
+    function signOut() {
+        var auth = _deps && _deps.auth();
+        var ui = _deps.ui();
+        if (ui) ui.setBusy(true);
+        return Promise.resolve()
+            .then(function () {
+                if (!auth) return;
+                return auth.signOut();
+            })
+            .then(function () {
+                if (ui) ui.setBusy(false);
+                _resetContext();
+                _hideApp();
+                _showAuth();
+                _showUI('showSignedOut', [{
+                    onSignIn: function (c) { signIn(c); }
+                }]);
+                _state = 'signed_out';
+            })
+            .catch(function () {
+                if (ui) ui.setBusy(false);
+                _hideApp();
+                _showAuth();
+                _showUI('showError', ['로그아웃할 수 없습니다.', {
+                    onRetry: function () {
+                        _showUI('showSignedOut', [{
+                            onSignIn: function (c) { signIn(c); }
+                        }]);
+                    }
+                }]);
+                _state = 'error';
+            });
+    }
+
+    function createInitialStore(opts) {
+        var auth = _deps && _deps.auth();
+        var ui = _deps.ui();
+        if (ui) ui.setBusy(true);
+        return Promise.resolve()
+            .then(function () {
+                if (!auth) return;
+                return auth.createInitialStore(opts);
+            })
+            .then(function () {
+                if (ui) ui.setBusy(false);
+                return _runBootstrap();
+            })
+            .catch(function () {
+                if (ui) ui.setBusy(false);
+                _showUI('showError', ['매장을 만들 수 없습니다.', {
+                    onRetry: function () {
+                        _showUI('showStoreOnboarding', [{
+                            onCreateStore: function (o) { createInitialStore(o); },
+                            onSignOut: function () { signOut(); }
+                        }]);
+                    }
+                }]);
+            });
+    }
+
+    function selectMembership(membership) {
+        if (!membership) return;
+        _context.activeMembership = membership;
+        _enterApp();
+    }
+
+    function getState() {
+        return _state;
+    }
+
+    function getContext() {
+        // Return a shallow copy to prevent external mutation.
+        return {
+            user: _context.user,
+            profile: _context.profile,
+            memberships: _context.memberships.slice(),
+            activeMembership: _context.activeMembership
+        };
+    }
+
+    function destroy() {
+        if (_unsubAuth) {
+            try { _unsubAuth(); } catch (e) { /* ignore */ }
+            _unsubAuth = null;
+        }
+        if (_deps) {
+            var ui = _deps.ui();
+            if (ui && typeof ui.destroy === 'function') ui.destroy();
+        }
+        _resetContext();
+        _appInitCalled = false;
+        _started = false;
+        _state = 'idle';
+        _bootstrapRevision = 0;
+        _bootstrapInFlight = null;
+    }
+
+    global.LESOULAppBootstrap = Object.freeze({
+        start: start,
+        retry: retry,
+        signIn: signIn,
+        signOut: signOut,
+        createInitialStore: createInitialStore,
+        selectMembership: selectMembership,
+        getState: getState,
+        getContext: getContext,
+        destroy: destroy
+    });
+})(typeof window !== 'undefined' ? window : globalThis);

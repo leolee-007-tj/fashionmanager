@@ -814,6 +814,10 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-document.addEventListener('DOMContentLoaded', () => {
-    App.init();
-});
+// Expose App globally so app-bootstrap.js can control initialization.
+// The auto DOMContentLoaded bootstrap was removed; app-bootstrap.js now drives App.init().
+if (typeof window !== 'undefined') {
+    window.App = App;
+} else if (typeof globalThis !== 'undefined') {
+    globalThis.App = App;
+}
