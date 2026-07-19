@@ -625,3 +625,39 @@ localStorage 기반 동기 데이터 계층을 async 전환 가능한 경계로 
 
 ### 상세 문서
 - db.js 메서드 전체 목록과 전환 난이도: `docs/ASYNC_MIGRATION_MAP.md`
+
+## 12. 3-5B: Products Read Path Async Boundary (2026-07-19)
+
+### 목적
+상품 목록/조회 read path만 async boundary에 맞춰 준비한다.
+**3-5B는 Products read path only, no CRUD conversion.**
+실제 Supabase CRUD 호출은 금지하며, 데이터 소스는 여전히 localStorage다.
+
+### 주요 변경
+- **js/db.js**: `DB.getProductsAsync()`, `DB.getDataSourceMode()`, `DB.isAsyncBoundaryEnabled(scope)` 추가
+- **js/products.js**: `Products.load()`와 `Products.renderList()`를 async로 변경 (read path만)
+- **js/app.js**: `App.renderPage()`를 async로 변경, products 페이지에서 `await Products.renderList()` 처리
+- **새 테스트**: `tests/products-read-async-contract.test.mjs` (P1-P13)
+
+### async boundary 구조
+```
+App.renderPage() (async)
+  └─ products 페이지
+       └─ await Products.renderList() (async)
+            └─ await Products.load() (async)
+                 └─ await DB.getProductsAsync()
+                      └─ Promise.resolve(DB.getProducts())  // 여전히 localStorage
+```
+
+### 제약 준수
+- 실제 Supabase products CRUD 호출: ❌ (no)
+- Products write path 변경: ❌ (no) — submitForm/delete/batch* 기존 sync 유지
+- localStorage key 변경: ❌ (no)
+- Orders/Customers/Expenses/Settings 모듈 변경: ❌ (no)
+- 원격 Supabase 연결: ❌ (no)
+- service_role 브라우저 사용: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 재추가: ❌ (no)
+
+### 상세 문서
+- Products read path 전환 상세: `docs/ASYNC_MIGRATION_MAP.md` §6

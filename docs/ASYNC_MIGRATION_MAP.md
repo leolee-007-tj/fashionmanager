@@ -163,3 +163,41 @@
 - Supabase CRUD 호출 금지 (이번 단계)
 - `js/config.js` commit 금지
 - `data_export.json` 재추가 금지
+
+## 6. 3-5B: Products Read Path Async Boundary (2026-07-19)
+
+### 목적
+상품 목록/조회 read path만 async boundary에 맞춰 준비한다.
+**3-5B는 Products read path only, no CRUD conversion.**
+실제 Supabase CRUD 호출은 금지하며, 데이터 소스는 여전히 localStorage다.
+
+### 변경 내용
+
+#### js/db.js
+- `DB.getProductsAsync()`: `Promise.resolve(this.getProducts())` 래핑 helper 추가
+- `DB.getDataSourceMode()`: 현재 항상 `'localStorage'` 반환
+- `DB.isAsyncBoundaryEnabled(scope)`: `scope === 'products-read'`일 때만 `true`
+- 기존 sync `DB.getProducts()`는 유지
+
+#### js/products.js (read path만)
+- `Products.load()`: `async function`으로 변경, `DB.getProductsAsync()`를 await (미지원 시 `DB.getProducts()` fallback)
+- `Products.renderList()`: `async function`으로 변경, `await this.load()` 사용
+- 렌더링 결과는 기존과 동일
+
+#### js/app.js (최소 대응)
+- `App.renderPage()`: `async function`으로 변경, products 페이지에서 `await Products.renderList()` 처리
+- 다른 페이지는 기존 sync 동작 유지
+
+### 이번 단계에서 하지 않는 일
+- Products write path (submitForm/delete/batchDelete/batchReclassify/batchMonthChange) 전환 ❌
+- Orders/Customers/Expenses/Settings 모듈 async 전환 ❌
+- supabase.from('products') 호출 ❌
+- insert/update/delete/upsert 구현 ❌
+- 상품 데이터 구조 변경 ❌
+- localStorage prefix 변경 ❌
+
+### 검증
+- `tests/products-read-async-contract.test.mjs` (P1-P13)
+- 기존 JS 테스트 전체 회귀
+- preflight + DB lint + pgTAP
+- 브라우저 수동 확인: 상품 목록/검색/정렬/필터 정상 동작

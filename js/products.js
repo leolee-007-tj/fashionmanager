@@ -12,8 +12,19 @@ const Products = {
         loaded: false
     },
 
-    load() {
-        this.state.products = DB.getProducts();
+    /**
+     * Products read path (3-5B).
+     * async boundary에 맞춰 DB.getProductsAsync()를 우선 사용하고,
+     * 구버전 DB(또는 helper 미지원 환경)에서는 기존 sync DB.getProducts()로 fallback한다.
+     * 렌더링 결과는 기존과 동일하다.
+     * @returns {Promise<void>}
+     */
+    async load() {
+        if (typeof DB.getProductsAsync === 'function') {
+            this.state.products = await DB.getProductsAsync();
+        } else {
+            this.state.products = DB.getProducts();
+        }
         this.autoClassifyAll();
         this.applyFilters();
         this.state.loaded = true;
@@ -86,9 +97,15 @@ const Products = {
         this.state.filtered = list;
     },
 
-    renderList() {
+    /**
+     * Products renderList (3-5B).
+     * load()가 async이므로 Promise를 반환한다.
+     * App.renderPage는 반환된 Promise를 안전하게 처리한다.
+     * @returns {Promise<string>} HTML 문자열
+     */
+    async renderList() {
         if (!this.state.loaded) {
-            this.load();
+            await this.load();
         } else {
             this.applyFilters();
         }

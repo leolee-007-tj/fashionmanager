@@ -66,6 +66,36 @@ const DB = {
         }
     },
 
+    /**
+     * 현재 data source 모드를 반환한다.
+     * 3-5A/B 단계에서는 항상 'localStorage'다.
+     * 향후 원격 DataSource 도입 시 'remote' 등으로 확장 예정.
+     */
+    getDataSourceMode() {
+        return 'localStorage';
+    },
+
+    /**
+     * async boundary 활성화 여부.
+     * 3-5B에서 products read path만 true로 전환했다.
+     * 다른 업무 모듈은 아직 false (기존 sync 경로 유지).
+     */
+    isAsyncBoundaryEnabled(scope) {
+        if (scope === 'products-read') return true;
+        return false;
+    },
+
+    /**
+     * Products read async helper (3-5B).
+     * 현재는 DB.getProducts() 결과를 Promise.resolve로 감싸 반환한다.
+     * 원격 DataSource 도입 시 이 위치에서 fetch/select 호출로 교체한다.
+     * 기존 sync DB.getProducts()는 유지된다.
+     */
+    getProductsAsync() {
+        return Promise.resolve(this.getProducts());
+    },
+
+
     init() {
         const keywords = this.getKeywords();
         if (!keywords || keywords.length === 0) {

@@ -879,3 +879,66 @@ localStorage 기반 동기 데이터 계층을 async 전환 가능한 경계로 
 - service_role 브라우저 사용: ❌ (no)
 - js/config.js commit: ❌ (no)
 - data_export.json 재추가: ❌ (no)
+
+## 3-5B: Products Read Path Async Boundary (2026-07-19)
+
+### 목적
+상품 목록/조회 read path만 async boundary에 맞춰 준비한다.
+**3-5B는 Products read path only, no CRUD conversion.**
+실제 Supabase CRUD 호출은 금지하며, 데이터 소스는 여전히 localStorage다.
+
+### 변경 파일
+- `js/db.js` (수정): `DB.getProductsAsync()`, `DB.getDataSourceMode()`, `DB.isAsyncBoundaryEnabled(scope)` 추가
+- `js/products.js` (수정): `Products.load()`와 `Products.renderList()`를 async로 변경 (read path만)
+- `js/app.js` (수정): `App.renderPage()`를 async로 변경, products 페이지에서 `await Products.renderList()` 처리
+- `docs/ASYNC_MIGRATION_MAP.md` (수정): §6 3-5B 섹션 추가
+- `docs/CURRENT_ARCHITECTURE.md` (수정): §12 3-5B 섹션 추가
+- `tests/products-read-async-contract.test.mjs` (신규): P1-P13 정적 계약 테스트
+
+### Products Read Path Async Contract Tests (P1-P13)
+
+| # | 검사 항목 | 결과 |
+|---|---|---|
+| P1 | js/db.js에 getProductsAsync 또는 products read async helper 존재 | PASS |
+| P2 | getProductsAsync는 현재 localStorage/기존 getProducts 기반 | PASS |
+| P3 | js/db.js에 supabase.from('products') 없음 | PASS |
+| P4 | js/products.js의 read path에서 await 또는 Promise handling 존재 | PASS |
+| P5 | Products write methods submitForm/delete/batch*에 Supabase 호출 없음 | PASS |
+| P6 | js/orders.js/js/customers.js/js/expenses.js/js/settings.js 변경 없음 | PASS |
+| P7 | localStorage prefix lesoul_gh_ 유지 | PASS |
+| P8 | data_export.json 없음 | PASS |
+| P9 | js/config.js는 commit되지 않음 | PASS |
+| P10 | docs에 "3-5B는 Products read path only, no CRUD conversion" 명시 | PASS |
+| P11 | ASYNC_MIGRATION_MAP에 Products read path 단계 기록 | PASS |
+| P12 | service_role 문자열 없음 | PASS |
+| P13 | remote supabase.co URL 없음 | PASS |
+
+### 브라우저 수동 확인 결과
+
+| 항목 | 상태 |
+|---|---|
+| 상품 목록 페이지 열림 | ✅ |
+| 상품 검색 동작 | ✅ |
+| 상품 정렬 동작 | ✅ |
+| 상품 필터 동작 | ✅ |
+| 기존 상품 데이터 유지 | ✅ |
+| 상품 추가/수정/삭제 기존 동작 유지 | ✅ |
+| 주문/고객/분석 페이지 기존 동작 유지 | ✅ |
+
+### JS 테스트 결과
+- 총 테스트 수: 125 (112 + 13)
+- pass: 125
+- fail: 0
+
+### DB 회귀
+- DB lint: PASS
+- pgTAP: PASS (131/131)
+
+### 제약 준수
+- 실제 Supabase products CRUD 호출: ❌ (no)
+- Products write path 변경: ❌ (no)
+- localStorage key 변경: ❌ (no)
+- 원격 Supabase 연결: ❌ (no)
+- service_role 브라우저 사용: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 재추가: ❌ (no)

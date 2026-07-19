@@ -118,7 +118,13 @@ const App = {
         this.renderPage();
     },
 
-    renderPage() {
+    /**
+     * renderPage (3-5B).
+     * Products.renderList()가 async일 수 있으므로, content가 Promise인 경우 await 후 렌더링한다.
+     * 다른 페이지는 기존 sync 동작을 유지한다.
+     * 반환값이 없더라도 호출 측(App.render 등)은 그대로 동작한다.
+     */
+    async renderPage() {
         const main = document.getElementById('main-content');
         if (!main) return;
         let content = '';
@@ -132,7 +138,7 @@ const App = {
                 case 'products':
                     if (args[0] === 'add') content = Products.renderAdd();
                     else if (args[1] === 'edit') content = Products.renderEdit(args[0]);
-                    else content = Products.renderList();
+                    else content = await Products.renderList();
                     break;
                 case 'orders':
                     if (args[0] === 'add') content = Orders.renderAdd();
