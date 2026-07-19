@@ -399,3 +399,71 @@ ProductsDataSource boundary가 분리됐으므로, 이번 단계에서는 Supaba
 - 기존 JS 테스트 전체 회귀
 - preflight + DB lint + pgTAP
 - 브라우저 수동 확인: 상품 목록/추가/수정/삭제/일괄 작업 정상 동작
+
+## 10. 3-5F: SupabaseProductsDataSource Disabled Skeleton (2026-07-19)
+
+### 목적
+Products Supabase mapping contract가 고정됐으므로, 이번 단계에서는 SupabaseProductsDataSource skeleton만 추가한다.
+**3-5F는 SupabaseProductsDataSource disabled skeleton only, no Supabase CRUD conversion.**
+기본 활성 DataSource는 반드시 LocalProductsDataSource로 유지한다.
+실제 Supabase products read/write 전환은 아직 하지 않는다.
+
+### 변경 내용
+
+#### js/db.js
+- `DB._createDisabledSupabaseProductsDataSource()`: SupabaseProductsDataSource skeleton 팩토리 추가
+- skeleton 메서드: `name`, `listProducts()`, `setProducts(products)`, `createProduct(product)`, `updateProduct(id, updates)`, `deleteProduct(id)`
+- **모든 메서드는 `throw new Error('SupabaseProductsDataSource is not enabled yet')`**
+- **활성 DataSource 변경 없음**: `getProductsDataSource()`는 여전히 LocalProductsDataSource 반환
+- runtime에서 자동 생성/활성화하지 않음
+- feature flag / config / auth session 기반 자동 전환 없음
+
+#### skeleton 특성
+- disabled 상태: 모든 메서드 호출 시 명확히 실패
+- 실제 `supabase.from('products')` 호출 없음
+- 실제 select/insert/update/delete/upsert 구현 없음
+- 네트워크 호출 없음
+- mapping helper는 참조만 (실제 호출은 다음 단계에서)
+
+### SupabaseProductsDataSource 구조 (skeleton)
+
+```
+SupabaseProductsDataSource (disabled skeleton)
+  ├─ name: 'SupabaseProductsDataSource'
+  ├─ listProducts() → throws "not enabled yet"
+  ├─ setProducts(products) → throws "not enabled yet"
+  ├─ createProduct(product) → throws "not enabled yet"
+  ├─ updateProduct(id, updates) → throws "not enabled yet"
+  └─ deleteProduct(id) → throws "not enabled yet"
+```
+
+### 현재 활성 DataSource
+- **LocalProductsDataSource**: 계속 활성 상태 유지
+- `getProductsDataSource()` 기본값 = LocalProductsDataSource
+- SupabaseProductsDataSource는 skeleton만 존재, runtime에서 자동 사용하지 않음
+
+### 다음 단계 예정
+- SupabaseProductsDataSource 실제 구현: `supabase.from('products')` 기반 CRUD
+- mapping helper를 사용한 legacy ↔ row 변환
+- store_id와 auth session 연동
+- 단계적 활성화 전략 (read-only → write → full)
+
+### 이번 단계에서 하지 않는 일
+- `getProductsDataSource()` 기본값을 SupabaseProductsDataSource로 변경 ❌
+- 실제 `supabase.from('products')` 실행 ❌
+- 실제 select/insert/update/delete/upsert 구현 ❌
+- 원격 Supabase 연결 ❌
+- service_role 브라우저 사용 ❌
+- feature flag로 SupabaseProductsDataSource 자동 활성화 ❌
+- js/config.js 값으로 products data source 전환 ❌
+- auth session 기반으로 products data source 전환 ❌
+- 상품 스키마 변경 ❌
+- localStorage prefix 변경 ❌
+- products.js 변경 ❌
+- 주문/고객/재고 트랜잭션 로직 변경 ❌
+
+### 검증
+- `tests/products-supabase-datasource-skeleton-contract.test.mjs` (S1-S16)
+- 기존 JS 테스트 전체 회귀
+- preflight + DB lint + pgTAP
+- 브라우저 수동 확인: 상품 목록/추가/수정/삭제/일괄 작업 정상 동작

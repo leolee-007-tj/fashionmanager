@@ -826,3 +826,68 @@ Mapping Layer (순수 함수, runtime 미사용):
 
 ### 상세 문서
 - Products mapping 상세: `docs/ASYNC_MIGRATION_MAP.md` §9
+
+## 16. 3-5F: SupabaseProductsDataSource Disabled Skeleton (2026-07-19)
+
+### 목적
+Products Supabase mapping contract가 고정됐으므로, 이번 단계에서는 SupabaseProductsDataSource skeleton만 추가한다.
+**3-5F는 SupabaseProductsDataSource disabled skeleton only, no Supabase CRUD conversion.**
+기본 활성 DataSource는 반드시 LocalProductsDataSource로 유지한다.
+실제 Supabase products read/write 전환은 아직 하지 않는다.
+
+### Products DataSource 구조
+
+```
+DB.getProductsDataSource() → ProductsDataSource
+  ├─ LocalProductsDataSource (현재 활성, 기본값)
+  │    └─ 기존 localStorage 기반 DB sync 메서드
+  └─ SupabaseProductsDataSource (disabled skeleton, 미사용)
+       ├─ name: 'SupabaseProductsDataSource'
+       ├─ listProducts() → throws "not enabled yet"
+       ├─ setProducts() → throws "not enabled yet"
+       ├─ createProduct() → throws "not enabled yet"
+       ├─ updateProduct() → throws "not enabled yet"
+       └─ deleteProduct() → throws "not enabled yet"
+
+Mapping Layer (순수 함수, runtime 미사용):
+  DB.mapLegacyProductToSupabaseRow / mapSupabaseRowToLegacyProduct
+```
+
+### 현재 Runtime 상태
+- **활성 DataSource**: LocalProductsDataSource (변경 없음, 기본값)
+- **데이터 저장**: localStorage (기존과 동일)
+- **SupabaseProductsDataSource**: skeleton만 존재, runtime에서 자동 사용하지 않음
+- **자동 전환 없음**: feature flag / config / auth session 기반 자동 전환 없음
+
+### 인증 게이트 vs 업무 데이터 전환
+- 인증 게이트 (3-4): 완료됨 — Supabase Auth와 연결
+- 업무 데이터 전환 (3-5):
+  - 3-5A: async boundary 준비 ✅
+  - 3-5B: Products read path async ✅
+  - 3-5C: Products write path async ✅
+  - 3-5D: Products DataSource interface extraction ✅
+  - 3-5E: Products Supabase mapping contract ✅
+  - 3-5F: SupabaseProductsDataSource disabled skeleton ✅ (현재)
+  - 다음: SupabaseProductsDataSource 실제 CRUD 구현 예정
+- **아직 Supabase products CRUD 호출 없음** — skeleton만 추가
+- 인증 게이트와 업무 데이터 전환은 여전히 분리되어 있음
+
+### 제약 준수
+- 실제 Supabase products CRUD 호출: ❌ (no)
+- 활성 DataSource: LocalProductsDataSource (기본값, 변경 없음)
+- getProductsDataSource() 기본값 변경: ❌ (no)
+- skeleton 메서드는 모두 disabled error throw
+- 실제 supabase.from('products') 실행: ❌ (no)
+- 실제 select/insert/update/delete/upsert 구현: ❌ (no)
+- feature flag / config / auth session 기반 자동 전환: ❌ (no)
+- localStorage key 변경: ❌ (no)
+- 상품 스키마 변경: ❌ (no)
+- products.js 변경: ❌ (no)
+- Orders/Customers/Expenses/Settings 모듈 변경: ❌ (no)
+- 원격 Supabase 연결: ❌ (no)
+- service_role 브라우저 사용: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 재추가: ❌ (no)
+
+### 상세 문서
+- Products skeleton 상세: `docs/ASYNC_MIGRATION_MAP.md` §10

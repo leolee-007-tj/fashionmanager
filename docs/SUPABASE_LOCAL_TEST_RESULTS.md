@@ -1156,3 +1156,78 @@ ProductsDataSource boundary가 분리됐으므로, 이번 단계에서는 Supaba
 - service_role 브라우저 사용: ❌ (no)
 - js/config.js commit: ❌ (no)
 - data_export.json 재추가: ❌ (no)
+
+## 3-5F: SupabaseProductsDataSource Disabled Skeleton (2026-07-19)
+
+### 목적
+Products Supabase mapping contract가 고정됐으므로, 이번 단계에서는 SupabaseProductsDataSource skeleton만 추가한다.
+**3-5F는 SupabaseProductsDataSource disabled skeleton only, no Supabase CRUD conversion.**
+기본 활성 DataSource는 반드시 LocalProductsDataSource로 유지한다.
+
+### 변경 파일
+- `js/db.js` (수정): `_createDisabledSupabaseProductsDataSource()` skeleton 팩토리 추가
+- `docs/ASYNC_MIGRATION_MAP.md` (수정): §10 3-5F 섹션 추가
+- `docs/CURRENT_ARCHITECTURE.md` (수정): §16 3-5F 섹션 추가
+- `tests/products-supabase-datasource-skeleton-contract.test.mjs` (신규): S1-S16 정적 계약 테스트
+
+### Products Supabase DataSource Skeleton Contract Tests (S1-S16)
+
+| # | 검사 항목 | 결과 |
+|---|---|---|
+| S1 | js/db.js에 SupabaseProductsDataSource skeleton 존재 | PASS |
+| S2 | skeleton에 listProducts/setProducts/createProduct/updateProduct/deleteProduct 존재 | PASS |
+| S3 | skeleton 메서드는 disabled error를 throw | PASS |
+| S4 | getProductsDataSource 기본값은 LocalProductsDataSource 유지 | PASS |
+| S5 | SupabaseProductsDataSource가 runtime에서 자동 활성화되지 않음 | PASS |
+| S6 | js/db.js에 실제 supabase.from('products') 실행 코드 없음 | PASS |
+| S7 | js/db.js에 실제 select/insert/update/delete/upsert 구현 없음 | PASS |
+| S8 | mapping helper는 유지됨 | PASS |
+| S9 | LocalProductsDataSource는 기존 localStorage sync 메서드를 계속 사용 | PASS |
+| S10 | products.js 변경 없음 또는 async helper 경유 유지 | PASS |
+| S11 | localStorage prefix lesoul_gh_ 유지 | PASS |
+| S12 | service_role 문자열 없음 | PASS |
+| S13 | remote supabase.co URL 없음 | PASS |
+| S14 | data_export.json 없음 | PASS |
+| S15 | js/config.js는 commit되지 않음 | PASS |
+| S16 | docs에 "3-5F는 disabled skeleton only, no Supabase CRUD conversion" 명시 | PASS |
+
+### 추가 검증
+- resetProductsDataSourceForTesting 리셋 동작: PASS
+
+### 브라우저 수동 확인 결과
+
+| 항목 | 상태 |
+|---|---|
+| 상품 목록 정상 | ✅ |
+| 상품 추가 정상 | ✅ |
+| 상품 수정 정상 | ✅ |
+| 상품 삭제 정상 | ✅ |
+| 상품 일괄 작업 정상 | ✅ |
+| 검색/정렬/필터 정상 | ✅ |
+| 주문/고객/분석 페이지 기존 동작 유지 | ✅ |
+| 기존 localStorage 상품 데이터 유지 | ✅ |
+
+### JS 테스트 결과
+- 총 테스트 수: 195 (177 + 18)
+- pass: 195
+- fail: 0
+
+### DB 회귀
+- DB lint: PASS (기존과 동일, 스키마 변경 없음)
+- pgTAP: PASS (131/131, 기존과 동일)
+
+### 제약 준수
+- 실제 Supabase products CRUD 호출: ❌ (no)
+- 활성 DataSource: LocalProductsDataSource (기본값, 변경 없음)
+- getProductsDataSource() 기본값 변경: ❌ (no)
+- 실제 supabase.from('products') 실행: ❌ (no)
+- 실제 select/insert/update/delete/upsert 구현: ❌ (no)
+- feature flag / config / auth session 기반 자동 전환: ❌ (no)
+- localStorage key 변경: ❌ (no)
+- 상품 스키마 변경: ❌ (no)
+- products.js 변경: ❌ (no)
+- Orders/Customers/Expenses/Settings 모듈 변경: ❌ (no)
+- 원격 Supabase 연결: ❌ (no)
+- service_role 브라우저 사용: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 재추가: ❌ (no)

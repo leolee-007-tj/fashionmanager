@@ -194,9 +194,14 @@ describe('Products Supabase mapping contract (M1-M18)', function () {
         // getProductsDataSource 기본값이 LocalProductsDataSource인지 확인
         assert.match(content, /getProductsDataSource\s*\([^)]*\)\s*\{[\s\S]*?_createLocalProductsDataSource\s*\(/,
             'getProductsDataSource should default to LocalProductsDataSource');
-        // SupabaseProductsDataSource 활성화 코드 없음 확인
-        assert.doesNotMatch(content, /getProductsDataSource\s*\([^)]*\)\s*\{[\s\S]*?SupabaseProductsDataSource\s*\(/,
-            'getProductsDataSource must not return SupabaseProductsDataSource');
+        // getProductsDataSource가 _createDisabledSupabaseProductsDataSource를 호출하지 않는지 확인
+        // 함수 본문 내에서 다음 메서드 정의 전까지만 체크
+        const fnMatch = content.match(
+            /getProductsDataSource\s*\([^)]*\)\s*\{([\s\S]*?)\n\s*\},\s*\n\s*\/\*\*\s*\n\s*\*\s*테스트 전용/
+        );
+        assert.ok(fnMatch, 'getProductsDataSource function body should be extractable');
+        assert.doesNotMatch(fnMatch[1], /SupabaseProductsDataSource|_createDisabledSupabaseProductsDataSource/,
+            'getProductsDataSource body must not reference SupabaseProductsDataSource');
     });
 
     it('M11: getProductsDataSource default returns LocalProductsDataSource', function () {

@@ -220,6 +220,52 @@ const DB = {
         };
     },
 
+    /**
+     * 3-5F: SupabaseProductsDataSource Disabled Skeleton
+     *
+     * SupabaseProductsDataSource의 skeleton만 추가한다.
+     * 3-5F는 SupabaseProductsDataSource disabled skeleton only, no Supabase CRUD conversion.
+     *
+     * - 현재 모든 메서드는 명확히 실패 (disabled error throw)
+     * - 실제 원격 products 테이블 호출 금지
+     * - 실제 select/insert/update/delete/upsert 구현 금지
+     * - 네트워크 호출 금지
+     * - runtime에서 자동 생성/활성화하지 않음
+     * - getProductsDataSource() 기본값은 LocalProductsDataSource 유지
+     * - 다음 단계에서 실제 Supabase CRUD 구현 예정
+     *
+     * 향후 구현 시 사용할 것들 (현재는 참조만):
+     *   - DB.mapLegacyProductToSupabaseRow / mapSupabaseRowToLegacyProduct
+     *   - DB._SUPABASE_PRODUCT_EXTENDED_FIELDS
+     *   - 원격 products 테이블 쿼리 (아직 사용 금지)
+     */
+    _createDisabledSupabaseProductsDataSource() {
+        const disabledErrorMsg = 'SupabaseProductsDataSource is not enabled yet';
+        return {
+            name: 'SupabaseProductsDataSource',
+
+            listProducts() {
+                throw new Error(disabledErrorMsg);
+            },
+
+            setProducts(products) {
+                throw new Error(disabledErrorMsg);
+            },
+
+            createProduct(product) {
+                throw new Error(disabledErrorMsg);
+            },
+
+            updateProduct(id, updates) {
+                throw new Error(disabledErrorMsg);
+            },
+
+            deleteProduct(id) {
+                throw new Error(disabledErrorMsg);
+            }
+        };
+    },
+
     // ==================== Products Supabase Mapping (3-5E) ====================
 
     /**
