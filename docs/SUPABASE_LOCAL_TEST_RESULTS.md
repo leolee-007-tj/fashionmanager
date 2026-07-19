@@ -942,3 +942,72 @@ localStorage 기반 동기 데이터 계층을 async 전환 가능한 경계로 
 - service_role 브라우저 사용: ❌ (no)
 - js/config.js commit: ❌ (no)
 - data_export.json 재추가: ❌ (no)
+
+## 3-5C: Products Write Path Async Boundary Preparation (2026-07-19)
+
+### 목적
+Products read path async boundary가 완료됐으므로, 이번에는 Products write path를 async boundary에 맞게 준비한다.
+**3-5C는 Products write path async boundary only, no Supabase CRUD conversion.**
+실제 Supabase insert/update/delete/upsert 호출은 금지하며, 데이터 소스는 여전히 localStorage다.
+
+### 변경 파일
+- `js/db.js` (수정): `setProductsAsync`, `addProductAsync`, `updateProductAsync`, `deleteProductAsync` 추가
+- `js/products.js` (수정): `submitForm`, `delete`, `batchDelete`, `batchReclassify`, `batchMonthChange`를 async로 전환
+- `js/app.js` (수정): `bindPageForms()` productForm submit handler Promise 안전 처리
+- `docs/ASYNC_MIGRATION_MAP.md` (수정): §7 3-5C 섹션 추가
+- `docs/CURRENT_ARCHITECTURE.md` (수정): §13 3-5C 섹션 추가
+- `tests/products-write-async-contract.test.mjs` (신규): W1-W15 정적 계약 테스트
+
+### Products Write Path Async Contract Tests (W1-W15)
+
+| # | 검사 항목 | 결과 |
+|---|---|---|
+| W1 | js/db.js에 addProductAsync 존재 | PASS |
+| W2 | js/db.js에 updateProductAsync 존재 | PASS |
+| W3 | js/db.js에 deleteProductAsync 존재 | PASS |
+| W4 | js/db.js에 setProductsAsync 존재 | PASS |
+| W5 | write async helpers는 기존 sync localStorage 메서드를 Promise.resolve로 감쌈 | PASS |
+| W6 | js/db.js에 supabase.from('products') 없음 | PASS |
+| W7 | Products write methods가 async 또는 Promise handling 사용 | PASS |
+| W8 | Products write path에 Supabase insert/update/delete/upsert 호출 없음 | PASS |
+| W9 | localStorage prefix lesoul_gh_ 유지 | PASS |
+| W10 | 다른 업무 모듈에 Supabase 직접 호출 없음 | PASS |
+| W11 | data_export.json 없음 | PASS |
+| W12 | js/config.js는 commit되지 않음 | PASS |
+| W13 | docs에 "3-5C는 Products write path async boundary only, no Supabase CRUD conversion" 명시 | PASS |
+| W14 | service_role 문자열 없음 | PASS |
+| W15 | remote supabase.co URL 없음 | PASS |
+
+### 브라우저 수동 확인 결과
+
+| 항목 | 상태 |
+|---|---|
+| 상품 추가 정상 | ✅ |
+| 상품 수정 정상 | ✅ |
+| 상품 삭제 정상 | ✅ |
+| 상품 일괄 삭제 정상 | ✅ |
+| 상품 일괄 분류 정상 | ✅ |
+| 상품 월 일괄 변경 정상 | ✅ |
+| 상품 목록/검색/정렬/필터 정상 | ✅ |
+| 주문/고객/분석 페이지 기존 동작 유지 | ✅ |
+| 기존 localStorage 상품 데이터 유지 | ✅ |
+
+### JS 테스트 결과
+- 총 테스트 수: 140 (125 + 15)
+- pass: 140
+- fail: 0
+
+### DB 회귀
+- DB lint: PASS
+- pgTAP: PASS (131/131)
+
+### 제약 준수
+- 실제 Supabase products CRUD 호출: ❌ (no)
+- Products read path 유지: ✅ (yes, 유지됨)
+- localStorage key 변경: ❌ (no)
+- 상품 스키마 변경: ❌ (no)
+- Orders/Customers/Expenses/Settings 모듈 변경: ❌ (no)
+- 원격 Supabase 연결: ❌ (no)
+- service_role 브라우저 사용: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 재추가: ❌ (no)

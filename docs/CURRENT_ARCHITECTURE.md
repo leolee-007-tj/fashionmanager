@@ -661,3 +661,46 @@ App.renderPage() (async)
 
 ### 상세 문서
 - Products read path 전환 상세: `docs/ASYNC_MIGRATION_MAP.md` §6
+
+## 13. 3-5C: Products Write Path Async Boundary Preparation (2026-07-19)
+
+### 목적
+Products read path async boundary가 완료됐으므로, 이번에는 Products write path를 async boundary에 맞게 준비한다.
+**3-5C는 Products write path async boundary only, no Supabase CRUD conversion.**
+실제 Supabase insert/update/delete/upsert 호출은 금지하며, 데이터 소스는 여전히 localStorage다.
+
+### 주요 변경
+- **js/db.js**: `DB.setProductsAsync`, `DB.addProductAsync`, `DB.updateProductAsync`, `DB.deleteProductAsync` 추가 (모두 기존 sync 메서드를 Promise.resolve로 감쌈)
+- **js/products.js**: `submitForm`, `delete`, `batchDelete`, `batchReclassify`, `batchMonthChange`를 async로 전환 (write path만)
+- **js/app.js**: `bindPageForms()`에서 productForm submit handler를 Promise 안전 처리
+- **새 테스트**: `tests/products-write-async-contract.test.mjs` (W1-W15)
+
+### Products async boundary 완료 상태
+```
+Products read path (3-5B):
+  App.renderPage() → await Products.renderList() → await Products.load() → await DB.getProductsAsync()
+
+Products write path (3-5C):
+  App.bindPageForms() → Promise.resolve(Products.submitForm()).catch()
+    └─ await DB.addProductAsync() / DB.updateProductAsync()
+  Products.delete() → await DB.deleteProductAsync()
+  Products.batchDelete/batchReclassify/batchMonthChange() → await DB.setProductsAsync()
+```
+
+### Data source 상태
+- **현재**: localStorage (prefix `lesoul_gh_`)
+- **다음 단계 예정**: SupabaseDataSource 추가
+- 이번 단계에서는 실제 Supabase CRUD 호출 없음
+
+### 제약 준수
+- 실제 Supabase products CRUD 호출: ❌ (no)
+- localStorage key 변경: ❌ (no)
+- 상품 스키마 변경: ❌ (no)
+- Orders/Customers/Expenses/Settings 모듈 변경: ❌ (no)
+- 원격 Supabase 연결: ❌ (no)
+- service_role 브라우저 사용: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 재추가: ❌ (no)
+
+### 상세 문서
+- Products write path 전환 상세: `docs/ASYNC_MIGRATION_MAP.md` §7

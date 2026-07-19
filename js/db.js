@@ -77,11 +77,12 @@ const DB = {
 
     /**
      * async boundary 활성화 여부.
-     * 3-5B에서 products read path만 true로 전환했다.
+     * 3-5B에서 products read path, 3-5C에서 products write path를 true로 전환했다.
      * 다른 업무 모듈은 아직 false (기존 sync 경로 유지).
      */
     isAsyncBoundaryEnabled(scope) {
         if (scope === 'products-read') return true;
+        if (scope === 'products-write') return true;
         return false;
     },
 
@@ -93,6 +94,28 @@ const DB = {
      */
     getProductsAsync() {
         return Promise.resolve(this.getProducts());
+    },
+
+    /**
+     * Products write async helpers (3-5C).
+     * 현재는 기존 sync localStorage 메서드를 Promise.resolve로 감싸 반환한다.
+     * 원격 DataSource 도입 시 이 위치에서 insert/update/delete/upsert 호출로 교체한다.
+     * 기존 sync DB.setProducts/addProduct/updateProduct/deleteProduct는 유지된다.
+     */
+    setProductsAsync(products) {
+        return Promise.resolve(this.setProducts(products));
+    },
+
+    addProductAsync(product) {
+        return Promise.resolve(this.addProduct(product));
+    },
+
+    updateProductAsync(id, updates) {
+        return Promise.resolve(this.updateProduct(id, updates));
+    },
+
+    deleteProductAsync(id) {
+        return Promise.resolve(this.deleteProduct(id));
     },
 
 

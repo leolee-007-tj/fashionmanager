@@ -187,7 +187,12 @@ const App = {
             const editId = args[1] === 'edit' ? args[0] : null;
             productForm.onsubmit = (e) => {
                 e.preventDefault();
-                Products.submitForm(editId);
+                // 3-5C: Products.submitForm이 async일 수 있으므로 Promise를 안전하게 처리.
+                // 오류 발생 시 일반 오류 메시지 표시.
+                Promise.resolve(Products.submitForm(editId)).catch(err => {
+                    console.error('Products.submitForm failed:', err && err.message ? err.message : err);
+                    App.flash(t('common', 'error') || 'Error', 'error');
+                });
             };
         }
         const customerForm = document.getElementById('customerForm');

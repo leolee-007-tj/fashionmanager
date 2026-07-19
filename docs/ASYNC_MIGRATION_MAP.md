@@ -201,3 +201,50 @@
 - 기존 JS 테스트 전체 회귀
 - preflight + DB lint + pgTAP
 - 브라우저 수동 확인: 상품 목록/검색/정렬/필터 정상 동작
+
+## 7. 3-5C: Products Write Path Async Boundary Preparation (2026-07-19)
+
+### 목적
+Products read path async boundary가 완료됐으므로, 이번에는 Products write path를 async boundary에 맞게 준비한다.
+**3-5C는 Products write path async boundary only, no Supabase CRUD conversion.**
+실제 Supabase insert/update/delete/upsert 호출은 금지하며, 데이터 소스는 여전히 localStorage다.
+
+### 변경 내용
+
+#### js/db.js
+- `DB.setProductsAsync(products)`: `Promise.resolve(this.setProducts(products))` 래핑
+- `DB.addProductAsync(product)`: `Promise.resolve(this.addProduct(product))` 래핑
+- `DB.updateProductAsync(id, updates)`: `Promise.resolve(this.updateProduct(id, updates))` 래핑
+- `DB.deleteProductAsync(id)`: `Promise.resolve(this.deleteProduct(id))` 래핑
+- `DB.isAsyncBoundaryEnabled('products-write')` → `true`
+- 기존 sync `DB.setProducts/addProduct/updateProduct/deleteProduct`는 유지
+
+#### js/products.js (write path만)
+- `Products.submitForm()`: `async function`, `DB.addProductAsync/updateProductAsync`를 await (미지원 시 sync fallback)
+- `Products.delete(id)`: `async function`, `DB.deleteProductAsync`를 await (미지원 시 sync fallback)
+- `Products.batchDelete()`: `async function`, `DB.setProductsAsync`를 await (미지원 시 sync fallback)
+- `Products.batchReclassify()`: `async function`, `DB.setProductsAsync`를 await (미지원 시 sync fallback)
+- `Products.batchMonthChange()`: `async function`, `DB.setProductsAsync`를 await (미지원 시 sync fallback)
+- 기능 결과는 기존과 동일
+
+#### js/app.js (최소 대응)
+- `bindPageForms()`: productForm submit handler에서 `Promise.resolve(Products.submitForm(editId)).catch(...)` 처리
+- 오류 발생 시 `App.flash`로 일반 오류 표시
+- 다른 form handler는 기존 sync 동작 유지
+
+### 이번 단계에서 하지 않는 일
+- supabase.from('products') 호출 ❌
+- Supabase insert/update/delete/upsert 구현 ❌
+- 원격 Supabase 연결 ❌
+- service_role 브라우저 사용 ❌
+- localStorage prefix 변경 ❌
+- 상품 스키마 변경 ❌
+- 주문/고객 트랜잭션 로직 변경 ❌
+- autoClassifyAll 로직 변경 ❌
+- 가격 계산 로직 변경 ❌
+
+### 검증
+- `tests/products-write-async-contract.test.mjs` (W1-W15)
+- 기존 JS 테스트 전체 회귀
+- preflight + DB lint + pgTAP
+- 브라우저 수동 확인: 상품 추가/수정/삭제/일괄 작업 정상 동작

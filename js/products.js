@@ -319,7 +319,7 @@ const Products = {
         App.renderPage();
     },
 
-    batchReclassify() {
+    async batchReclassify() {
         if (this.state.selected.size === 0) {
             App.flash(t('common', 'please_select'), 'warning');
             return;
@@ -339,14 +339,18 @@ const Products = {
                 count++;
             }
         });
-        DB.setProducts(products);
+        if (typeof DB.setProductsAsync === 'function') {
+            await DB.setProductsAsync(products);
+        } else {
+            DB.setProducts(products);
+        }
         this.state.products = products;
         this.state.selected.clear();
         App.flash(count + t('common', 'items_reclassified'), 'success');
         App.render();
     },
 
-    batchMonthChange() {
+    async batchMonthChange() {
         if (this.state.selected.size === 0) {
             App.flash(t('common', 'please_select'), 'warning');
             return;
@@ -369,7 +373,11 @@ const Products = {
                 p.updated_at = new Date().toISOString();
             }
         });
-        DB.setProducts(products);
+        if (typeof DB.setProductsAsync === 'function') {
+            await DB.setProductsAsync(products);
+        } else {
+            DB.setProducts(products);
+        }
         this.state.selected.clear();
         this.state.stockYear = y;
         this.state.stockMonth = m;
@@ -377,22 +385,30 @@ const Products = {
         App.render();
     },
 
-    batchDelete() {
+    async batchDelete() {
         if (this.state.selected.size === 0) {
             App.flash(t('common', 'please_select'), 'warning');
             return;
         }
         if (!confirm(this.state.selected.size + t('common', 'confirm_delete_items'))) return;
         const products = DB.getProducts().filter(p => !this.state.selected.has(p.id));
-        DB.setProducts(products);
+        if (typeof DB.setProductsAsync === 'function') {
+            await DB.setProductsAsync(products);
+        } else {
+            DB.setProducts(products);
+        }
         this.state.selected.clear();
         App.flash(t('common', 'delete') + '!', 'success');
         App.render();
     },
 
-    delete(id) {
+    async delete(id) {
         if (!confirm(t('common', 'confirm_delete') + '?')) return;
-        DB.deleteProduct(id);
+        if (typeof DB.deleteProductAsync === 'function') {
+            await DB.deleteProductAsync(id);
+        } else {
+            DB.deleteProduct(id);
+        }
         App.flash(t('common', 'delete') + '!', 'success');
         App.render();
     },
@@ -606,7 +622,7 @@ const Products = {
         App.render();
     },
 
-    submitForm(editId = null) {
+    async submitForm(editId = null) {
         const form = document.getElementById('productForm');
         const fd = new FormData(form);
         const title = fd.get('original_title').trim();
@@ -637,11 +653,19 @@ const Products = {
             normalized_title: title
         };
         if (editId) {
-            DB.updateProduct(parseInt(editId), productData);
+            if (typeof DB.updateProductAsync === 'function') {
+                await DB.updateProductAsync(parseInt(editId), productData);
+            } else {
+                DB.updateProduct(parseInt(editId), productData);
+            }
             App.flash(t('common', 'save') + '!', 'success');
         } else {
             productData.product_code = DB.generateProductCode(brand, productData.stock_year, productData.stock_month);
-            DB.addProduct(productData);
+            if (typeof DB.addProductAsync === 'function') {
+                await DB.addProductAsync(productData);
+            } else {
+                DB.addProduct(productData);
+            }
             App.flash(t('common', 'register') + '!', 'success');
         }
         this.tempImage = null;
