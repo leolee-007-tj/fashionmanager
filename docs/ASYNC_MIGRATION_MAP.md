@@ -539,3 +539,84 @@ _createControlledSupabaseProductsDataSource(client, context) → {
 - preflight + DB lint + pgTAP
 - 브라우저 수동 확인: 상품 목록/추가/수정/삭제/일괄 작업 정상 동작
 - 일반 브라우저 runtime이 SupabaseProductsDataSource로 자동 전환되지 않음 확인
+
+## 12. 3-5H: Products Supabase Read Local Integration Smoke (2026-07-19)
+
+### 목적
+3-5G에서 SupabaseProductsDataSource의 local-only controlled listProducts 구조를 만들었다.
+이번 단계에서는 실제 로컬 Supabase/Auth/RLS 환경에서 products read가 동작하는지 통합 smoke test로 검증한다.
+**3-5H는 local-only integration smoke only, no runtime conversion, no write.**
+
+단, 일반 앱 runtime은 계속 LocalProductsDataSource를 사용해야 한다.
+Products 화면을 Supabase read로 자동 전환하면 안 된다.
+write path는 여전히 disabled 상태여야 한다.
+
+### 변경 내용
+
+#### tests/products-supabase-read-local.integration.mjs (신규)
+- 로컬 Supabase 환경에서 실행하는 integration smoke test
+- `RUN_LOCAL_SUPABASE_INTEGRATION=1` 환경 변수가 있어야 실행 (opt-in)
+- 기본 `node --test`에서는 skip, 네트워크 호출 없음
+- 테스트 흐름:
+  1. service_role admin API로 테스트 유저 생성 (setup only)
+  2. anon key로 password 로그인
+  3. ensure_user_profile RPC 호출
+  4. create_initial_store RPC로 테스트 스토어 생성
+  5. authenticated owner (anon key + access token)로 products fixture 2개 삽입 (RLS insert 정책도 검증)
+  6. anon client + SupabaseProductsDataSource.listProducts()로 read 검증
+  7. 결과가 mapSupabaseRowToLegacyProduct로 정상 변환되는지 확인
+  8. write methods disabled 확인
+  9. best-effort 테스트 유저 cleanup (기본 cleanup은 db reset)
+
+#### 중요 제약
+- 테스트 데이터는 dummy/local-only만 사용
+- 실제 운영 데이터 금지
+- 실제 계정 정보 문서 기록 금지
+- token/session/key console.log 금지
+- response body 전체 console.log 금지
+- 오류 출력도 sanitized message만 사용
+- service_role은 setup에서만 사용, DataSource/브라우저 코드에 전달 금지
+- 브라우저 코드에 service_role 포함 금지
+- 원격 Supabase 연결 금지 (localhost/127.0.0.1만 허용)
+
+### 현재 활성 DataSource
+- **LocalProductsDataSource**: 계속 기본 활성 상태 유지
+- `getProductsDataSource()` 기본값 = LocalProductsDataSource
+- SupabaseProductsDataSource는 테스트에서만 `setProductsDataSourceForTesting()`으로 주입
+- 일반 브라우저 상품 화면은 계속 localStorage 사용
+
+### write path 상태
+- setProducts: disabled (throw "write methods not enabled yet")
+- createProduct: disabled
+- updateProduct: disabled
+- deleteProduct: disabled
+- insert/update/delete/upsert 실제 구현 없음
+
+### 다음 단계 예정
+- write path 구현 (create/update/delete)
+- 실제 앱 runtime 전환 (feature flag 기반)
+- store_id와 auth session 연동
+- batch / classification / 월 변경 등의 복잡한 write flow 통합
+
+### 이번 단계에서 하지 않는 일
+- `getProductsDataSource()` 기본값을 SupabaseProductsDataSource로 변경 ❌
+- 일반 runtime에서 SupabaseProductsDataSource 자동 활성화 ❌
+- Products 화면을 Supabase read로 자동 전환 ❌
+- create/update/delete/upsert 구현 ❌
+- Supabase write path 구현 ❌
+- 원격 Supabase 연결 ❌
+- service_role 브라우저 사용 ❌
+- service_role 값을 JS/browser 코드에 넣기 ❌
+- js/config.js commit ❌
+- 상품 스키마 변경 ❌
+- localStorage prefix 변경 ❌
+- products.js 변경 ❌
+- data_export.json 재추가 ❌
+
+### 검증
+- `tests/products-supabase-read-local.integration.mjs` (P1-P8, opt-in)
+- `tests/products-supabase-read-contract.test.mjs` (R1-R19)
+- 기존 JS 테스트 전체 회귀
+- preflight + DB lint + pgTAP
+- 브라우저 수동 확인: 상품 목록/추가/수정/삭제/일괄 작업 정상 동작
+- 일반 브라우저 runtime이 SupabaseProductsDataSource로 자동 전환되지 않음 확인

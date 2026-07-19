@@ -966,3 +966,78 @@ DB.getProductsDataSource() → ProductsDataSource
 
 ### 상세 문서
 - Products read controlled test 상세: `docs/ASYNC_MIGRATION_MAP.md` §11
+
+## 18. 3-5H: Products Supabase Read Local Integration Smoke (2026-07-19)
+
+### 목적
+3-5G에서 SupabaseProductsDataSource의 local-only controlled listProducts 구조를 만들었다.
+이번 단계에서는 실제 로컬 Supabase/Auth/RLS 환경에서 products read가 동작하는지 통합 smoke test로 검증한다.
+**3-5H는 local-only integration smoke only, no runtime conversion, no write.**
+
+### Products DataSource 현재 상태
+
+```
+Runtime default: LocalProductsDataSource (localStorage)
+
+Test-only (opt-in):
+  SupabaseProductsDataSource (local-only read)
+    ├─ listProducts() → anon client + RLS + store_id 필터 → mapping → legacy objects
+    ├─ setProducts()    → throw "write not enabled" (disabled)
+    ├─ createProduct()  → throw "write not enabled" (disabled)
+    ├─ updateProduct()  → throw "write not enabled" (disabled)
+    └─ deleteProduct()  → throw "write not enabled" (disabled)
+```
+
+### Local Integration Smoke Test
+- 파일: `tests/products-supabase-read-local.integration.mjs`
+- 실행 조건: `RUN_LOCAL_SUPABASE_INTEGRATION=1` 환경 변수 (opt-in)
+- 기본 `node --test`: skip, 네트워크 호출 없음
+- 테스트 흐름:
+  1. service_role admin API로 테스트 유저 생성 (setup only)
+  2. anon key로 password 로그인
+  3. ensure_user_profile + create_initial_store
+  4. authenticated owner (anon key + access token)로 products fixture 2개 삽입 (RLS insert 정책도 검증)
+  5. anon client + SupabaseProductsDataSource.listProducts()로 read 검증
+  6. 결과가 mapSupabaseRowToLegacyProduct로 정상 변환 확인
+  7. write methods disabled 확인
+  8. best-effort 테스트 유저 cleanup (기본 cleanup은 db reset)
+
+### 현재 Runtime 상태
+- **활성 DataSource**: LocalProductsDataSource (기본값, 변경 없음)
+- **데이터 저장**: localStorage (기존과 동일)
+- **SupabaseProductsDataSource**: 테스트에서만 주입, runtime에서 자동 사용하지 않음
+- **write disabled**: create/update/delete/setProducts 모두 disabled error
+- **자동 전환 없음**: feature flag / config / auth session 기반 자동 전환 없음
+
+### 인증 게이트 vs 업무 데이터 전환
+- 인증 게이트 (3-4): 완료됨 — Supabase Auth와 연결
+- 업무 데이터 전환 (3-5):
+  - 3-5A: async boundary 준비 ✅
+  - 3-5B: Products read path async ✅
+  - 3-5C: Products write path async ✅
+  - 3-5D: Products DataSource interface extraction ✅
+  - 3-5E: Products Supabase mapping contract ✅
+  - 3-5F: SupabaseProductsDataSource disabled skeleton ✅
+  - 3-5G: Products Supabase read path local-only controlled test ✅
+  - 3-5H: Products Supabase read local integration smoke ✅ (현재)
+  - 다음: write path 구현, runtime 전환 예정
+- **아직 일반 앱 runtime은 localStorage 사용**
+- 인증 게이트와 업무 데이터 전환은 여전히 분리되어 있음
+
+### 제약 준수
+- 실제 Supabase products write 호출: ❌ (no)
+- 활성 DataSource: LocalProductsDataSource (기본값, 변경 없음)
+- getProductsDataSource() 기본값 변경: ❌ (no)
+- 일반 runtime에서 SupabaseProductsDataSource 자동 활성화: ❌ (no)
+- create/update/delete/upsert 구현: ❌ (no)
+- 원격 Supabase 연결: ❌ (no)
+- service_role 브라우저 사용: ❌ (no)
+- service_role 값을 JS/browser 코드에 넣기: ❌ (no)
+- localStorage key 변경: ❌ (no)
+- 상품 스키마 변경: ❌ (no)
+- products.js 변경: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 재추가: ❌ (no)
+
+### 상세 문서
+- Products read local integration 상세: `docs/ASYNC_MIGRATION_MAP.md` §12
