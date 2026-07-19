@@ -89,14 +89,20 @@ describe('Products datasource boundary contract (D1-D16)', function () {
             'db.js should not call createClient');
     });
 
-    it('D8: js/db.js has no direct Supabase insert/update/delete/upsert implementation', function () {
+    it('D8: js/db.js has no upsert/hard delete; controlled insert/update allowed (3-5I update)', function () {
         const content = readFile('js/db.js');
-        assert.doesNotMatch(content, /\.insert\s*\(/i,
-            'db.js should not have .insert() call');
+        // upsert는 금지 (대량 overwrite 위험)
         assert.doesNotMatch(content, /\.upsert\s*\(/i,
             'db.js should not have .upsert() call');
+        // 실제 hard delete()는 금지 (soft delete via update 사용)
+        assert.doesNotMatch(content, /from\s*\([^)]*\)\s*\.\s*delete\s*\(/i,
+            'db.js should not have from(...).delete() hard delete');
+        // supabase.xxx 직접 호출은 금지 (client 명시적 주입만 허용)
         assert.doesNotMatch(content, /supabase\s*\.\s*(insert|upsert|update|delete)\s*\(/i,
-            'db.js should not call Supabase CRUD methods');
+            'db.js should not call supabase.xxx CRUD methods directly');
+        // setProducts는 여전히 disabled (대량 overwrite 금지)
+        assert.match(content, /setProducts[\s\S]*?throw\s+new\s+Error/i,
+            'setProducts should still throw Error (disabled, no bulk overwrite)');
     });
 
     it('D9: localStorage prefix lesoul_gh_ preserved', function () {

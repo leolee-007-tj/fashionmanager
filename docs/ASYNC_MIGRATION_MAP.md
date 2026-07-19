@@ -620,3 +620,87 @@ write path는 여전히 disabled 상태여야 한다.
 - preflight + DB lint + pgTAP
 - 브라우저 수동 확인: 상품 목록/추가/수정/삭제/일괄 작업 정상 동작
 - 일반 브라우저 runtime이 SupabaseProductsDataSource로 자동 전환되지 않음 확인
+
+## 13. 3-5I: Products Supabase Write Path Local-only Controlled Contract (2026-07-19)
+
+### 목표
+SupabaseProductsDataSource의 create/update/delete write methods를 local-only controlled 방식으로 구현한다.
+setProducts는 대량 overwrite 위험이 있으므로 계속 disabled 유지.
+일반 runtime은 여전히 LocalProductsDataSource를 사용하며 자동 전환되지 않는다.
+**3-5I는 local-only controlled write contract only, no runtime conversion.**
+
+### 변경 내용
+
+#### js/db.js — write methods 구현
+- `createProduct(product)`:
+  - legacy product → `mapLegacyProductToSupabaseRow`로 변환
+  - `store_id`는 `context.storeId`로 강제 (product 내 값 무시)
+  - insert 후 select single → `mapSupabaseRowToLegacyProduct`로 변환 반환
+- `updateProduct(id, updates)`:
+  - `legacy_id + store_id` 조건으로 제한
+  - id/legacy_id/store_id/created_at/created_by 등 위험 필드 patch에서 제외
+  - update 후 select single → legacy object 반환
+- `deleteProduct(id)`:
+  - 실제 DELETE 대신 `deleted_at = now()` soft delete 방식
+  - `legacy_id + store_id` 조건으로 제한
+  - update 후 select single → legacy object 반환
+- `setProducts(products)`:
+  - 계속 disabled 유지 (대량 overwrite 금지)
+  - `throw new Error('setProducts is not enabled for SupabaseProductsDataSource')`
+
+#### tests/products-supabase-write-contract.test.mjs (신규)
+- W1-W21 계약 테스트
+- mock client 기반, 실제 네트워크 호출 없음
+- 기본 `node --test`에서 실행 가능
+
+### 제약
+- local-only / localhost / 127.0.0.1만 허용
+- 원격 Supabase (supabase.co) 연결 금지
+- service_role 브라우저/DataSource 사용 금지
+- 명시적 client 주입 + localOnly: true + storeId 필요
+- 실제 DELETE 대신 deleted_at soft delete
+- setProducts disabled 유지
+- 일반 runtime 자동 전환 없음 (기본값은 LocalProductsDataSource)
+- products.js 변경 없음
+
+### 현재 활성 DataSource
+- **LocalProductsDataSource**: 계속 기본 활성 상태 유지
+- `getProductsDataSource()` 기본값 = LocalProductsDataSource
+- SupabaseProductsDataSource는 테스트에서만 `setProductsDataSourceForTesting()`으로 주입
+- 일반 브라우저 상품 화면은 계속 localStorage 사용
+
+### write path 상태
+- setProducts: **disabled** (대량 overwrite 금지)
+- createProduct: 구현됨 (local-only controlled)
+- updateProduct: 구현됨 (local-only controlled, legacy_id + store_id 제한)
+- deleteProduct: 구현됨 (local-only controlled, soft delete)
+- 일반 runtime 자동 전환: ❌
+- 원격 Supabase 연결: ❌
+
+### 다음 단계 예정
+- write path local integration smoke test (실제 Supabase와의 통합 검증)
+- 실제 앱 runtime 전환 (feature flag 기반)
+- store_id와 auth session 연동
+- batch / classification / 월 변경 등의 복잡한 write flow 통합
+
+### 이번 단계에서 하지 않는 일
+- `getProductsDataSource()` 기본값을 SupabaseProductsDataSource로 변경 ❌
+- 일반 runtime에서 SupabaseProductsDataSource 자동 활성화 ❌
+- Products 화면을 Supabase write로 자동 전환 ❌
+- setProducts 대량 overwrite 구현 ❌
+- 원격 Supabase 연결 ❌
+- service_role 브라우저 사용 ❌
+- service_role 값을 JS/browser 코드에 넣기 ❌
+- js/config.js commit ❌
+- 상품 스키마 변경 ❌
+- localStorage prefix 변경 ❌
+- products.js 변경 ❌
+- data_export.json 재추가 ❌
+
+### 검증
+- `tests/products-supabase-write-contract.test.mjs` (W1-W21)
+- `tests/products-supabase-read-contract.test.mjs` (R1-R21, R3 수정)
+- 기존 JS 테스트 전체 회귀
+- preflight + DB lint + pgTAP
+- 브라우저 수동 확인: 상품 목록/추가/수정/삭제/일괄 작업 정상 동작
+- 일반 브라우저 runtime이 SupabaseProductsDataSource로 자동 전환되지 않음 확인

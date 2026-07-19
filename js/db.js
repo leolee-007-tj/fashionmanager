@@ -221,37 +221,63 @@ const DB = {
     },
 
     /**
-     * 3-5G: SupabaseProductsDataSource Read-Only Controlled Skeleton
+     * 3-5I: SupabaseProductsDataSource Local-only Controlled Write
      *
-     * listProducts read path만 로컬 테스트 전용으로 제한 구현한다.
-     * 3-5G는 local-only controlled read test only, no write conversion.
+     * listProducts read + create/update/delete write를 local-only controlled 방식으로 구현한다.
+     * 3-5I는 local-only controlled write contract only, no runtime conversion.
      *
-     * - listProducts만 구현 (read-only, local-only controlled)
-     * - setProducts/createProduct/updateProduct/deleteProduct는 disabled error 유지
+     * - listProducts: 구현됨 (local-only controlled)
+     * - createProduct: 구현됨 (local-only controlled, insert)
+     * - updateProduct: 구현됨 (local-only controlled, legacy_id + store_id 제한)
+     * - deleteProduct: 구현됨 (local-only controlled, soft delete via deleted_at)
+     * - setProducts: disabled (대량 overwrite 금지)
      * - 실제 브라우저 runtime에서 자동 생성하지 않음
      * - getProductsDataSource() 기본값은 LocalProductsDataSource 유지
      * - setProductsDataSourceForTesting으로만 주입 가능
      * - 원격 Supabase 연결 금지
      * - service_role 브라우저 사용 금지
      *
-     * listProducts local-only 조건:
+     * write methods 공통 local-only 조건:
      *   1. client가 명시적으로 주입되어야 함
      *   2. context가 { localOnly: true, storeId: ... } 형태여야 함
      *   3. localOnly !== true면 throw
      *   4. storeId가 없으면 throw
      *   5. URL이 localhost / 127.0.0.1이 아니면 throw
-     *   6. products table select read-only만 수행
-     *   7. 결과 row는 mapSupabaseRowToLegacyProduct로 변환
-     *   8. token/session/key를 console.log 하지 않음
-     *   9. 오류 메시지에 key/JWT/token/body 전체를 포함하지 않음
+     *   6. 결과 row는 mapSupabaseRowToLegacyProduct로 변환
+     *   7. token/session/key를 console.log 하지 않음
+     *   8. 오류 메시지에 key/JWT/token/body 전체를 포함하지 않음
      *
      * @param {Object} client - Supabase client (명시적 주입)
      * @param {Object} context - { localOnly: true, storeId: string, url?: string }
-     * @returns {Object} SupabaseProductsDataSource (read-only controlled)
+     * @returns {Object} SupabaseProductsDataSource (local-only controlled read + write)
      */
     _createControlledSupabaseProductsDataSource(client, context) {
         const db = this;
-        const writeDisabledMsg = 'SupabaseProductsDataSource write methods are not enabled yet';
+
+        function _validateWriteContext(methodName) {
+            if (!client) {
+                throw new Error(`SupabaseProductsDataSource.${methodName} requires explicit client`);
+            }
+            if (!context || context.localOnly !== true) {
+                throw new Error(`SupabaseProductsDataSource.${methodName} requires localOnly context`);
+            }
+            if (!context.storeId) {
+                throw new Error(`SupabaseProductsDataSource.${methodName} requires storeId`);
+            }
+            const url = (client.supabaseUrl || context.url || '').toLowerCase();
+            if (!/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(url)) {
+                throw new Error(`SupabaseProductsDataSource.${methodName} requires localhost URL`);
+            }
+        }
+
+        function _wrapWriteError(methodName, err) {
+            if (err && err.message && err.message.indexOf('requires ') === 0) {
+                throw err;
+            }
+            throw new Error(`SupabaseProductsDataSource.${methodName} query failed`);
+        }
+
+        const _setProductsDisabledMsg = 'setProducts is not enabled for SupabaseProductsDataSource';
 
         return {
             name: 'SupabaseProductsDataSource',
@@ -261,60 +287,99 @@ const DB = {
              * products table에서 store_id 기반 read-only select 수행.
              */
             listProducts() {
-                // 1. client 명시적 주입 확인
-                if (!client) {
-                    throw new Error('SupabaseProductsDataSource.listProducts requires explicit client');
-                }
-                // 2. context 확인
-                if (!context || context.localOnly !== true) {
-                    throw new Error('SupabaseProductsDataSource.listProducts requires localOnly context');
-                }
-                // 3. storeId 확인
-                if (!context.storeId) {
-                    throw new Error('SupabaseProductsDataSource.listProducts requires storeId');
-                }
-                // 4. URL localhost 확인 (client.supabaseUrl 또는 context.url)
-                const url = (client.supabaseUrl || context.url || '').toLowerCase();
-                if (!/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(url)) {
-                    throw new Error('SupabaseProductsDataSource.listProducts requires localhost URL');
-                }
-                // 5. products table select read-only
+                _validateWriteContext('listProducts');
                 return client.from('products')
                     .select('*')
                     .eq('store_id', context.storeId)
                     .then(response => {
                         if (response.error) {
-                            // 9. 오류 메시지에 key/JWT/token/body 포함 금지
                             throw new Error('SupabaseProductsDataSource.listProducts query failed');
                         }
-                        // 6. 결과를 legacy product object로 변환
                         const rows = response.data || [];
                         return rows.map(row => db.mapSupabaseRowToLegacyProduct(row));
                     })
-                    .catch(err => {
-                        // 8. token/session/key console.log 금지
-                        // 9. 오류 메시지에 민감 정보 포함 금지
-                        if (err && err.message && err.message.indexOf('requires ') === 0) {
-                            throw err; // validation error는 그대로 전달
-                        }
-                        throw new Error('SupabaseProductsDataSource.listProducts query failed');
-                    });
+                    .catch(err => _wrapWriteError('listProducts', err));
             },
 
             setProducts(products) {
-                throw new Error(writeDisabledMsg);
+                throw new Error(_setProductsDisabledMsg);
             },
 
+            /**
+             * Local-only controlled create.
+             * legacy product → supabase row 변환 후 insert.
+             * store_id는 context.storeId로 강제.
+             */
             createProduct(product) {
-                throw new Error(writeDisabledMsg);
+                _validateWriteContext('createProduct');
+                const row = db.mapLegacyProductToSupabaseRow(product || {});
+                row.store_id = context.storeId;
+                delete row.id;
+                return client.from('products')
+                    .insert(row)
+                    .select()
+                    .single()
+                    .then(response => {
+                        if (response.error) {
+                            throw new Error('SupabaseProductsDataSource.createProduct query failed');
+                        }
+                        return db.mapSupabaseRowToLegacyProduct(response.data);
+                    })
+                    .catch(err => _wrapWriteError('createProduct', err));
             },
 
+            /**
+             * Local-only controlled update.
+             * legacy_id + store_id 조건으로 제한.
+             * id/legacy_id/store_id 등 위험 필드는 patch에서 제외.
+             */
             updateProduct(id, updates) {
-                throw new Error(writeDisabledMsg);
+                _validateWriteContext('updateProduct');
+                const DANGER_FIELDS = ['id', 'legacy_id', 'store_id', 'created_at', 'created_by'];
+                const safeUpdates = {};
+                const upd = updates || {};
+                for (const key of Object.keys(upd)) {
+                    if (DANGER_FIELDS.indexOf(key) === -1) {
+                        safeUpdates[key] = upd[key];
+                    }
+                }
+                safeUpdates.updated_at = new Date().toISOString();
+                return client.from('products')
+                    .update(safeUpdates)
+                    .eq('legacy_id', Number(id))
+                    .eq('store_id', context.storeId)
+                    .select()
+                    .single()
+                    .then(response => {
+                        if (response.error) {
+                            throw new Error('SupabaseProductsDataSource.updateProduct query failed');
+                        }
+                        return db.mapSupabaseRowToLegacyProduct(response.data);
+                    })
+                    .catch(err => _wrapWriteError('updateProduct', err));
             },
 
+            /**
+             * Local-only controlled soft delete.
+             * 실제 DELETE 대신 deleted_at = now()로 soft delete.
+             * legacy_id + store_id 조건으로 제한.
+             */
             deleteProduct(id) {
-                throw new Error(writeDisabledMsg);
+                _validateWriteContext('deleteProduct');
+                const patch = { deleted_at: new Date().toISOString() };
+                return client.from('products')
+                    .update(patch)
+                    .eq('legacy_id', Number(id))
+                    .eq('store_id', context.storeId)
+                    .select()
+                    .single()
+                    .then(response => {
+                        if (response.error) {
+                            throw new Error('SupabaseProductsDataSource.deleteProduct query failed');
+                        }
+                        return db.mapSupabaseRowToLegacyProduct(response.data);
+                    })
+                    .catch(err => _wrapWriteError('deleteProduct', err));
             }
         };
     },

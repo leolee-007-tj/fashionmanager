@@ -109,17 +109,14 @@ describe('Products Supabase Read Contract (R1-R19)', function () {
         }
     });
 
-    it('R3: set/create/update/delete throw disabled error', function () {
+    it('R3: setProducts throws disabled error (create/update/delete now implemented in 3-5I)', function () {
         const DB = loadDbForTesting();
         const ds = DB._createControlledSupabaseProductsDataSource(
             createMockClient(),
             { localOnly: true, storeId: 'test-store' }
         );
-        const pattern = /not enabled yet/i;
-        assert.throws(() => ds.setProducts([]), pattern, 'setProducts should be disabled');
-        assert.throws(() => ds.createProduct({}), pattern, 'createProduct should be disabled');
-        assert.throws(() => ds.updateProduct(1, {}), pattern, 'updateProduct should be disabled');
-        assert.throws(() => ds.deleteProduct(1), pattern, 'deleteProduct should be disabled');
+        assert.throws(() => ds.setProducts([]), /setProducts is not enabled/i,
+            'setProducts should be disabled (bulk overwrite not allowed)');
     });
 
     it('R4: getProductsDataSource default is LocalProductsDataSource', function () {

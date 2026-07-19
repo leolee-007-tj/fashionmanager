@@ -68,9 +68,10 @@ describe('Products Supabase DataSource Skeleton Contract (S1-S16)', function () 
             'skeleton name should be SupabaseProductsDataSource');
     });
 
-    it('S3: write methods throw disabled error (listProducts throws validation error without client)', function () {
+    it('S3: setProducts disabled; create/update/delete require client validation (3-5I update)', function () {
         const DB = loadDbForTesting();
         // 3-5G: listProducts는 client/context 없이 호출 시 validation error throw
+        // 3-5I: create/update/delete도 client 없으면 validation error throw
         const skeleton = DB._createControlledSupabaseProductsDataSource(null, null);
         assert.equal(skeleton.name, 'SupabaseProductsDataSource');
 
@@ -81,27 +82,28 @@ describe('Products Supabase DataSource Skeleton Contract (S1-S16)', function () 
             'listProducts should throw validation error without client'
         );
 
-        // write methods → disabled error
-        const writeErrPattern = /not enabled yet/i;
-        assert.throws(
-            () => skeleton.setProducts([]),
-            writeErrPattern,
-            'setProducts should throw disabled error'
-        );
+        // create/update/delete without client → validation error (requires explicit client)
         assert.throws(
             () => skeleton.createProduct({}),
-            writeErrPattern,
-            'createProduct should throw disabled error'
+            /requires explicit client/i,
+            'createProduct should throw validation error without client'
         );
         assert.throws(
             () => skeleton.updateProduct(1, {}),
-            writeErrPattern,
-            'updateProduct should throw disabled error'
+            /requires explicit client/i,
+            'updateProduct should throw validation error without client'
         );
         assert.throws(
             () => skeleton.deleteProduct(1),
-            writeErrPattern,
-            'deleteProduct should throw disabled error'
+            /requires explicit client/i,
+            'deleteProduct should throw validation error without client'
+        );
+
+        // setProducts → always disabled (bulk overwrite not allowed)
+        assert.throws(
+            () => skeleton.setProducts([]),
+            /setProducts is not enabled/i,
+            'setProducts should always be disabled'
         );
     });
 
@@ -148,29 +150,29 @@ describe('Products Supabase DataSource Skeleton Contract (S1-S16)', function () 
         }
     });
 
-    it('S7: js/db.js has no write CRUD (insert/update/delete/upsert); read-only select allowed (3-5G)', function () {
+    it('S7: js/db.js has controlled write (insert/update for soft delete); no hard delete() (3-5I update)', function () {
         const content = readFile('js/db.js');
-        // 3-5G: _createControlledSupabaseProductsDataSource로 변경됨
         const factoryStart = content.indexOf('_createControlledSupabaseProductsDataSource');
         assert.ok(factoryStart > -1, 'factory should exist');
-        const afterFactory = content.slice(factoryStart, factoryStart + 2500);
+        const afterFactory = content.slice(factoryStart, factoryStart + 5000);
 
-        // 3-5G: read-only select는 허용됨 (listProducts 구현)
-        // write methods (insert/update/delete/upsert)는 금지
-        assert.doesNotMatch(afterFactory, /\.insert\s*\(/i,
-            'skeleton must not have .insert() (write forbidden)');
-        assert.doesNotMatch(afterFactory, /\.upsert\s*\(/i,
-            'skeleton must not have .upsert() (write forbidden)');
-        // .update()와 .delete()는 write method에서 throw Error로 사용되므로,
-        // supabase chain의 .update()/.delete()만 금지 (client.from(...).update/delete 패턴)
-        assert.doesNotMatch(afterFactory, /from\s*\([^)]*\)\s*\.\s*update\s*\(/i,
-            'skeleton must not have from(...).update() (write forbidden)');
+        // 3-5I: controlled write 구현됨 (insert + update)
+        // .insert() 와 .update() 는 이제 허용됨 (controlled write)
+        // 실제 hard delete()는 금지 (soft delete via update 사용)
         assert.doesNotMatch(afterFactory, /from\s*\([^)]*\)\s*\.\s*delete\s*\(/i,
-            'skeleton must not have from(...).delete() (write forbidden)');
+            'factory must not have from(...).delete() (hard delete forbidden — use soft delete');
 
-        // write methods는 throw new Error로 disabled 처리되어 있어야 함
-        assert.match(afterFactory, /throw\s+new\s+Error\s*\(/i,
-            'write methods should throw Error (disabled state)');
+        // setProducts는 여전히 disabled
+        assert.match(afterFactory, /setProducts[\s\S]*?throw\s+new\s+Error/i,
+            'setProducts should still throw Error (disabled, no bulk overwrite)');
+
+        // localOnly / storeId / localhost 제약이 있어야 함
+        assert.match(afterFactory, /localOnly/i,
+            'factory must enforce localOnly constraint');
+        assert.match(afterFactory, /storeId/i,
+            'factory must enforce storeId constraint');
+        assert.match(afterFactory, /localhost|127\.0\.0\.1/,
+            'factory must enforce localhost URL constraint');
     });
 
     it('S8: mapping helpers are preserved', function () {

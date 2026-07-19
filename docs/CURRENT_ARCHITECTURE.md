@@ -1041,3 +1041,97 @@ Test-only (opt-in):
 
 ### 상세 문서
 - Products read local integration 상세: `docs/ASYNC_MIGRATION_MAP.md` §12
+
+## 19. 3-5I: Products Supabase Write Path Local-only Controlled Contract (2026-07-19)
+
+### 목표
+SupabaseProductsDataSource의 create/update/delete write methods를 local-only controlled 방식으로 구현한다.
+setProducts는 대량 overwrite 위험이 있으므로 계속 disabled 유지.
+일반 runtime은 여전히 LocalProductsDataSource를 사용하며 자동 전환되지 않는다.
+**3-5I는 local-only controlled write contract only, no runtime conversion.**
+
+### Products DataSource 현재 상태
+
+```
+Runtime default: LocalProductsDataSource (localStorage)
+
+Test-only (controlled / opt-in):
+  SupabaseProductsDataSource (local-only read + write)
+    ├─ listProducts()   → anon client + RLS + store_id 필터 → mapping → legacy objects
+    ├─ createProduct()  → mapLegacy → insert (store_id 강제) → mapping → legacy object
+    ├─ updateProduct()  → legacy_id + store_id 필터 → update (위험 필드 차단) → mapping → legacy object
+    ├─ deleteProduct()  → legacy_id + store_id 필터 → soft delete (deleted_at) → mapping → legacy object
+    └─ setProducts()    → throw "setProducts is not enabled" (disabled — bulk overwrite 금지)
+```
+
+### Write Methods 세부 규칙
+
+#### createProduct
+- `mapLegacyProductToSupabaseRow`로 변환 후 insert
+- `store_id`는 `context.storeId`로 강제 (product 내 값 무시)
+- insert 후 `.select().single()`로 결과 조회
+- 결과를 `mapSupabaseRowToLegacyProduct`로 변환 후 반환
+
+#### updateProduct
+- `legacy_id + store_id` 이중 필터로 대상 제한
+- id/legacy_id/store_id/created_at/created_by 등 위험 필드는 patch에서 제외
+- `updated_at` 자동 설정
+- update 후 `.select().single()`로 결과 조회 → legacy 변환 반환
+
+#### deleteProduct
+- 실제 `delete()` 호출 ❌
+- `deleted_at = new Date().toISOString()`로 soft delete
+- `legacy_id + store_id` 이중 필터
+- update 후 결과 → legacy 변환 반환
+
+#### setProducts
+- 계속 disabled 유지
+- 대량 overwrite 위험으로 인해 명시적으로 금지
+
+### Contract Test
+- 파일: `tests/products-supabase-write-contract.test.mjs`
+- W1-W21 검증 항목
+- mock client 기반, 실제 네트워크 호출 없음
+- 기본 `node --test`에서 실행 가능
+
+### 현재 Runtime 상태
+- **활성 DataSource**: LocalProductsDataSource (기본값, 변경 없음)
+- **데이터 저장**: localStorage (기존과 동일)
+- **SupabaseProductsDataSource**: 테스트에서만 주입, runtime에서 자동 사용하지 않음
+- **setProducts disabled**: 대량 overwrite 금지
+- **자동 전환 없음**: feature flag / config / auth session 기반 자동 전환 없음
+
+### 인증 게이트 vs 업무 데이터 전환
+- 인증 게이트 (3-4): 완료됨 — Supabase Auth와 연결
+- 업무 데이터 전환 (3-5):
+  - 3-5A: async boundary 준비 ✅
+  - 3-5B: Products read path async ✅
+  - 3-5C: Products write path async ✅
+  - 3-5D: Products DataSource interface extraction ✅
+  - 3-5E: Products Supabase mapping contract ✅
+  - 3-5F: SupabaseProductsDataSource disabled skeleton ✅
+  - 3-5G: Products Supabase read path local-only controlled test ✅
+  - 3-5H: Products Supabase read local integration smoke ✅
+  - 3-5I: Products Supabase write path local-only controlled contract ✅ (현재)
+  - 다음: write path local integration smoke, runtime 전환 예정
+- **아직 일반 앱 runtime은 localStorage 사용**
+- 인증 게이트와 업무 데이터 전환은 여전히 분리되어 있음
+
+### 제약 준수
+- 실제 Supabase products write 호출: ✅ (controlled test only, runtime no)
+- 활성 DataSource: LocalProductsDataSource (기본값, 변경 없음)
+- getProductsDataSource() 기본값 변경: ❌ (no)
+- 일반 runtime에서 SupabaseProductsDataSource 자동 활성화: ❌ (no)
+- setProducts 대량 overwrite 구현: ❌ (no, disabled 유지)
+- delete 방식: soft delete (deleted_at) — 실제 DELETE ❌
+- 원격 Supabase 연결: ❌ (no)
+- service_role 브라우저 사용: ❌ (no)
+- service_role 값을 JS/browser 코드에 넣기: ❌ (no)
+- localStorage key 변경: ❌ (no)
+- 상품 스키마 변경: ❌ (no)
+- products.js 변경: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 재추가: ❌ (no)
+
+### 상세 문서
+- Products write contract 상세: `docs/ASYNC_MIGRATION_MAP.md` §13
