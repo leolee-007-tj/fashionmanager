@@ -4,13 +4,16 @@
 
 | 항목 | 값 |
 |---|---|
-| 실행 날짜 | 2026-07-12 (3-4C1 단계 업데이트) |
+| 실행 날짜 | 2026-07-19 (3-4C1.1 단계 업데이트) |
 | OS | macOS Intel x86_64 |
 | Docker Desktop | 설치 및 실행 성공 (v29.6.1) |
 | Supabase CLI 버전 | v2.109.1 |
 | migration 파일명 | timestamp 형식 (`20260711000100_`~`20260711001000_`) |
 | 로컬 Supabase 실행 여부 | **성공** |
-| Node.js (JS 테스트) | v20.x (Docker node:20-alpine) |
+| Node.js (JS 테스트) | v24.18.0 (native Node, Docker Node fallback 없음) |
+| native Node 경로 | /Users/lesoul888/.nvm/versions/node/v24.18.0/bin/node |
+| Supabase CLI 경로 | /Users/lesoul888/.supabase/bin/supabase |
+| Docker CLI 경로 | /Applications/Docker.app/Contents/Resources/bin/docker |
 
 ## 실행 상태
 
@@ -258,6 +261,154 @@
 - [x] **3-4C1**: GitHub Actions 아님 (로컬 실행)
 - [x] **3-4C1**: 브라우저 UI 통합 미실행 (HTTP 통합만)
 - [x] **3-4C1**: env 파일 권한 600, EXIT trap으로 삭제
+- [x] **3-4C1.1**: runner에 `--preflight` / `--run` 명시적 모드 추가
+- [x] **3-4C1.1**: 인자 없으면 usage만 출력하고 종료
+- [x] **3-4C1.1**: `--preflight`는 읽기 전용 (supabase start/stop/reset 금지)
+- [x] **3-4C1.1**: `--preflight`에서 docker run/pull/stop/restart 금지
+- [x] **3-4C1.1**: `--preflight`에서 config.toml/js/config.js 쓰기 금지
+- [x] **3-4C1.1**: `--run`은 preflight PASS 후에만 실행
+- [x] **3-4C1.1**: 자동 `supabase start` 제거 (runner에 문자열 없음)
+- [x] **3-4C1.1**: `--ignore-health-check` 제거 (runner에 문자열 없음)
+- [x] **3-4C1.1**: Docker Node fallback 제거 (docker run 문자열 없음)
+- [x] **3-4C1.1**: `node:20-alpine` 사용 금지
+- [x] **3-4C1.1**: native Node만 사용 (v24.18.0)
+- [x] **3-4C1.1**: Node 미설치라고 단정하지 않음 (표준 경로 탐색)
+- [x] **3-4C1.1**: 중요 명령에 `|| true` 사용 금지
+- [x] **3-4C1.1**: db reset timeout 600초 (기존 180초에서 증가)
+- [x] **3-4C1.1**: cleanup db reset timeout 600초
+- [x] **3-4C1.1**: integration test timeout 180초
+- [x] **3-4C1.1**: docker info timeout 15초
+- [x] **3-4C1.1**: supabase status timeout 20초
+- [x] **3-4C1.1**: timeout 메시지는 사실만 출력 (`exceeded N seconds`)
+- [x] **3-4C1.1**: Docker 리소스 부족/디스크 I/O 병목 단정 금지
+- [x] **3-4C1.1**: 각 명령의 command/exit_code/elapsed_seconds 기록
+- [x] **3-4C1.1**: key/token/JWT/email/password 출력 0
+- [x] **3-4C1.1**: 20분 이상 무한 대기 금지
+- [x] **3-4C1.1**: config.toml 수정 0
+- [x] **3-4C1.1**: js/config.js 생성 0
+- [x] **3-4C1.1**: supabase/migrations/* 변경 0
+- [x] **3-4C1.1**: supabase/tests/* 변경 0
+- [x] **3-4C1.1**: index.html/css/style.css/js/* 변경 0
+- [x] **3-4C1.1**: runner 계약 테스트 19/19 PASS (C1-C18)
+- [x] **3-4C1.1**: preflight PASS (12s)
+- [x] **3-4C1.1**: JS 단위 테스트 + 계약 테스트 76/76 PASS
+- [x] **3-4C1.1**: 통합 테스트 14/14 PASS (run 총 소요 244s)
+- [x] **3-4C1.1**: db lint exit=0 (오류 0)
+- [x] **3-4C1.1**: pgTAP 131/131 PASS (Files=4, Result: PASS)
+- [x] **3-4C1.1**: 자동 start/restart/install 실행 수: 0
+- [x] **3-4C1.1**: Docker image pull 실행 수: 0
+- [x] **3-4C1.1**: 설정 파일 변경 수: 0
+- [x] **3-4C1.1**: GitHub Actions 아님 (로컬 검증)
+- [x] **3-4C1.1**: 원격 Supabase 미연결
+
+## Local Runner Contract Tests (3-4C1.1)
+
+`scripts/run-local-auth-rpc-integration.sh`의 정적 계약을 검증하는 테스트다.
+실제 Docker/Supabase를 실행하지 않고 runner 파일 내용만 정적으로 검사한다.
+
+### 실행 환경
+
+| 항목 | 값 |
+|---|---|
+| 테스트 러너 | Node.js 내장 `node:test` |
+| Node 버전 | v24.18.0 (native) |
+| 외부 의존성 | 없음 |
+| 실제 Docker/Supabase 실행 | 0 |
+
+### 실행 명령
+
+```bash
+node --test tests/local-runner-contract.test.mjs
+```
+
+### 테스트 결과
+
+| 항목 | 값 |
+|---|---|
+| 테스트 파일 | 1 |
+| 총 테스트 수 | 19 (C1-C18 + parent) |
+| pass | **19** |
+| fail | **0** |
+
+### 계약 항목
+
+| # | 검사 항목 | 결과 |
+|---|---|---|
+| C1 | `supabase start` 문자열 없음 | PASS |
+| C2 | `--ignore-health-check` 문자열 없음 | PASS |
+| C3 | `docker run` 문자열 없음 | PASS |
+| C4 | `docker pull` 문자열 없음 | PASS |
+| C5 | `brew install` 문자열 없음 | PASS |
+| C6 | `npm install` 문자열 없음 | PASS |
+| C7 | `--preflight` 모드 존재 | PASS |
+| C8 | `--run` 모드 존재 | PASS |
+| C9 | db reset timeout 600초 | PASS |
+| C10 | cleanup db reset timeout 600초 | PASS |
+| C11 | docker info timeout 15초 | PASS |
+| C12 | supabase status timeout 20초 | PASS |
+| C13 | 중요 명령에 `|| true` 사용 없음 | PASS |
+| C14 | preflight에서 db reset 실행 없음 | PASS |
+| C15 | preflight에서 설정 파일 쓰기 없음 | PASS |
+| C16 | Docker Node fallback 없음 | PASS |
+| C17 | key/token/JWT 출력 없음 | PASS |
+| C18 | native node만 사용 | PASS |
+
+## Local Auth and RPC Integration Tests (3-4C1.1)
+
+실제 로컬 Supabase에 HTTP 요청을 보내는 통합 테스트 결과.
+
+### 실행 명령
+
+```bash
+bash scripts/run-local-auth-rpc-integration.sh --preflight
+bash scripts/run-local-auth-rpc-integration.sh --run
+```
+
+### 실행 결과 (2026-07-19)
+
+| 항목 | 값 |
+|---|---|
+| preflight 결과 | PASS (12s) |
+| docker info exit code | 0 (elapsed 5s) |
+| supabase status exit code | 0 (elapsed 3s) |
+| API hostname | 127.0.0.1 |
+| db reset elapsed | 139s |
+| post-reset status exit code | 0 (elapsed 1s) |
+| integration test elapsed | 4s |
+| cleanup db reset elapsed | 91s |
+| run 총 소요 | 244s |
+| 통합 subtests | 14 (12 시나리오 + 1 parent + 1 보안) |
+| pass | **14** |
+| fail | **0** |
+| timeout 발생 | 없음 |
+| 자동 supabase start 실행 수 | 0 |
+| Docker restart 실행 수 | 0 |
+| Docker Node fallback 실행 수 | 0 |
+| Docker image pull 실행 수 | 0 |
+| 설정 파일 변경 수 | 0 |
+| 실제 네트워크 호출 | localhost만 |
+| 원격 요청 | 0 |
+| secret 출력 | 0 |
+| GitHub Actions | 아님 (로컬 검증) |
+| 브라우저 UI 통합 | 미실행 |
+
+### 시나리오별 결과
+
+| # | 시나리오 | 결과 | elapsed |
+|---|---|---|---|
+| I1 | test user 생성 (admin API) | PASS | 722ms |
+| I2 | password login (anon key) | PASS | 333ms |
+| I3 | ensure_user_profile RPC | PASS | 297ms |
+| I4 | 초기 membership 0개 | PASS | 37ms |
+| I5 | create_initial_store RPC | PASS | 32ms |
+| I6 | idempotency (같은 store UUID) | PASS | 16ms |
+| I7 | owner membership 1개 | PASS | 14ms |
+| I8 | store RLS 조회 | PASS | 16ms |
+| I9 | store_settings 기본 언어 ko | PASS | 30ms |
+| I10 | list_staff_products 빈 배열 | PASS | 63ms |
+| I11 | refresh token 새 session | PASS | 364ms |
+| I12 | signOut 및 재로그인 | PASS | 521ms |
+| Security | localhost hostname만 사용 | PASS | <1ms |
 
 ## JavaScript Foundation Unit Tests
 
