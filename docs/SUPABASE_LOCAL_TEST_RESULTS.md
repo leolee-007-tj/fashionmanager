@@ -763,3 +763,63 @@ wrapper script 동작:
 - 원격 Supabase 연결: ❌ (no)
 - business modules 변경: ❌ (no)
 - localStorage 업무 데이터: ✅ (유지)
+
+## 3-4C3: Browser Auth Failure / Recovery Smoke (2026-07-19)
+
+### 목적
+브라우저 인증 게이트의 실패/복구 경로를 검증한다. 정상 흐름은 3-4C2에서 확인됐다.
+아직 business CRUD 전환은 시작하지 않는다.
+
+### 변경 파일
+- `docs/SUPABASE_BROWSER_AUTH_SMOKE_TEST.md` (업데이트): R1-R10 recovery 시나리오 추가
+- `docs/SUPABASE_LOCAL_TEST_RESULTS.md` (업데이트): 3-4C3 섹션 추가
+- `docs/CURRENT_ARCHITECTURE.md` (업데이트): 3-4C3 섹션 추가
+- `tests/browser-auth-recovery-contract.test.mjs` (신규): C1-C12 정적 계약 테스트
+
+### Recovery Contract Tests (C1-C12)
+
+| # | 검사 항목 | 결과 |
+|---|---|---|
+| C1 | index.html에 js/config.js optional hook 존재 | PASS |
+| C2 | js/config.js가 config.example.js보다 먼저 로드됨 | PASS |
+| C3 | config.example.js 기본값 SUPABASE_ENABLED=false | PASS |
+| C4 | config.example.js가 기존 LESOUL_CONFIG를 덮어쓰지 않음 | PASS |
+| C5 | js/config.js는 .gitignore에 포함됨 | PASS |
+| C6 | index.html/js/docs에 service_role 실제 사용 없음 | PASS |
+| C7 | js 코드에 access_token/refresh_token console.log 없음 | PASS |
+| C8 | auth-ui error state에 retry 버튼 존재 | PASS |
+| C9 | app-bootstrap logout failure retry가 signOut 재시도 | PASS |
+| C10 | unknown/null bootstrap result에서 app 본문 숨김 | PASS |
+| C11 | remote supabase.co URL 없음 | PASS |
+| C12 | business modules 변경 없음 | PASS |
+
+### Recovery 시나리오 (R1-R10)
+
+| # | 시나리오 | 결과 |
+|---|---|---|
+| R1 | js/config.js 없음 → legacy mode | PASS |
+| R2 | 잘못된 SUPABASE_URL → error + retry | PASS |
+| R3 | 잘못된 anon key → 일반 오류 메시지 | PASS |
+| R4 | 잘못된 이메일/비밀번호 → signed-out 유지 | PASS |
+| R5 | Supabase 중단 → timeout + retry | PASS |
+| R6 | session 확인 실패 → 안전 전환 | PASS |
+| R7 | logout 실패 → retry signOut | PASS |
+| R8 | onboarding 실패 → 앱 진입 금지 | PASS |
+| R9 | token/session console 출력 없음 | PASS |
+| R10 | 원격 URL 차단 | PASS |
+
+### 주요 제약 준수
+- service_role 브라우저 사용: ❌ (no)
+- token/session console 출력: ❌ (no)
+- 원격 Supabase 연결: ❌ (no)
+- business CRUD 변경: ❌ (no)
+- js/config.js commit: ❌ (no)
+
+### JS 테스트 결과
+- 총 테스트 수: 99
+- pass: 99
+- fail: 0
+
+### DB 회귀
+- DB lint: PASS
+- pgTAP: PASS (131/131)

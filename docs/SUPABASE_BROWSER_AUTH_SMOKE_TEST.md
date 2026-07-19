@@ -151,8 +151,94 @@ http://127.0.0.1:4173/index.html
 | service_role 브라우저 | ❌ (없음) |
 | 원격 Supabase 연결 | ❌ (없음) |
 
-## 16. 다음 단계
+## 16. 3-4C3: Browser Auth Failure / Recovery Smoke
 
-- 3-4C3: Business CRUD Supabase 전환
+실패/복구 경로에 대한 smoke test다. 정상 흐름은 3-4C2에서 검증됐다.
+
+### R1. js/config.js 없음
+- GitHub Pages 또는 일반 로컬 서버에서 js/config.js가 404여도 앱이 legacy mode로 정상 실행
+- config.example.js 기본값 SUPABASE_ENABLED=false가 적용
+- 앱 전체가 흰 화면으로 죽지 않음
+
+### R2. SUPABASE_ENABLED=true + 잘못된 SUPABASE_URL
+- 앱 전체가 흰 화면으로 죽지 않음
+- 인증 영역에 안전한 오류 메시지와 retry 표시
+- token/key/url 전체값을 console.log로 출력하지 않음
+
+### R3. SUPABASE_ENABLED=true + 잘못된 anon key
+- 로그인 실패 시 일반적인 오류 메시지만 표시
+- key 값, JWT, response body 전체를 화면/console에 출력하지 않음
+
+### R4. 잘못된 이메일/비밀번호 로그인
+- signed-out 화면 유지
+- password input은 clear
+- 구체적인 인증 실패 사유를 과도하게 노출하지 않음
+
+### R5. Supabase local stack 중단 상태
+- 브라우저가 무한 loading에 빠지지 않음
+- timeout 또는 error state로 전환
+- retry 버튼이 동작
+
+### R6. 새로고침 중 session 확인 실패
+- 앱 본문을 잘못 노출하지 않음
+- auth-root error 또는 signed-out 상태로 안전하게 이동
+
+### R7. logout 실패
+- 앱이 중간 상태로 꼬이지 않음
+- retry가 실제 signOut 재시도
+- logout 버튼 중복 클릭 방지 유지
+
+### R8. store onboarding 실패
+- 매장 생성 실패 시 앱 진입 금지
+- 입력값/오류 상태 안전 처리
+- retry 가능
+
+### R9. token/session/service_role console 출력 없음
+- index.html, js/auth-service.js, js/app-bootstrap.js, js/auth-ui.js에서 token/session/key를 출력하지 않음
+
+### R10. 원격 URL 차단
+- docs와 contract test에서 supabase.co 또는 https 원격 URL 사용 금지
+
+## 17. Recovery Contract Tests (C1-C12)
+
+정적 계약 테스트로 실패/복구 요구사항을 검증한다.
+
+```bash
+node --test tests/browser-auth-recovery-contract.test.mjs
+```
+
+| # | 검사 항목 |
+|---|---|
+| C1 | index.html에 js/config.js optional hook 존재 |
+| C2 | js/config.js가 config.example.js보다 먼저 로드됨 |
+| C3 | config.example.js 기본값 SUPABASE_ENABLED=false |
+| C4 | config.example.js가 기존 LESOUL_CONFIG를 덮어쓰지 않음 |
+| C5 | js/config.js는 .gitignore에 포함됨 |
+| C6 | index.html/js/docs에 service_role 실제 사용 없음 |
+| C7 | js 코드에 access_token/refresh_token console.log 없음 |
+| C8 | auth-ui error state에 retry 버튼 존재 |
+| C9 | app-bootstrap logout failure retry가 signOut 재시도 |
+| C10 | unknown/null bootstrap result에서 app 본문 숨김 |
+| C11 | remote supabase.co URL 없음 |
+| C12 | business modules 변경 없음 |
+
+## 18. 수동 recovery smoke 결과
+
+| 항목 | 상태 |
+|---|---|
+| R1. js/config.js 없음 → legacy mode | ✅ |
+| R2. 잘못된 URL → error + retry | ✅ |
+| R3. 잘못된 anon key → 일반 오류 | ✅ |
+| R4. 잘못된 이메일/비밀번호 | ✅ |
+| R5. Supabase 중단 → timeout + retry | ✅ |
+| R6. session 확인 실패 → 안전 전환 | ✅ |
+| R7. logout 실패 → retry signOut | ✅ |
+| R8. onboarding 실패 → 앱 진입 금지 | ✅ |
+| R9. token console 출력 없음 | ✅ |
+| R10. 원격 URL 차단 | ✅ |
+
+## 19. 다음 단계
+
+- 3-4D: Business CRUD Supabase 전환
 - localStorage 데이터를 Supabase로 마이그레이션
 - 상품/주문/고객 모듈 Supabase API로 전환

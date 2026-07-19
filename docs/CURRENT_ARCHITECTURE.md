@@ -511,3 +511,63 @@ product.reserved_stock -= quantity
 | token console 출력 | ❌ (없음) |
 | service_role 브라우저 | ❌ (없음) |
 | 원격 Supabase 연결 | ❌ (없음) |
+
+## 10. 3-4C3: Browser Auth Failure / Recovery Smoke (2026-07-19)
+
+### 목적
+브라우저 인증 게이트의 실패/복구 경로를 검증한다. 정상 흐름은 3-4C2에서 확인됐다.
+아직 business CRUD 전환은 시작하지 않는다.
+
+### 주요 변경
+- **새 테스트**: `tests/browser-auth-recovery-contract.test.mjs` (C1-C12 정적 계약 테스트)
+- **문서 업데이트**: `docs/SUPABASE_BROWSER_AUTH_SMOKE_TEST.md`에 R1-R10 recovery 시나리오 추가
+- **문서 업데이트**: `docs/SUPABASE_LOCAL_TEST_RESULTS.md`에 3-4C3 결과 추가
+- **문서 업데이트**: `docs/CURRENT_ARCHITECTURE.md`에 3-4C3 섹션 추가
+
+### 실패/복구 시나리오 (R1-R10)
+| # | 시나리오 | 처리 방식 |
+|---|---|---|
+| R1 | js/config.js 없음 | legacy mode로 정상 실행 (SUPABASE_ENABLED=false) |
+| R2 | 잘못된 SUPABASE_URL | error UI + retry, 앱 본문 숨김 |
+| R3 | 잘못된 anon key | 일반 오류 메시지, key/JWT/body 미출력 |
+| R4 | 잘못된 이메일/비밀번호 | signed-out 유지, password clear, 구체 사유 미노출 |
+| R5 | Supabase stack 중단 | timeout → error state, retry 가능 |
+| R6 | session 확인 실패 | auth-root error 또는 signed-out으로 안전 전환 |
+| R7 | logout 실패 | error state + retry signOut, 중간 상태 방지 |
+| R8 | onboarding 실패 | 앱 진입 금지, retry 가능 |
+| R9 | token/session 출력 | console.log로 token/session/key 출력 안 함 |
+| R10 | 원격 URL 차단 | supabase.co / https 원격 URL 사용 금지 |
+
+### Recovery Contract Tests (C1-C12)
+| # | 검사 항목 | 결과 |
+|---|---|---|
+| C1 | index.html에 js/config.js optional hook 존재 | PASS |
+| C2 | js/config.js가 config.example.js보다 먼저 로드됨 | PASS |
+| C3 | config.example.js 기본값 SUPABASE_ENABLED=false | PASS |
+| C4 | config.example.js가 기존 LESOUL_CONFIG를 덮어쓰지 않음 | PASS |
+| C5 | js/config.js는 .gitignore에 포함됨 | PASS |
+| C6 | index.html/js/docs에 service_role 실제 사용 없음 | PASS |
+| C7 | js 코드에 access_token/refresh_token console.log 없음 | PASS |
+| C8 | auth-ui error state에 retry 버튼 존재 | PASS |
+| C9 | app-bootstrap logout failure retry가 signOut 재시도 | PASS |
+| C10 | unknown/null bootstrap result에서 app 본문 숨김 | PASS |
+| C11 | remote supabase.co URL 없음 | PASS |
+| C12 | business modules 변경 없음 | PASS |
+
+### 안전 장치 목록
+- `_hideApp()`: 모든 error 경로에서 앱 본문 숨김
+- `_safeErrorState()`: error + retry 버튼 표시
+- bootstrap revision guard: stale 결과 무시
+- signOut single-flight: 중복 로그아웃 방지
+- bootstrap single-flight: 중복 bootstrap 방지
+- CDN load-state 관리 (loading/loaded/failed)
+- legacy fallback 금지: 인증 오류 시 자동으로 legacy 앱으로 우회하지 않음
+- Context 메모리 전용: token/session을 localStorage에 저장하지 않음
+- 모든 동적 값 `textContent` 사용: innerHTML 금지 (XSS 방지)
+
+### 제약 준수
+- service_role 브라우저 사용: ❌ (no)
+- token/session console 출력: ❌ (no)
+- 원격 Supabase 연결: ❌ (no)
+- business CRUD 변경: ❌ (no)
+- js/config.js commit: ❌ (no)
