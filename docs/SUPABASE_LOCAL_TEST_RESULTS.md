@@ -1080,3 +1080,79 @@ Products read/write async boundary가 준비됐으므로, 이번 단계에서는
 - service_role 브라우저 사용: ❌ (no)
 - js/config.js commit: ❌ (no)
 - data_export.json 재추가: ❌ (no)
+
+## 3-5E: Products Supabase Mapping Contract (2026-07-19)
+
+### 목적
+ProductsDataSource boundary가 분리됐으므로, 이번 단계에서는 Supabase products row와 기존 legacy product object 사이의 mapping contract를 고정한다.
+**3-5E는 Products Supabase mapping contract only, no Supabase CRUD conversion.**
+활성 DataSource는 계속 LocalProductsDataSource여야 한다.
+
+### 변경 파일
+- `js/db.js` (수정): mapping helper 추가 (mapLegacyProductToSupabaseRow, mapSupabaseRowToLegacyProduct, validateProductMappingInputForTesting)
+- `docs/ASYNC_MIGRATION_MAP.md` (수정): §9 3-5E 섹션 추가, 필드 매핑표 작성
+- `docs/CURRENT_ARCHITECTURE.md` (수정): §15 3-5E 섹션 추가
+- `tests/products-supabase-mapping-contract.test.mjs` (신규): M1-M18 정적 계약 테스트
+
+### Products Supabase Mapping Contract Tests (M1-M18)
+
+| # | 검사 항목 | 결과 |
+|---|---|---|
+| M1 | js/db.js에 mapLegacyProductToSupabaseRow 존재 | PASS |
+| M2 | js/db.js에 mapSupabaseRowToLegacyProduct 존재 | PASS |
+| M3 | mapping helper는 supabase.from을 호출하지 않음 | PASS |
+| M4 | mapping helper는 insert/update/delete/upsert를 호출하지 않음 | PASS |
+| M5 | legacy id는 legacy_id로 매핑됨 | PASS |
+| M6 | Supabase uuid id와 legacy numeric id를 혼동하지 않음 | PASS |
+| M7 | price/cost/stock/reserved_stock 필드 매핑 규칙 존재 | PASS |
+| M8 | created_at/updated_at 매핑 규칙 존재 | PASS |
+| M9 | image/base64 관련 필드는 text 보존 방침 명시 | PASS |
+| M10 | LocalProductsDataSource가 여전히 기본 활성 DataSource | PASS |
+| M11 | getProductsDataSource 기본값이 LocalProductsDataSource | PASS |
+| M12 | js/db.js에 supabase.from('products') 없음 | PASS |
+| M13 | remote supabase.co URL 없음 | PASS |
+| M14 | service_role 문자열 없음 | PASS |
+| M15 | localStorage prefix lesoul_gh_ 유지 | PASS |
+| M16 | docs에 "3-5E는 mapping contract only, no Supabase CRUD conversion" 명시 | PASS |
+| M17 | data_export.json 없음 | PASS |
+| M18 | js/config.js는 commit되지 않음 | PASS |
+
+### 추가 순수 함수 수준 검증
+- round-trip mapping (legacy → row → legacy) 핵심 필드 보존: PASS
+- 누락 필드 안전 기본값 처리: PASS
+- validateProductMappingInputForTesting 입력 검증: PASS
+
+### 브라우저 수동 확인 결과
+
+| 항목 | 상태 |
+|---|---|
+| 상품 목록 정상 | ✅ |
+| 상품 추가 정상 | ✅ |
+| 상품 수정 정상 | ✅ |
+| 상품 삭제 정상 | ✅ |
+| 상품 일괄 작업 정상 | ✅ |
+| 검색/정렬/필터 정상 | ✅ |
+| 주문/고객/분석 페이지 기존 동작 유지 | ✅ |
+| 기존 localStorage 상품 데이터 유지 | ✅ |
+
+### JS 테스트 결과
+- 총 테스트 수: 175 (156 + 19)
+- pass: 175
+- fail: 0
+
+### DB 회귀
+- DB lint: PASS (기존과 동일, 스키마 변경 없음)
+- pgTAP: PASS (131/131, 기존과 동일)
+
+### 제약 준수
+- 실제 Supabase products CRUD 호출: ❌ (no)
+- 활성 DataSource: LocalProductsDataSource (변경 없음)
+- mapping helper의 네트워크/localStorage 호출: ❌ (no)
+- localStorage key 변경: ❌ (no)
+- 상품 스키마 변경: ❌ (no)
+- products.js 변경: ❌ (no)
+- Orders/Customers/Expenses/Settings 모듈 변경: ❌ (no)
+- 원격 Supabase 연결: ❌ (no)
+- service_role 브라우저 사용: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 재추가: ❌ (no)

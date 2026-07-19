@@ -763,3 +763,66 @@ Products.submitForm() → await DB.addProductAsync()
 
 ### 상세 문서
 - Products DataSource 상세: `docs/ASYNC_MIGRATION_MAP.md` §8
+
+## 15. 3-5E: Products Supabase Mapping Contract (2026-07-19)
+
+### 목적
+ProductsDataSource boundary가 분리됐으므로, 이번 단계에서는 Supabase products row와 기존 legacy product object 사이의 mapping contract를 고정한다.
+**3-5E는 Products Supabase mapping contract only, no Supabase CRUD conversion.**
+활성 DataSource는 계속 LocalProductsDataSource여야 한다.
+
+### Products DataSource + Mapping Layer 구조
+
+```
+DB.getProductsDataSource() → ProductsDataSource
+  ├─ LocalProductsDataSource (현재 활성)
+  │    └─ 기존 localStorage 기반 DB sync 메서드
+  └─ SupabaseProductsDataSource (다음 단계 예정, 미구현)
+       └─ mapping helpers 사용 예정
+
+Mapping Layer (순수 함수, runtime 미사용):
+  DB.mapLegacyProductToSupabaseRow(product) → Supabase row
+  DB.mapSupabaseRowToLegacyProduct(row) → legacy product
+  DB.validateProductMappingInputForTesting(obj, kind) → boolean
+```
+
+### Mapping Layer 설명
+- **순수 함수**: side-effect 없음, localStorage/네트워크/Supabase client 호출 금지
+- **runtime 미사용**: 현재 app runtime에서 자동 사용하지 않음
+- **다음 단계 연동**: SupabaseProductsDataSource 구현 시 mapping helper 사용 예정
+- **필드 매핑**: legacy numeric id ↔ legacy_id, Supabase uuid는 별도 관리
+- **image 보존**: base64 image는 text로 보존 (blob 변환하지 않음)
+- **안전 기본값**: 누락 필드는 안전 기본값 처리 (앱 호환성 보존)
+
+### 현재 Runtime 상태
+- **활성 DataSource**: LocalProductsDataSource (변경 없음)
+- **데이터 저장**: localStorage (기존과 동일)
+- **mapping helper**: runtime에서 호출하지 않음 (다음 단계에서 사용)
+
+### 인증 게이트 vs 업무 데이터 전환
+- 인증 게이트 (3-4): 완료됨 — Supabase Auth와 연결
+- 업무 데이터 전환 (3-5):
+  - 3-5A: async boundary 준비 ✅
+  - 3-5B: Products read path async ✅
+  - 3-5C: Products write path async ✅
+  - 3-5D: Products DataSource interface extraction ✅
+  - 3-5E: Products Supabase mapping contract ✅ (현재)
+  - 다음: SupabaseProductsDataSource 구현 예정
+- **아직 Supabase products CRUD 호출 없음** — mapping contract만 고정
+- 인증 게이트와 업무 데이터 전환은 여전히 분리되어 있음
+
+### 제약 준수
+- 실제 Supabase products CRUD 호출: ❌ (no)
+- 활성 DataSource: LocalProductsDataSource (변경 없음)
+- mapping helper의 네트워크/localStorage 호출: ❌ (no)
+- localStorage key 변경: ❌ (no)
+- 상품 스키마 변경: ❌ (no)
+- products.js 변경: ❌ (no)
+- Orders/Customers/Expenses/Settings 모듈 변경: ❌ (no)
+- 원격 Supabase 연결: ❌ (no)
+- service_role 브라우저 사용: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 재추가: ❌ (no)
+
+### 상세 문서
+- Products mapping 상세: `docs/ASYNC_MIGRATION_MAP.md` §9

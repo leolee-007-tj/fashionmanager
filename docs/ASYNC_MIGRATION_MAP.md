@@ -305,3 +305,97 @@ interface ProductsDataSource {
 - 기존 JS 테스트 전체 회귀
 - preflight + DB lint + pgTAP
 - 브라우저 수동 확인: 상품 목록/추가/수정/삭제/일괄 작업 정상 동작
+
+## 9. 3-5E: Products Supabase Mapping Contract (2026-07-19)
+
+### 목적
+ProductsDataSource boundary가 분리됐으므로, 이번 단계에서는 Supabase products row와 기존 legacy product object 사이의 mapping contract를 고정한다.
+**3-5E는 Products Supabase mapping contract only, no Supabase CRUD conversion.**
+활성 DataSource는 계속 LocalProductsDataSource여야 한다.
+
+### 변경 내용
+
+#### js/db.js
+- `DB.mapLegacyProductToSupabaseRow(product)`: legacy product object → Supabase products row (순수 함수)
+- `DB.mapSupabaseRowToLegacyProduct(row)`: Supabase products row → legacy product object (순수 함수)
+- `DB.validateProductMappingInputForTesting(productOrRow, kind)`: 매핑 입력값 정적 검증 (테스트용)
+- `DB._SUPABASE_PRODUCT_EXTENDED_FIELDS`: Supabase 확장 필드 기본값 (frozen object)
+- **활성 DataSource 변경 없음**: `getProductsDataSource()`는 여전히 LocalProductsDataSource 반환
+
+#### mapping helper 특성
+- 순수 함수 (side-effect 없음)
+- localStorage 읽기/쓰기 금지
+- 네트워크 호출 금지
+- Supabase client 호출 금지
+- 현재 runtime에서 자동 사용하지 않음 (다음 단계에서 사용 예정)
+
+### Legacy product object ↔ Supabase products row 필드 매핑표
+
+| Legacy field | Supabase column | 타입 | 비고 |
+|---|---|---|---|
+| `id` (numeric) | `legacy_id` (bigint) | number → bigint | legacy numeric id는 legacy_id로 보존 |
+| — | `id` (uuid) | — | Supabase uuid, legacy numeric id와 다름. 신규 생성 시 null (DB가 gen_random_uuid()로 채움) |
+| — | `store_id` (uuid) | — | 현재 브라우저 business CRUD에서 미사용. 매핑 시 null (다음 단계에서 인증 게이트와 연동) |
+| `product_code` | `product_code` | text | direct copy |
+| `original_title` | `original_title` | text | direct copy (필수) |
+| `normalized_title` | `normalized_title` | text | direct copy |
+| `title_language` | `title_language` | text | direct copy |
+| `brand` | `brand` | text | direct copy (필수) |
+| `category` | `category` | text | direct copy |
+| `color` | `color` | text | direct copy |
+| `size` | `size` | text | direct copy |
+| `material` | `material` | text | direct copy |
+| — | `season` | text | Supabase 전용 확장 필드 (legacy에 없음, 기본값 null) |
+| — | `fit` | text | Supabase 전용 확장 필드 (기본값 null) |
+| — | `style` | text | Supabase 전용 확장 필드 (기본값 null) |
+| — | `classification_status` | text | Supabase 전용 확장 필드 (기본값 null) |
+| `korea_cost` | `korea_cost` | numeric | direct copy |
+| `actual_converted_cost` | `actual_converted_cost` | numeric | direct copy |
+| `china_base_price` | `china_base_price` | numeric | direct copy |
+| `current_stock` | `current_stock` | integer | direct copy (기본값 0) |
+| `reserved_stock` | `reserved_stock` | integer | direct copy (기본값 0) |
+| `stock_year` | `stock_year` | integer | direct copy |
+| `stock_month` | `stock_month` | integer | direct copy |
+| `image` (base64) | `image` | text | base64 text 보존 (이번 단계에서 blob 변환하지 않음) |
+| `notes` | `notes` | text | direct copy |
+| — | `created_by` | uuid | 인증 연동 후 채움 (현재 null) |
+| — | `updated_by` | uuid | 인증 연동 후 채움 (현재 null) |
+| `created_at` | `created_at` | timestamptz | ISO string direct copy |
+| `updated_at` | `updated_at` | timestamptz | ISO string direct copy |
+| — | `deleted_at` | timestamptz | Supabase 전용 soft-delete 필드 (기본값 null) |
+| — | `version` | integer | Supabase 전용乐观锁 필드 (기본값 1) |
+
+### 매핑 규칙
+1. **id 분리**: legacy numeric id → `legacy_id`, Supabase uuid → `id` (혼동 방지)
+2. **안전 기본값**: 누락/unknown 필드는 안전 기본값 처리 (앱 호환성 보존)
+3. **image text 보존**: base64 image는 text로 보존, blob 변환하지 않음
+4. **store_id 미사용**: 현재 브라우저 business CRUD에서 store_id 미사용, 매핑 시 null
+5. **profit/price calculation 변경 없음**: 이번 단계에서 가격 계산 로직 변경하지 않음
+6. **round-trip 보장**: legacy → row → legacy 변환 시 핵심 필드 보존
+
+### 현재 활성 DataSource
+- **LocalProductsDataSource**: 계속 활성 상태 유지
+- mapping helper는 runtime에서 자동 사용하지 않음
+
+### 다음 단계 예정
+- **SupabaseProductsDataSource**: `supabase.from('products')` 기반 구현 (아직 구현 안 함)
+- SupabaseProductsDataSource에서 mapping helper 사용 예정
+- 실제 Supabase CRUD 호출은 다음 단계에서 수행
+
+### 이번 단계에서 하지 않는 일
+- `supabase.from('products')` 호출 ❌
+- Supabase select/insert/update/delete/upsert 구현 ❌
+- 원격 Supabase 연결 ❌
+- service_role 브라우저 사용 ❌
+- ProductsDataSource를 Supabase로 활성화 ❌
+- 상품 스키마 변경 ❌
+- localStorage prefix 변경 ❌
+- 주문/고객/재고 트랜잭션 로직 변경 ❌
+- products.js 변경 ❌
+- feature flag로 실제 Supabase products read/write 켜는 코드 추가 ❌
+
+### 검증
+- `tests/products-supabase-mapping-contract.test.mjs` (M1-M18)
+- 기존 JS 테스트 전체 회귀
+- preflight + DB lint + pgTAP
+- 브라우저 수동 확인: 상품 목록/추가/수정/삭제/일괄 작업 정상 동작

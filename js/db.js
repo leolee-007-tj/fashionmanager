@@ -220,6 +220,177 @@ const DB = {
         };
     },
 
+    // ==================== Products Supabase Mapping (3-5E) ====================
+
+    /**
+     * 3-5E: Products Supabase Mapping Contract
+     *
+     * 순수 매핑 helper들.
+     * 3-5E는 Products Supabase mapping contract only, no Supabase CRUD conversion.
+     *
+     * - legacy product object ↔ Supabase products row 필드 매핑
+     * - 네트워크 호출 금지, localStorage 읽기/쓰기 금지
+     * - 실제 table CRUD 구현 금지
+     * - 현재 runtime에서 자동 사용하지 않음 (다음 단계에서 사용 예정)
+     * - 활성 DataSource는 계속 LocalProductsDataSource
+     *
+     * 필드 매핑 규칙:
+     *   legacy.id (numeric) → supabase.legacy_id (bigint)
+     *   supabase.id (uuid)  → 신규 필드, legacy numeric id와 다름 (혼동 주의)
+     *   store_id            → 현재 브라우저 business CRUD에서 미사용 (매핑 시 null 허용)
+     *   original_title, brand, category, color, size, material → 동일 이름 direct copy
+     *   korea_cost, actual_converted_cost, china_base_price → numeric 그대로
+     *   current_stock, reserved_stock → integer 그대로
+     *   stock_year, stock_month → integer 그대로
+     *   product_code, title_language, normalized_title → text 그대로
+     *   image (base64) → text 보존 (이번 단계에서 blob 변환하지 않음)
+     *   notes → text 그대로
+     *   created_at, updated_at → ISO string 그대로
+     *   season, fit, style, classification_status → Supabase 전용 확장 필드 (legacy에 없으면 null)
+     *   created_by, updated_by → 인증 연동 후 채움 (현재 null)
+     *   deleted_at, version → Supabase 전용 필드 (매핑 시 기본값)
+     *   누락/unknown 필드는 안전 기본값 처리 (앱 호환성 보존)
+     *   profit/price calculation은 이번 단계에서 변경하지 않음
+     */
+
+    /**
+     * Supabase products row의 확장 필드 기본값.
+     * legacy product object에 없는 필드들의 안전 기본값.
+     */
+    _SUPABASE_PRODUCT_EXTENDED_FIELDS: Object.freeze({
+        season: null,
+        fit: null,
+        style: null,
+        classification_status: null,
+        created_by: null,
+        updated_by: null,
+        deleted_at: null,
+        version: 1
+    }),
+
+    /**
+     * legacy product object를 Supabase products row로 변환한다.
+     * 순수 함수: 네트워크/localStorage 접근 없음.
+     *
+     * @param {Object} product - legacy product object
+     * @returns {Object} Supabase products row (id는 uuid, legacy_id는 numeric id)
+     */
+    mapLegacyProductToSupabaseRow(product) {
+        this._validateProductMappingInputForTesting(product, 'legacy');
+        const safeValue = (v, fallback) => (v === undefined ? fallback : v);
+        return {
+            // id는 uuid이며, legacy numeric id와 다름.
+            // 신규 생성 시에는 id를 null로 두고 DB가 gen_random_uuid()로 채운다.
+            // legacy numeric id는 legacy_id 컬럼으로 보존한다.
+            id: null,
+            legacy_id: product.id != null ? Number(product.id) : null,
+            store_id: null, // 현재 브라우저 business CRUD에서 미사용. 다음 단계에서 인증 게이트와 연동.
+
+            // direct copy fields
+            product_code: safeValue(product.product_code, null),
+            original_title: safeValue(product.original_title, ''),
+            normalized_title: safeValue(product.normalized_title, null),
+            title_language: safeValue(product.title_language, null),
+            brand: safeValue(product.brand, ''),
+            category: safeValue(product.category, null),
+            color: safeValue(product.color, null),
+            size: safeValue(product.size, null),
+            material: safeValue(product.material, null),
+
+            // numeric fields
+            korea_cost: safeValue(product.korea_cost, null),
+            actual_converted_cost: safeValue(product.actual_converted_cost, null),
+            china_base_price: safeValue(product.china_base_price, null),
+
+            // integer fields
+            current_stock: safeValue(product.current_stock, 0),
+            reserved_stock: safeValue(product.reserved_stock, 0),
+            stock_year: safeValue(product.stock_year, null),
+            stock_month: safeValue(product.stock_month, null),
+
+            // image: base64 text 보존 (이번 단계에서 blob 변환하지 않음)
+            image: safeValue(product.image, null),
+            notes: safeValue(product.notes, null),
+
+            // timestamps
+            created_at: safeValue(product.created_at, null),
+            updated_at: safeValue(product.updated_at, null),
+
+            // Supabase 확장 필드 (legacy에 없으므로 기본값)
+            ...this._SUPABASE_PRODUCT_EXTENDED_FIELDS
+        };
+    },
+
+    /**
+     * Supabase products row를 legacy product object로 변환한다.
+     * 순수 함수: 네트워크/localStorage 접근 없음.
+     *
+     * @param {Object} row - Supabase products row
+     * @returns {Object} legacy product object (id는 legacy_id 기반, 없으면 null)
+     */
+    mapSupabaseRowToLegacyProduct(row) {
+        this._validateProductMappingInputForTesting(row, 'supabase');
+        const safeValue = (v, fallback) => (v === undefined ? fallback : v);
+        return {
+            // legacy numeric id 우선. 없으면 null (신규 row의 경우).
+            // Supabase uuid id는 legacy object에 노출하지 않는다 (혼동 방지).
+            id: row.legacy_id != null ? Number(row.legacy_id) : null,
+
+            // direct copy fields
+            product_code: safeValue(row.product_code, null),
+            original_title: safeValue(row.original_title, ''),
+            normalized_title: safeValue(row.normalized_title, null),
+            title_language: safeValue(row.title_language, null),
+            brand: safeValue(row.brand, ''),
+            category: safeValue(row.category, null),
+            color: safeValue(row.color, null),
+            size: safeValue(row.size, null),
+            material: safeValue(row.material, null),
+
+            // numeric fields
+            korea_cost: safeValue(row.korea_cost, null),
+            actual_converted_cost: safeValue(row.actual_converted_cost, null),
+            china_base_price: safeValue(row.china_base_price, null),
+
+            // integer fields
+            current_stock: safeValue(row.current_stock, 0),
+            reserved_stock: safeValue(row.reserved_stock, 0),
+            stock_year: safeValue(row.stock_year, null),
+            stock_month: safeValue(row.stock_month, null),
+
+            // image: base64 text 보존
+            image: safeValue(row.image, null),
+            notes: safeValue(row.notes, null),
+
+            // timestamps
+            created_at: safeValue(row.created_at, null),
+            updated_at: safeValue(row.updated_at, null)
+        };
+    },
+
+    /**
+     * 매핑 입력값 정적 검증 (테스트/디버그용).
+     * 순수 함수: 부작용 없음.
+     *
+     * @param {Object} productOrRow - 매핑 대상 객체
+     * @param {string} kind - 'legacy' 또는 'supabase'
+     * @throws {Error} 입력이 객체가 아니거나 kind가 잘못된 경우
+     */
+    validateProductMappingInputForTesting(productOrRow, kind) {
+        if (productOrRow === null || typeof productOrRow !== 'object' || Array.isArray(productOrRow)) {
+            throw new Error('Product mapping input must be a non-null object');
+        }
+        if (kind !== 'legacy' && kind !== 'supabase') {
+            throw new Error('Product mapping kind must be "legacy" or "supabase"');
+        }
+        return true;
+    },
+
+    // internal alias (mapLegacy/mapSupabase 호출 시 사용)
+    _validateProductMappingInputForTesting(productOrRow, kind) {
+        return this.validateProductMappingInputForTesting(productOrRow, kind);
+    },
+
 
     init() {
         const keywords = this.getKeywords();

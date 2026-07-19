@@ -150,8 +150,11 @@ describe('Browser auth recovery contract (C1-C12)', function () {
     });
 
     it('C12: business modules have no Supabase conversion changes', function () {
+        // 3-5D 이후 js/db.js는 data layer / ProductsDataSource / mapping layer로 분리됨.
+        // db.js의 Supabase 문자열은 mapping helper 이름으로 허용되며,
+        // 실제 Supabase CRUD 호출 여부는 products-supabase-mapping-contract.test.mjs가 검증.
+        // 여기서는 business 업무 모듈만 검사.
         const businessFiles = [
-            'js/db.js',
             'js/products.js',
             'js/orders.js',
             'js/customers.js',
