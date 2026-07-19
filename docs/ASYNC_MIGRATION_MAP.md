@@ -467,3 +467,75 @@ SupabaseProductsDataSource (disabled skeleton)
 - 기존 JS 테스트 전체 회귀
 - preflight + DB lint + pgTAP
 - 브라우저 수동 확인: 상품 목록/추가/수정/삭제/일괄 작업 정상 동작
+
+## 11. 3-5G: Products Supabase Read Path Local-only Controlled Test (2026-07-19)
+
+### 목적
+SupabaseProductsDataSource skeleton이 추가됐으므로, 이번 단계에서는 listProducts read path만 로컬 테스트 전용으로 제한 구현한다.
+**3-5G는 local-only controlled read test only, no write conversion.**
+기본 앱 runtime의 활성 DataSource는 반드시 LocalProductsDataSource로 유지한다.
+
+### 변경 내용
+
+#### js/db.js
+- `_createDisabledSupabaseProductsDataSource()` → `_createControlledSupabaseProductsDataSource(client, context)`로 변경
+- **listProducts만 구현** (read-only, local-only controlled)
+- **write methods (setProducts/createProduct/updateProduct/deleteProduct)는 계속 disabled error 유지**
+- 기본 `getProductsDataSource()`는 LocalProductsDataSource 유지
+- runtime에서 자동 생성/활성화하지 않음
+- `setProductsDataSourceForTesting()`으로만 주입 가능
+
+#### listProducts local-only 조건
+1. **client 명시적 주입 필요**: client가 없으면 throw
+2. **context.localOnly === true 필요**: localOnly가 true가 아니면 throw
+3. **storeId 필요**: storeId가 없으면 throw
+4. **localhost/127.0.0.1 URL만 허용**: 원격 URL이면 throw
+5. **products select read-only**: `client.from('products').select('*').eq('store_id', storeId)`만 수행
+6. **결과 변환**: `mapSupabaseRowToLegacyProduct(row)`로 legacy object로 변환
+7. **민감 정보 보호**: token/session/key console.log 금지, 오류 메시지에 key/JWT/token/body 포함 금지
+
+### SupabaseProductsDataSource 구조 (3-5G)
+
+```
+_createControlledSupabaseProductsDataSource(client, context) → {
+  name: 'SupabaseProductsDataSource',
+  listProducts() → local-only controlled read (구현됨),
+  setProducts()    → throw "write methods not enabled yet",
+  createProduct()  → throw "write methods not enabled yet",
+  updateProduct()  → throw "write methods not enabled yet",
+  deleteProduct()  → throw "write methods not enabled yet"
+}
+```
+
+### 현재 활성 DataSource
+- **LocalProductsDataSource**: 계속 기본 활성 상태 유지
+- `getProductsDataSource()` 기본값 = LocalProductsDataSource
+- SupabaseProductsDataSource는 `setProductsDataSourceForTesting()`으로만 주입 가능
+- 일반 브라우저 상품 화면은 이번 단계에서도 localStorage 사용
+
+### 다음 단계 예정
+- write path 구현 (create/update/delete)
+- 실제 앱 runtime 전환 (feature flag 기반)
+- store_id와 auth session 연동
+
+### 이번 단계에서 하지 않는 일
+- `getProductsDataSource()` 기본값을 SupabaseProductsDataSource로 변경 ❌
+- 일반 runtime에서 SupabaseProductsDataSource 자동 활성화 ❌
+- Products 화면을 Supabase read로 자동 전환 ❌
+- create/update/delete/upsert 구현 ❌
+- Supabase write path 구현 ❌
+- 원격 Supabase 연결 ❌
+- service_role 브라우저 사용 ❌
+- js/config.js commit ❌
+- 상품 스키마 변경 ❌
+- localStorage prefix 변경 ❌
+- products.js 변경 ❌
+- data_export.json 재추가 ❌
+
+### 검증
+- `tests/products-supabase-read-contract.test.mjs` (R1-R19)
+- `tests/products-supabase-datasource-skeleton-contract.test.mjs` (S1-S16, 업데이트됨)
+- 기존 JS 테스트 전체 회귀
+- preflight + DB lint + pgTAP
+- 브라우저 수동 확인: 상품 목록/추가/수정/삭제/일괄 작업 정상 동작
+- 일반 브라우저 runtime이 SupabaseProductsDataSource로 자동 전환되지 않음 확인

@@ -891,3 +891,78 @@ Mapping Layer (순수 함수, runtime 미사용):
 
 ### 상세 문서
 - Products skeleton 상세: `docs/ASYNC_MIGRATION_MAP.md` §10
+
+## 17. 3-5G: Products Supabase Read Path Local-only Controlled Test (2026-07-19)
+
+### 목적
+SupabaseProductsDataSource skeleton이 추가됐으므로, 이번 단계에서는 listProducts read path만 로컬 테스트 전용으로 제한 구현한다.
+**3-5G는 local-only controlled read test only, no write conversion.**
+기본 앱 runtime의 활성 DataSource는 반드시 LocalProductsDataSource로 유지한다.
+
+### Products DataSource 현재 상태
+
+```
+DB.getProductsDataSource() → ProductsDataSource
+  ├─ LocalProductsDataSource (기본 runtime, 활성)
+  │    └─ 기존 localStorage 기반 DB sync 메서드
+  └─ SupabaseProductsDataSource (local-only controlled read test 가능)
+       ├─ listProducts() → local-only controlled read (구현됨)
+       │    ├─ client 명시적 주입 필요
+       │    ├─ context.localOnly === true 필요
+       │    ├─ storeId 필요
+       │    ├─ localhost/127.0.0.1 URL만 허용
+       │    ├─ products select read-only
+       │    └─ mapSupabaseRowToLegacyProduct로 결과 변환
+       ├─ setProducts()    → throw "write not enabled" (disabled)
+       ├─ createProduct()  → throw "write not enabled" (disabled)
+       ├─ updateProduct()  → throw "write not enabled" (disabled)
+       └─ deleteProduct()  → throw "write not enabled" (disabled)
+```
+
+### 현재 Runtime 상태
+- **활성 DataSource**: LocalProductsDataSource (기본값, 변경 없음)
+- **데이터 저장**: localStorage (기존과 동일)
+- **SupabaseProductsDataSource**: `setProductsDataSourceForTesting()`으로만 주입 가능
+- **자동 전환 없음**: feature flag / config / auth session 기반 자동 전환 없음
+- **write disabled**: create/update/delete/setProducts는 모두 disabled error
+
+### listProducts local-only 조건
+1. client 명시적 주입 필요 (없으면 throw)
+2. context.localOnly === true 필요 (아니면 throw)
+3. storeId 필요 (없으면 throw)
+4. localhost/127.0.0.1 URL만 허용 (원격이면 throw)
+5. products table select read-only만 수행
+6. 결과는 mapSupabaseRowToLegacyProduct로 legacy object로 변환
+7. token/session/key console.log 금지
+8. 오류 메시지에 key/JWT/token/body 포함 금지
+
+### 인증 게이트 vs 업무 데이터 전환
+- 인증 게이트 (3-4): 완료됨 — Supabase Auth와 연결
+- 업무 데이터 전환 (3-5):
+  - 3-5A: async boundary 준비 ✅
+  - 3-5B: Products read path async ✅
+  - 3-5C: Products write path async ✅
+  - 3-5D: Products DataSource interface extraction ✅
+  - 3-5E: Products Supabase mapping contract ✅
+  - 3-5F: SupabaseProductsDataSource disabled skeleton ✅
+  - 3-5G: Products Supabase read path local-only controlled test ✅ (현재)
+  - 다음: write path 구현, runtime 전환 예정
+- **아직 일반 앱 runtime은 localStorage 사용** — SupabaseProductsDataSource는 테스트 전용
+- 인증 게이트와 업무 데이터 전환은 여전히 분리되어 있음
+
+### 제약 준수
+- 실제 Supabase products write 호출: ❌ (no)
+- 활성 DataSource: LocalProductsDataSource (기본값, 변경 없음)
+- getProductsDataSource() 기본값 변경: ❌ (no)
+- 일반 runtime에서 SupabaseProductsDataSource 자동 활성화: ❌ (no)
+- create/update/delete/upsert 구현: ❌ (no)
+- 원격 Supabase 연결: ❌ (no)
+- service_role 브라우저 사용: ❌ (no)
+- localStorage key 변경: ❌ (no)
+- 상품 스키마 변경: ❌ (no)
+- products.js 변경: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 재추가: ❌ (no)
+
+### 상세 문서
+- Products read controlled test 상세: `docs/ASYNC_MIGRATION_MAP.md` §11

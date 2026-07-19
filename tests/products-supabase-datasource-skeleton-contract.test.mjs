@@ -44,17 +44,14 @@ describe('Products Supabase DataSource Skeleton Contract (S1-S16)', function () 
         const content = readFile('js/db.js');
         assert.match(content, /SupabaseProductsDataSource/,
             'db.js should mention SupabaseProductsDataSource');
-        assert.match(content, /_createDisabledSupabaseProductsDataSource\s*\(/,
-            'db.js should have _createDisabledSupabaseProductsDataSource factory');
+        // 3-5G: _createDisabledSupabaseProductsDataSource가 _createControlledSupabaseProductsDataSource로 변경됨
+        assert.match(content, /_createControlledSupabaseProductsDataSource\s*\(/,
+            'db.js should have _createControlledSupabaseProductsDataSource factory');
     });
 
     it('S2: skeleton has listProducts/setProducts/createProduct/updateProduct/deleteProduct', function () {
         const content = readFile('js/db.js');
-        const skeletonMatch = content.match(
-            /_createDisabledSupabaseProductsDataSource\s*\([^)]*\)\s*\{([\s\S]*?)\n\s*;\n\s*\},/
-        );
-        // 더 넓은 범위로 검색
-        const factoryStart = content.indexOf('_createDisabledSupabaseProductsDataSource');
+        const factoryStart = content.indexOf('_createControlledSupabaseProductsDataSource');
         assert.ok(factoryStart > -1, 'factory should exist');
         const afterFactory = content.slice(factoryStart);
         assert.match(afterFactory, /listProducts\s*\(/,
@@ -71,43 +68,39 @@ describe('Products Supabase DataSource Skeleton Contract (S1-S16)', function () 
             'skeleton name should be SupabaseProductsDataSource');
     });
 
-    it('S3: skeleton methods throw disabled error', function () {
+    it('S3: write methods throw disabled error (listProducts throws validation error without client)', function () {
         const DB = loadDbForTesting();
-        const skeleton = DB._createDisabledSupabaseProductsDataSource();
+        // 3-5G: listProducts는 client/context 없이 호출 시 validation error throw
+        const skeleton = DB._createControlledSupabaseProductsDataSource(null, null);
         assert.equal(skeleton.name, 'SupabaseProductsDataSource');
 
-        // listProducts
+        // listProducts without client → validation error (requires explicit client)
         assert.throws(
             () => skeleton.listProducts(),
-            /not enabled yet/i,
-            'listProducts should throw disabled error'
+            /requires explicit client/i,
+            'listProducts should throw validation error without client'
         );
 
-        // setProducts
+        // write methods → disabled error
+        const writeErrPattern = /not enabled yet/i;
         assert.throws(
             () => skeleton.setProducts([]),
-            /not enabled yet/i,
+            writeErrPattern,
             'setProducts should throw disabled error'
         );
-
-        // createProduct
         assert.throws(
             () => skeleton.createProduct({}),
-            /not enabled yet/i,
+            writeErrPattern,
             'createProduct should throw disabled error'
         );
-
-        // updateProduct
         assert.throws(
             () => skeleton.updateProduct(1, {}),
-            /not enabled yet/i,
+            writeErrPattern,
             'updateProduct should throw disabled error'
         );
-
-        // deleteProduct
         assert.throws(
             () => skeleton.deleteProduct(1),
-            /not enabled yet/i,
+            writeErrPattern,
             'deleteProduct should throw disabled error'
         );
     });
@@ -127,8 +120,8 @@ describe('Products Supabase DataSource Skeleton Contract (S1-S16)', function () 
         const getDsMatch = content.match(/getProductsDataSource\s*\([^)]*\)\s*\{([\s\S]*?)\n\s*\},/);
         assert.ok(getDsMatch, 'getProductsDataSource should exist');
         const getDsBody = getDsMatch[1];
-        assert.doesNotMatch(getDsBody, /SupabaseProductsDataSource|_createDisabledSupabaseProductsDataSource/,
-            'getProductsDataSource default path must not reference SupabaseProductsDataSource');
+        assert.doesNotMatch(getDsBody, /SupabaseProductsDataSource|_createControlledSupabaseProductsDataSource/,
+            'getProductsDataSource body must not reference SupabaseProductsDataSource');
 
         // feature flag / config 기반 자동 전환이 없어야 함
         assert.doesNotMatch(content, /SUPABASE.*ENABLED.*products|products.*SUPABASE.*ENABLED/i,
@@ -155,28 +148,29 @@ describe('Products Supabase DataSource Skeleton Contract (S1-S16)', function () 
         }
     });
 
-    it('S7: js/db.js has no actual select/insert/update/delete/upsert implementation', function () {
+    it('S7: js/db.js has no write CRUD (insert/update/delete/upsert); read-only select allowed (3-5G)', function () {
         const content = readFile('js/db.js');
-        // SupabaseProductsDataSource skeleton 내부에 실제 CRUD chain 구현이 없어야 함
-        const factoryStart = content.indexOf('_createDisabledSupabaseProductsDataSource');
+        // 3-5G: _createControlledSupabaseProductsDataSource로 변경됨
+        const factoryStart = content.indexOf('_createControlledSupabaseProductsDataSource');
         assert.ok(factoryStart > -1, 'factory should exist');
-        const afterFactory = content.slice(factoryStart, factoryStart + 2000);
+        const afterFactory = content.slice(factoryStart, factoryStart + 2500);
 
-        // 실제 supabase chain 구현이 없어야 함 (.select, .insert, .update, .delete, .upsert 가 .from 다음에 오는 패턴)
-        assert.doesNotMatch(afterFactory, /supabase\s*\.\s*from\s*\([^)]*\)\s*\.\s*select\s*\(/i,
-            'skeleton must not have supabase.from(...).select() implementation');
-        assert.doesNotMatch(afterFactory, /supabase\s*\.\s*from\s*\([^)]*\)\s*\.\s*insert\s*\(/i,
-            'skeleton must not have supabase.from(...).insert() implementation');
-        assert.doesNotMatch(afterFactory, /supabase\s*\.\s*from\s*\([^)]*\)\s*\.\s*update\s*\(/i,
-            'skeleton must not have supabase.from(...).update() implementation');
-        assert.doesNotMatch(afterFactory, /supabase\s*\.\s*from\s*\([^)]*\)\s*\.\s*delete\s*\(/i,
-            'skeleton must not have supabase.from(...).delete() implementation');
-        assert.doesNotMatch(afterFactory, /supabase\s*\.\s*from\s*\([^)]*\)\s*\.\s*upsert\s*\(/i,
-            'skeleton must not have supabase.from(...).upsert() implementation');
+        // 3-5G: read-only select는 허용됨 (listProducts 구현)
+        // write methods (insert/update/delete/upsert)는 금지
+        assert.doesNotMatch(afterFactory, /\.insert\s*\(/i,
+            'skeleton must not have .insert() (write forbidden)');
+        assert.doesNotMatch(afterFactory, /\.upsert\s*\(/i,
+            'skeleton must not have .upsert() (write forbidden)');
+        // .update()와 .delete()는 write method에서 throw Error로 사용되므로,
+        // supabase chain의 .update()/.delete()만 금지 (client.from(...).update/delete 패턴)
+        assert.doesNotMatch(afterFactory, /from\s*\([^)]*\)\s*\.\s*update\s*\(/i,
+            'skeleton must not have from(...).update() (write forbidden)');
+        assert.doesNotMatch(afterFactory, /from\s*\([^)]*\)\s*\.\s*delete\s*\(/i,
+            'skeleton must not have from(...).delete() (write forbidden)');
 
-        // skeleton 메서드는 throw new Error로 disabled 처리되어 있어야 함
+        // write methods는 throw new Error로 disabled 처리되어 있어야 함
         assert.match(afterFactory, /throw\s+new\s+Error\s*\(/i,
-            'skeleton methods should throw Error (disabled state)');
+            'write methods should throw Error (disabled state)');
     });
 
     it('S8: mapping helpers are preserved', function () {
@@ -273,7 +267,8 @@ describe('Products Supabase DataSource Skeleton Contract (S1-S16)', function () 
     // 추가 검증
     it('S-extra: resetProductsDataSourceForTesting resets to LocalProductsDataSource', function () {
         const DB = loadDbForTesting();
-        const skeleton = DB._createDisabledSupabaseProductsDataSource();
+        // 3-5G: _createControlledSupabaseProductsDataSource 사용
+        const skeleton = DB._createControlledSupabaseProductsDataSource(null, null);
         DB.setProductsDataSourceForTesting(skeleton);
         assert.equal(DB.getProductsDataSource().name, 'SupabaseProductsDataSource');
 

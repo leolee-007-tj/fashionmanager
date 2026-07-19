@@ -1231,3 +1231,82 @@ Products Supabase mapping contract가 고정됐으므로, 이번 단계에서는
 - service_role 브라우저 사용: ❌ (no)
 - js/config.js commit: ❌ (no)
 - data_export.json 재추가: ❌ (no)
+
+## 3-5G: Products Supabase Read Path Local-only Controlled Test (2026-07-19)
+
+### 목적
+SupabaseProductsDataSource skeleton이 추가됐으므로, 이번 단계에서는 listProducts read path만 로컬 테스트 전용으로 제한 구현한다.
+**3-5G는 local-only controlled read test only, no write conversion.**
+기본 앱 runtime의 활성 DataSource는 반드시 LocalProductsDataSource로 유지한다.
+
+### 변경 파일
+- `js/db.js` (수정): `_createControlledSupabaseProductsDataSource(client, context)`로 변경, listProducts read-only 구현
+- `docs/ASYNC_MIGRATION_MAP.md` (수정): §11 3-5G 섹션 추가
+- `docs/CURRENT_ARCHITECTURE.md` (수정): §17 3-5G 섹션 추가
+- `tests/products-supabase-read-contract.test.mjs` (신규): R1-R19 정적/단위 계약 테스트
+- `tests/products-supabase-datasource-skeleton-contract.test.mjs` (수정): S1-S3, S7, S-extra를 3-5G 구조에 맞게 업데이트
+
+### Products Supabase Read Contract Tests (R1-R19)
+
+| # | 검사 항목 | 결과 |
+|---|---|---|
+| R1 | js/db.js에 controlled SupabaseProductsDataSource factory 존재 | PASS |
+| R2 | listProducts만 구현됨 | PASS |
+| R3 | set/create/update/delete는 disabled error 유지 | PASS |
+| R4 | getProductsDataSource 기본값은 LocalProductsDataSource 유지 | PASS |
+| R5 | SupabaseProductsDataSource는 runtime에서 자동 활성화되지 않음 | PASS |
+| R6 | listProducts는 명시적 client 주입이 필요 | PASS |
+| R7 | listProducts는 context.localOnly === true 필요 | PASS |
+| R8 | listProducts는 storeId 필요 | PASS |
+| R9 | listProducts는 localhost/127.0.0.1 URL만 허용 | PASS |
+| R10 | listProducts는 products select read-only만 수행 | PASS |
+| R11 | listProducts 결과는 mapSupabaseRowToLegacyProduct를 통해 legacy object로 변환 | PASS |
+| R12 | write path insert/update/delete/upsert 없음 | PASS |
+| R13 | service_role 문자열 없음 | PASS |
+| R14 | token/session/key console.log 없음 | PASS |
+| R15 | remote supabase.co URL 없음 | PASS |
+| R16 | localStorage prefix lesoul_gh_ 유지 | PASS |
+| R17 | docs에 "3-5G는 local-only controlled read test only, no write conversion" 명시 | PASS |
+| R18 | data_export.json 없음 | PASS |
+| R19 | js/config.js는 commit되지 않음 | PASS |
+
+### 추가 검증
+- listProducts 오류 처리 (민감 정보 누출 방지): PASS
+- listProducts 빈 결과 처리: PASS
+
+### 브라우저 수동 확인 결과
+
+| 항목 | 상태 |
+|---|---|
+| 상품 목록 정상 | ✅ |
+| 상품 추가 정상 | ✅ |
+| 상품 수정 정상 | ✅ |
+| 상품 삭제 정상 | ✅ |
+| 상품 일괄 작업 정상 | ✅ |
+| 검색/정렬/필터 정상 | ✅ |
+| 주문/고객/분석 페이지 기존 동작 유지 | ✅ |
+| 기존 localStorage 상품 데이터 유지 | ✅ |
+| 일반 브라우저 runtime이 SupabaseProductsDataSource로 자동 전환되지 않음 | ✅ |
+
+### JS 테스트 결과
+- 총 테스트 수: 215 (194 + 21)
+- pass: 215
+- fail: 0
+
+### DB 회귀
+- DB lint: PASS (기존과 동일, 스키마 변경 없음)
+- pgTAP: PASS (131/131, 기존과 동일)
+
+### 제약 준수
+- 실제 Supabase products write 호출: ❌ (no)
+- 활성 DataSource: LocalProductsDataSource (기본값, 변경 없음)
+- getProductsDataSource() 기본값 변경: ❌ (no)
+- 일반 runtime에서 SupabaseProductsDataSource 자동 활성화: ❌ (no)
+- create/update/delete/upsert 구현: ❌ (no)
+- 원격 Supabase 연결: ❌ (no)
+- service_role 브라우저 사용: ❌ (no)
+- localStorage key 변경: ❌ (no)
+- 상품 스키마 변경: ❌ (no)
+- products.js 변경: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 재추가: ❌ (no)
