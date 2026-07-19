@@ -571,3 +571,57 @@ product.reserved_stock -= quantity
 - 원격 Supabase 연결: ❌ (no)
 - business CRUD 변경: ❌ (no)
 - js/config.js commit: ❌ (no)
+
+## 11. 3-5A: Data Gateway Async Boundary Preparation (2026-07-19)
+
+### 목적
+인증 게이트 정상/실패/복구 검증이 끝났으므로, 업무 데이터 전환을 위한 준비를 시작한다.
+**이번 단계는 실제 상품/주문/고객 CRUD를 Supabase로 전환하지 않는다.**
+localStorage 기반 동기 데이터 계층을 async 전환 가능한 경계로 정리한다.
+
+### 데이터 게이트웨이 설계 개념
+
+#### 현재: localStorageDataSource
+- 모든 데이터가 `localStorage`에 저장 (prefix: `lesoul_gh_`)
+- `DB` 객체가 직접 `localStorage.getItem` / `setItem` 호출
+- sync API (즉시 값 반환)
+- 업무 모듈(products.js, orders.js, customers.js 등)이 `DB`를 직접 참조
+
+#### 다음 단계: SupabaseDataSource 추가 예정
+- `SupabaseDataSource` 클래스/객체 추가 예정
+- 동일한 메서드 시그니처를 async로 제공
+- `DB` 객체는 `localStorageDataSource` 역할을 유지하면서, 향후 data gateway가 어느 source를 사용할지 선택
+- 업무 모듈은 장기적으로 `DB` 직접 접근 대신 data gateway를 통해 접근
+
+#### 이번 단계(3-5A) 구조 준비
+- db.js에 data source 개념을 주석과 얇은 wrapper로 정리
+- 기존 sync API를 깨지 않는 범위에서 Promise 호환 helper 추가
+- 향후 async 전환 대상 메서드 목록을 내부 상수로 정리 (`DB.ASYNC_MIGRATION_TARGETS`)
+- **실제 Supabase CRUD 호출 없음**
+- **기존 public API 이름 유지**
+
+### 주요 변경
+- **js/db.js**: data source 주석, `DB.asyncReady` Promise helper, `DB.ASYNC_MIGRATION_TARGETS` 상수 추가
+- **새 문서**: `docs/ASYNC_MIGRATION_MAP.md` (db.js 메서드 전체 정리)
+- **새 테스트**: `tests/data-gateway-async-contract.test.mjs` (A1-A13 정적 계약 테스트)
+
+### 이번 단계에서 하지 않는 일
+- 기존 메서드를 전부 async로 변경 ❌
+- 화면 코드에 대규모 await 추가 ❌
+- localStorage key 변경 ❌
+- 데이터 구조 변경 ❌
+- Supabase client 호출 ❌
+- localStorage 데이터 migration 실행 ❌
+- remote Supabase 연결 ❌
+
+### 제약 준수
+- 실제 Supabase CRUD 호출: ❌ (no)
+- localStorage key 변경: ❌ (no)
+- business 화면 동작 변경: ❌ (no)
+- 원격 Supabase 연결: ❌ (no)
+- service_role 브라우저 사용: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 재추가: ❌ (no)
+
+### 상세 문서
+- db.js 메서드 전체 목록과 전환 난이도: `docs/ASYNC_MIGRATION_MAP.md`

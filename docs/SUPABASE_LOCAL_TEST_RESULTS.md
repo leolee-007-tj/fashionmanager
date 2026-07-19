@@ -823,3 +823,59 @@ wrapper script 동작:
 ### DB 회귀
 - DB lint: PASS
 - pgTAP: PASS (131/131)
+
+## 3-5A: Data Gateway Async Boundary Preparation (2026-07-19)
+
+### 목적
+인증 게이트 정상/실패/복구 검증이 끝났으므로, 업무 데이터 전환을 위한 준비를 시작한다.
+**이번 단계는 실제 상품/주문/고객 CRUD를 Supabase로 전환하지 않는다.**
+localStorage 기반 동기 데이터 계층을 async 전환 가능한 경계로 정리한다.
+
+### 변경 파일
+- `js/db.js` (수정): data source 주석, `DB.ASYNC_MIGRATION_TARGETS` 상수, `DB.asyncReady` Promise helper 추가
+- `docs/ASYNC_MIGRATION_MAP.md` (신규): db.js 메서드 전체 목록과 전환 난이도 정리
+- `docs/CURRENT_ARCHITECTURE.md` (수정): 3-5A 섹션, localStorageDataSource/SupabaseDataSource 설계 추가
+- `tests/data-gateway-async-contract.test.mjs` (신규): A1-A13 정적 계약 테스트
+
+### Data Gateway Contract Tests (A1-A13)
+
+| # | 검사 항목 | 결과 |
+|---|---|---|
+| A1 | js/db.js에 Supabase network CRUD 호출 없음 | PASS |
+| A2 | js/db.js에 service_role 문자열 없음 | PASS |
+| A3 | js/db.js에 remote supabase.co URL 없음 | PASS |
+| A4 | localStorage prefix lesoul_gh_ 유지 | PASS |
+| A5 | 기존 업무 모듈 파일에 Supabase CRUD 직접 호출 없음 | PASS |
+| A6 | products/orders/customers/analytics/expenses/settings가 여전히 기존 LESOULDB 경로를 사용 | PASS |
+| A7 | data_export.json 없음 | PASS |
+| A8 | js/config.js 없음 또는 git ignored | PASS |
+| A9 | supabase/migrations 변경 없음 | PASS |
+| A10 | supabase/tests 변경 없음 | PASS |
+| A11 | ASYNC_MIGRATION_MAP에 db.js 메서드 목록 존재 | PASS |
+| A12 | CURRENT_ARCHITECTURE에 localStorageDataSource / SupabaseDataSource 계획 명시 | PASS |
+| A13 | 이번 단계가 실제 CRUD 전환 아님을 문서에 명시 | PASS |
+
+### js/db.js 최소 코드 준비
+- `DB.ASYNC_MIGRATION_TARGETS`: 향후 async 전환 대상 메서드 목록 (내부 상수, 참조용)
+- `DB.asyncReady(methodName, ...args)`: sync 값을 Promise로 감싸는 helper
+- 기존 sync public API 이름/시그니처 유지
+- localStorage key 변경 없음
+- 실제 Supabase CRUD 호출 없음
+
+### JS 테스트 결과
+- 총 테스트 수: 112
+- pass: 112
+- fail: 0
+
+### DB 회귀
+- DB lint: PASS
+- pgTAP: PASS (131/131)
+
+### 제약 준수
+- 실제 Supabase CRUD 호출: ❌ (no)
+- localStorage key 변경: ❌ (no)
+- business 화면 동작 변경: ❌ (no)
+- 원격 Supabase 연결: ❌ (no)
+- service_role 브라우저 사용: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 재추가: ❌ (no)

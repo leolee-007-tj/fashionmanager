@@ -1,5 +1,70 @@
+/**
+ * LESOUL Store App — Data Layer (localStorageDataSource)
+ *
+ * 3-5A: Data Gateway Async Boundary Preparation
+ * ----------------------------------------------
+ * 현재 이 객체는 localStorageDataSource 역할을 한다.
+ * 모든 메서드는 sync API이며, 기존 업무 모듈은 DB를 직접 호출한다.
+ *
+ * 향후 단계에서 원격 DataSource가 동일한 메서드 시그니처를 async로 제공할 예정이다.
+ * 그 때 업무 모듈은 DB 직접 접근 대신 data gateway를 통해 접근하도록 점진적 전환한다.
+ *
+ * 이번 단계(3-5A)에서는:
+ *   - 기존 sync public API를 유지한다 (이름/시그니처 변경 없음)
+ *   - Promise 호환 helper(DB.asyncReady)만 추가한다
+ *   - 향후 async 전환 대상 메서드 목록을 상수로 정리한다
+ *   - 실제 원격 DB CRUD 호출은 하지 않는다
+ *   - localStorage key를 변경하지 않는다
+ *
+ * 상세 전환 계획은 docs/ASYNC_MIGRATION_MAP.md 참조.
+ */
 const DB = {
     prefix: 'lesoul_gh_',
+
+    /**
+     * 향후 async 전환 대상 메서드 목록 (내부 상수).
+     * 이 목록은 data gateway가 원격 DataSource로 전환할 때
+     * async 래퍼를 제공해야 하는 sync 메서드 이름을 나열한다.
+     * 이번 단계에서는 참조용으로만 사용하며, 실제 전환은 수행하지 않는다.
+     */
+    ASYNC_MIGRATION_TARGETS: Object.freeze([
+        'getProducts', 'setProducts', 'addProduct', 'updateProduct', 'deleteProduct',
+        'generateProductCode', 'findProductByBrandTitleCost',
+        'getOrders', 'setOrders', 'addOrder', 'updateOrder', 'deleteOrder',
+        'findDuplicateOrder',
+        'getCustomers', 'setCustomers', 'addCustomer', 'updateCustomer', 'deleteCustomer',
+        'findCustomerByName',
+        'getInventoryLogs', 'setInventoryLogs', 'addInventoryLog',
+        'getExpenses', 'setExpenses', 'addExpense', 'updateExpense', 'deleteExpense',
+        'getKeywords', 'setKeywords', 'addKeyword', 'updateKeyword', 'deleteKeyword',
+        'initDefaultKeywords',
+        'getSettings', 'getSetting', 'setSettings',
+        'recalculateAllPrices',
+        'exportAllData', 'importAllData', 'clearAllData'
+    ]),
+
+    /**
+     * Promise 호환 helper.
+     * sync 값을 Promise로 감싸서 반환한다.
+     * 향후 async 전환 시 업무 모듈이 점진적으로 await 패턴을 사용할 수 있도록 돕는다.
+     * 현재 단계에서는 sync 동작을 그대로 유지하며, 실제 I/O는 localStorage에서 수행한다.
+     *
+     * @param {string} methodName - DB 객체의 메서드 이름
+     * @param {...*} args - 메서드에 전달할 인자
+     * @returns {Promise<*>} sync 결과를 Promise로 감싼 값
+     */
+    asyncReady(methodName, ...args) {
+        try {
+            const fn = this[methodName];
+            if (typeof fn !== 'function') {
+                return Promise.reject(new Error('DB.asyncReady: unknown method ' + methodName));
+            }
+            const result = fn.apply(this, args);
+            return Promise.resolve(result);
+        } catch (e) {
+            return Promise.reject(e);
+        }
+    },
 
     init() {
         const keywords = this.getKeywords();
