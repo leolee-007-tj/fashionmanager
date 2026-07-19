@@ -23,10 +23,12 @@ describe('Products read async boundary contract (P1-P13)', function () {
             'db.js should have isAsyncBoundaryEnabled helper');
     });
 
-    it('P2: getProductsAsync is based on localStorage / existing getProducts', function () {
+    it('P2: getProductsAsync uses ProductsDataSource which is based on localStorage / existing getProducts', function () {
         const content = readFile('js/db.js');
-        assert.match(content, /getProductsAsync\s*\(\s*\)\s*\{[\s\S]*?Promise\.resolve\s*\(\s*this\.getProducts\s*\(\s*\)\s*\)/,
-            'getProductsAsync should wrap this.getProducts() with Promise.resolve');
+        assert.match(content, /getProductsAsync\s*\(\s*\)\s*\{[\s\S]*?getProductsDataSource\s*\(\s*\)\s*\.\s*listProducts\s*\(/,
+            'getProductsAsync should use ProductsDataSource.listProducts');
+        assert.match(content, /listProducts\s*\(\s*\)\s*\{[\s\S]*?db\.getProducts\s*\(\s*\)/,
+            'LocalProductsDataSource.listProducts should wrap db.getProducts()');
     });
 
     it('P3: js/db.js has no supabase.from("products") call', function () {

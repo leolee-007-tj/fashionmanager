@@ -248,3 +248,60 @@ Products read path async boundary가 완료됐으므로, 이번에는 Products w
 - 기존 JS 테스트 전체 회귀
 - preflight + DB lint + pgTAP
 - 브라우저 수동 확인: 상품 추가/수정/삭제/일괄 작업 정상 동작
+
+## 8. 3-5D: Products DataSource Interface Extraction (2026-07-19)
+
+### 목적
+Products read/write async boundary가 준비됐으므로, 이번 단계에서는 Products 전용 DataSource 인터페이스를 분리한다.
+**3-5D는 Products DataSource extraction only, no Supabase CRUD conversion.**
+현재 활성 DataSource는 반드시 LocalProductsDataSource이며, 내부 저장 방식은 기존 localStorage 그대로 유지한다.
+
+### 변경 내용
+
+#### js/db.js
+- `DB.getProductsDataSource()`: 현재 활성 Products DataSource 반환 (기본값: LocalProductsDataSource)
+- `DB.setProductsDataSourceForTesting(source)`: 테스트 전용 DataSource 교체
+- `DB.resetProductsDataSourceForTesting()`: 테스트 전용 DataSource 리셋
+- `DB._createLocalProductsDataSource()`: LocalProductsDataSource 팩토리
+  - `listProducts()` → `Promise.resolve(db.getProducts())`
+  - `setProducts(products)` → `db.setProducts()`, `Promise.resolve()`
+  - `createProduct(product)` → `db.addProduct()`, `Promise.resolve(result)`
+  - `updateProduct(id, updates)` → `db.updateProduct()`, `Promise.resolve(result)`
+  - `deleteProduct(id)` → `db.deleteProduct()`, `Promise.resolve(result)`
+- 기존 async helper(`getProductsAsync`, `addProductAsync`, `updateProductAsync`, `deleteProductAsync`, `setProductsAsync`)는 내부적으로 ProductsDataSource를 경유하도록 정리
+- 기존 sync public API(`DB.getProducts`, `DB.addProduct` 등)는 그대로 유지
+
+#### Products DataSource 인터페이스 계약
+```
+interface ProductsDataSource {
+    name: string;
+    listProducts(): Promise<Product[]>;
+    setProducts(products: Product[]): Promise<void>;
+    createProduct(product: Product): Promise<Product>;
+    updateProduct(id, updates): Promise<Product>;
+    deleteProduct(id): Promise<boolean>;
+}
+```
+
+### 현재 활성 DataSource
+- **LocalProductsDataSource**: 기존 localStorage 기반 DB sync 메서드를 감쌈
+
+### 다음 단계 예정
+- **SupabaseProductsDataSource**: `supabase.from('products')` 기반 구현 (아직 구현 안 함)
+- 실제 Supabase CRUD 호출은 다음 단계에서 수행
+
+### 이번 단계에서 하지 않는 일
+- supabase.from('products') 호출 ❌
+- Supabase insert/update/delete/upsert 구현 ❌
+- 원격 Supabase 연결 ❌
+- service_role 브라우저 사용 ❌
+- 상품 스키마 변경 ❌
+- localStorage prefix 변경 ❌
+- 주문/고객/재고 트랜잭션 로직 변경 ❌
+- products.js submit/delete/batch 로직 재작성 ❌
+
+### 검증
+- `tests/products-datasource-contract.test.mjs` (D1-D16)
+- 기존 JS 테스트 전체 회귀
+- preflight + DB lint + pgTAP
+- 브라우저 수동 확인: 상품 목록/추가/수정/삭제/일괄 작업 정상 동작

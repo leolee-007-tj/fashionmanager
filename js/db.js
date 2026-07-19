@@ -88,34 +88,136 @@ const DB = {
 
     /**
      * Products read async helper (3-5B).
-     * 현재는 DB.getProducts() 결과를 Promise.resolve로 감싸 반환한다.
-     * 원격 DataSource 도입 시 이 위치에서 fetch/select 호출로 교체한다.
+     * 현재는 LocalProductsDataSource의 listProducts()를 호출한다.
      * 기존 sync DB.getProducts()는 유지된다.
      */
     getProductsAsync() {
-        return Promise.resolve(this.getProducts());
+        return this.getProductsDataSource().listProducts();
     },
 
     /**
      * Products write async helpers (3-5C).
-     * 현재는 기존 sync localStorage 메서드를 Promise.resolve로 감싸 반환한다.
-     * 원격 DataSource 도입 시 이 위치에서 insert/update/delete/upsert 호출로 교체한다.
+     * 현재는 LocalProductsDataSource의 메서드를 호출한다.
      * 기존 sync DB.setProducts/addProduct/updateProduct/deleteProduct는 유지된다.
      */
     setProductsAsync(products) {
-        return Promise.resolve(this.setProducts(products));
+        return this.getProductsDataSource().setProducts(products);
     },
 
     addProductAsync(product) {
-        return Promise.resolve(this.addProduct(product));
+        return this.getProductsDataSource().createProduct(product);
     },
 
     updateProductAsync(id, updates) {
-        return Promise.resolve(this.updateProduct(id, updates));
+        return this.getProductsDataSource().updateProduct(id, updates);
     },
 
     deleteProductAsync(id) {
-        return Promise.resolve(this.deleteProduct(id));
+        return this.getProductsDataSource().deleteProduct(id);
+    },
+
+    // ==================== Products DataSource (3-5D) ====================
+
+    /**
+     * 3-5D: Products DataSource Interface Extraction
+     *
+     * Products 전용 data source 계층을 얇게 분리한다.
+     * 현재 활성 DataSource는 LocalProductsDataSource이며,
+     * 내부 저장 방식은 기존 localStorage 그대로 유지한다.
+     *
+     * 원격 ProductsDataSource는 다음 단계에서 구현 예정.
+     * 실제 원격 products 테이블 호출은 이번 단계에서 금지.
+     */
+
+    _productsDataSource: null,
+
+    /**
+     * 현재 활성 Products DataSource를 반환한다.
+     * 기본값은 LocalProductsDataSource.
+     */
+    getProductsDataSource() {
+        if (!this._productsDataSource) {
+            this._productsDataSource = this._createLocalProductsDataSource();
+        }
+        return this._productsDataSource;
+    },
+
+    /**
+     * 테스트 전용: DataSource를 교체한다.
+     * 운영 코드에서 직접 호출하지 말 것.
+     */
+    setProductsDataSourceForTesting(source) {
+        this._productsDataSource = source;
+    },
+
+    /**
+     * 테스트 전용: DataSource를 기본값으로 리셋한다.
+     */
+    resetProductsDataSourceForTesting() {
+        this._productsDataSource = null;
+    },
+
+    /**
+     * LocalProductsDataSource 팩토리.
+     * 내부적으로 기존 DB sync 메서드를 감싼다.
+     */
+    _createLocalProductsDataSource() {
+        const db = this;
+        return {
+            /**
+             * DataSource 이름 식별자.
+             */
+            name: 'LocalProductsDataSource',
+
+            /**
+             * 상품 목록 조회 (read).
+             * @returns {Promise<Array>} 상품 배열
+             */
+            listProducts() {
+                return Promise.resolve(db.getProducts());
+            },
+
+            /**
+             * 상품 전체 교체 (write).
+             * @param {Array} products - 상품 배열
+             * @returns {Promise<void>}
+             */
+            setProducts(products) {
+                db.setProducts(products);
+                return Promise.resolve();
+            },
+
+            /**
+             * 상품 생성 (write).
+             * @param {Object} product - 상품 데이터
+             * @returns {Promise<Object>} 생성된 상품 (id 포함)
+             */
+            createProduct(product) {
+                const result = db.addProduct(product);
+                return Promise.resolve(result);
+            },
+
+            /**
+             * 상품 부분 업데이트 (write).
+             * @param {number|string} id - 상품 ID
+             * @param {Object} updates - 업데이트할 필드
+             * @returns {Promise<Object>} 업데이트된 상품
+             */
+            updateProduct(id, updates) {
+                const result = db.updateProduct(id, updates);
+                return Promise.resolve(result);
+            },
+
+            /**
+             * 상품 삭제 (write).
+             * @param {number|string} id - 상품 ID
+             * @returns {Promise<boolean>} 삭제 성공 여부
+             */
+            deleteProduct(id) {
+                const result = db.deleteProduct(id);
+                return Promise.resolve(result);
+            }
+        };
     },
 
 

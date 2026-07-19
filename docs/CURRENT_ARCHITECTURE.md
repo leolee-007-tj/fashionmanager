@@ -704,3 +704,62 @@ Products write path (3-5C):
 
 ### 상세 문서
 - Products write path 전환 상세: `docs/ASYNC_MIGRATION_MAP.md` §7
+
+## 14. 3-5D: Products DataSource Interface Extraction (2026-07-19)
+
+### 목적
+Products read/write async boundary가 준비됐으므로, 이번 단계에서는 Products 전용 DataSource 인터페이스를 분리한다.
+**3-5D는 Products DataSource extraction only, no Supabase CRUD conversion.**
+현재 활성 DataSource는 반드시 LocalProductsDataSource이며, 내부 저장 방식은 기존 localStorage 그대로 유지한다.
+
+### Products DataSource 구조
+
+```
+DB.getProductsDataSource() → ProductsDataSource
+  ├─ LocalProductsDataSource (현재 활성)
+  │    ├─ listProducts() → Promise<Product[]>
+  │    ├─ setProducts(products) → Promise<void>
+  │    ├─ createProduct(product) → Promise<Product>
+  │    ├─ updateProduct(id, updates) → Promise<Product>
+  │    └─ deleteProduct(id) → Promise<boolean>
+  └─ SupabaseProductsDataSource (다음 단계 예정, 미구현)
+```
+
+### 호출 흐름
+```
+Products.load() → await DB.getProductsAsync()
+  └─ DB.getProductsDataSource().listProducts()
+       └─ LocalProductsDataSource.listProducts()
+            └─ Promise.resolve(db.getProducts())  // localStorage
+
+Products.submitForm() → await DB.addProductAsync()
+  └─ DB.getProductsDataSource().createProduct(product)
+       └─ LocalProductsDataSource.createProduct(product)
+            └─ db.addProduct(product) → Promise.resolve(result)  // localStorage
+```
+
+### 주요 변경
+- **js/db.js**: `LocalProductsDataSource`, `getProductsDataSource()`, 테스트용 setter/resetter 추가
+- **js/db.js**: 기존 async helper 내부 구현을 ProductsDataSource 경유로 정리
+- **새 테스트**: `tests/products-datasource-contract.test.mjs` (D1-D16)
+- **products.js**: 변경 없음 — 기존 async helper 호출 유지
+
+### 인증 게이트 vs 업무 데이터 전환
+- 인증 게이트 (3-4): 완료됨 — Supabase Auth와 연결
+- 업무 데이터 전환 (3-5): Products DataSource 인터페이스 분리 완료
+- **아직 Supabase products CRUD 호출 없음** — DataSource 인터페이스만 분리
+- 다음 단계에서 SupabaseProductsDataSource 구현 예정
+
+### 제약 준수
+- 실제 Supabase products CRUD 호출: ❌ (no)
+- 활성 DataSource: LocalProductsDataSource
+- localStorage key 변경: ❌ (no)
+- 상품 스키마 변경: ❌ (no)
+- Orders/Customers/Expenses/Settings 모듈 변경: ❌ (no)
+- 원격 Supabase 연결: ❌ (no)
+- service_role 브라우저 사용: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 재추가: ❌ (no)
+
+### 상세 문서
+- Products DataSource 상세: `docs/ASYNC_MIGRATION_MAP.md` §8

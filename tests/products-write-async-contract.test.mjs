@@ -37,16 +37,24 @@ describe('Products write async boundary contract (W1-W15)', function () {
             'db.js should have setProductsAsync method');
     });
 
-    it('W5: write async helpers wrap existing sync localStorage methods with Promise.resolve', function () {
+    it('W5: write async helpers use ProductsDataSource which wraps existing sync localStorage methods', function () {
         const content = readFile('js/db.js');
-        assert.match(content, /addProductAsync\s*\([^)]*\)\s*\{[\s\S]*?Promise\.resolve\s*\(\s*this\.addProduct\s*\(/,
-            'addProductAsync should wrap this.addProduct with Promise.resolve');
-        assert.match(content, /updateProductAsync\s*\([^)]*\)\s*\{[\s\S]*?Promise\.resolve\s*\(\s*this\.updateProduct\s*\(/,
-            'updateProductAsync should wrap this.updateProduct with Promise.resolve');
-        assert.match(content, /deleteProductAsync\s*\([^)]*\)\s*\{[\s\S]*?Promise\.resolve\s*\(\s*this\.deleteProduct\s*\(/,
-            'deleteProductAsync should wrap this.deleteProduct with Promise.resolve');
-        assert.match(content, /setProductsAsync\s*\([^)]*\)\s*\{[\s\S]*?Promise\.resolve\s*\(\s*this\.setProducts\s*\(/,
-            'setProductsAsync should wrap this.setProducts with Promise.resolve');
+        assert.match(content, /addProductAsync\s*\([^)]*\)\s*\{[\s\S]*?getProductsDataSource\s*\(\s*\)\s*\.\s*createProduct\s*\(/,
+            'addProductAsync should use ProductsDataSource.createProduct');
+        assert.match(content, /updateProductAsync\s*\([^)]*\)\s*\{[\s\S]*?getProductsDataSource\s*\(\s*\)\s*\.\s*updateProduct\s*\(/,
+            'updateProductAsync should use ProductsDataSource.updateProduct');
+        assert.match(content, /deleteProductAsync\s*\([^)]*\)\s*\{[\s\S]*?getProductsDataSource\s*\(\s*\)\s*\.\s*deleteProduct\s*\(/,
+            'deleteProductAsync should use ProductsDataSource.deleteProduct');
+        assert.match(content, /setProductsAsync\s*\([^)]*\)\s*\{[\s\S]*?getProductsDataSource\s*\(\s*\)\s*\.\s*setProducts\s*\(/,
+            'setProductsAsync should use ProductsDataSource.setProducts');
+        assert.match(content, /createProduct\s*\([^)]*\)\s*\{[\s\S]*?db\.addProduct\s*\(/,
+            'LocalProductsDataSource.createProduct should wrap db.addProduct');
+        assert.match(content, /updateProduct\s*\([^)]*\)\s*\{[\s\S]*?db\.updateProduct\s*\(/,
+            'LocalProductsDataSource.updateProduct should wrap db.updateProduct');
+        assert.match(content, /deleteProduct\s*\([^)]*\)\s*\{[\s\S]*?db\.deleteProduct\s*\(/,
+            'LocalProductsDataSource.deleteProduct should wrap db.deleteProduct');
+        assert.match(content, /setProducts\s*\([^)]*\)\s*\{[\s\S]*?db\.setProducts\s*\(/,
+            'LocalProductsDataSource.setProducts should wrap db.setProducts');
     });
 
     it('W6: js/db.js has no supabase.from("products") call', function () {
