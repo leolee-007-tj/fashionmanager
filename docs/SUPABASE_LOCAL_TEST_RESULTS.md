@@ -701,3 +701,65 @@ wrapper script 동작:
 - 기존 migration 11개: 변경 없음
 - 기존 업무 모듈 (db.js, products.js 등): 변경 없음
 - index.html, css/style.css, js/*: 변경 없음
+
+## 3-4C2: Local Browser Auth Smoke Test (2026-07-19)
+
+### 목적
+실제 브라우저에서 로컬 Supabase Auth와 인증 게이트 UI가 연결되는지 smoke test로 확인한다.
+
+### 변경 파일
+- `index.html`: js/config.js → js/config.example.js 로드 순서 변경
+- `docs/SUPABASE_BROWSER_AUTH_SMOKE_TEST.md` (신규): 브라우저 smoke test 문서
+- `docs/CURRENT_ARCHITECTURE.md` (업데이트): 3-4C2 섹션 추가
+- `tests/browser-auth-smoke-contract.test.mjs` (신규): B1-B10 정적 계약 테스트
+
+### js/config.js (로컬에서만 생성)
+- `.gitignore`에 이미 포함
+- commit 금지
+- service_role key 사용 금지
+- ANON_KEY만 사용
+
+### 정적 계약 테스트 (B1-B10)
+
+| # | 검사 항목 | 결과 |
+|---|---|---|
+| B1 | index.html에서 js/config.js가 js/config.example.js보다 먼저 로드됨 | PASS |
+| B2 | js/config.js는 .gitignore에 포함됨 | PASS |
+| B3 | index.html에 service_role 문자열 없음 | PASS |
+| B4 | index.html에 실제 Supabase URL/key 없음 | PASS |
+| B5 | config.example.js 기본값은 SUPABASE_ENABLED=false | PASS |
+| B6 | config.example.js는 기존 LESOUL_CONFIG를 덮어쓰지 않음 | PASS |
+| B7 | business modules js/db.js 등은 변경되지 않음 | PASS |
+| B8 | tests/docs에 실제 key/token/JWT 없음 | PASS |
+| B9 | docs에 js/config.js commit 금지 명시 | PASS |
+| B10 | docs에 service_role 브라우저 금지 명시 | PASS |
+
+### 브라우저 Smoke Test 수동 확인 결과
+
+| 항목 | 상태 |
+|---|---|
+| 로그인 화면 표시 | ✅ |
+| 로그인 성공 | ✅ |
+| onboarding 화면 표시 | ✅ |
+| 매장 생성 성공 | ✅ |
+| 앱 진입 | ✅ |
+| auth badge 표시 | ✅ |
+| 새로고침 세션 유지 | ✅ |
+| logout 성공 | ✅ |
+| 재로그인 가능 | ✅ |
+| token console 출력 | ❌ (없음) |
+| service_role 브라우저 | ❌ (없음) |
+| 원격 Supabase 연결 | ❌ (없음) |
+
+### 테스트 환경
+- 정적 서버: `python3 -m http.server 4173`
+- 브라우저 URL: `http://127.0.0.1:4173/index.html`
+- 대상: 로컬 Supabase (localhost only)
+- 원격 연결: 0
+
+### 주요 제약 준수
+- js/config.js commit: ❌ (no)
+- service_role 브라우저 사용: ❌ (no)
+- 원격 Supabase 연결: ❌ (no)
+- business modules 변경: ❌ (no)
+- localStorage 업무 데이터: ✅ (유지)

@@ -68,10 +68,12 @@ github-pages-version/
 - 헤더 언어 버튼 4개 (한국어/중국어/영어/일본어)
 - **3-4B 추가**: `<div id="auth-root" class="auth-root" hidden></div>` (body 첫 번째)
 - **3-4B 추가**: `#auth-context-badge`와 `#auth-logout-button` (header-right, 기본 hidden)
-- 스크립트 로드 순서 (3-4B 업데이트):
+- 스크립트 로드 순서 (3-4C2 업데이트):
   1. 업무 스크립트: i18n → db → price-calculator → classification → products → orders → customers → analytics → expenses → excel → settings
-  2. 인증 스크립트: config.example.js → supabase-client.js → auth-service.js → auth-ui.js
-  3. app.js → app-bootstrap.js (항상 마지막)
+  2. **3-4C2 추가**: js/config.js (optional local config, git ignored, 404 시 앱 실행 안 중단)
+  3. config.example.js (git tracked, LESOUL_CONFIG 가드로 pre-injected config 보호)
+  4. 인증 스크립트: supabase-client.js → auth-service.js → auth-ui.js
+  5. app.js → app-bootstrap.js (항상 마지막)
 - **3-4B 추가**: 마지막 인라인 스크립트에서 `LESOULAppBootstrap.start({})` 호출
 
 ### `js/i18n.js` (654줄)
@@ -450,3 +452,62 @@ product.reserved_stock -= quantity
 - `app_backup.js`가 언제 생성됐는지 (Git 히스토리 추적 가능하지만 이번 분석 범위 외) - "확인 필요"
 - Analytics의 `renderAsync()`가 실제로 호출되는 경로 (라우터는 `render()`만 호출) - "확인 필요, 현재는 호출되지 않는 것으로 보임"
 - Chart.js 버전 고정 여부 (jsdelivr CDN에서 버전 태그 없이 최신 로드) - "확인 필요"
+
+## 9. 3-4C2: Local Browser Auth Smoke Test (2026-07-19)
+
+### 목적
+실제 브라우저에서 로컬 Supabase Auth와 인증 게이트 UI가 연결되는지 smoke test로 확인한다.
+
+### 주요 변경
+- **index.html**: `js/config.js`가 `js/config.example.js`보다 먼저 로드되도록 추가
+- **js/config.js**: `.gitignore`에 이미 포함, 로컬에서만 생성
+- **js/config.example.js**: 기존 LESOUL_CONFIG 덮어쓰지 않는 가드 유지 (`if (!global.LESOUL_CONFIG)`)
+- **새 문서**: `docs/SUPABASE_BROWSER_AUTH_SMOKE_TEST.md`
+- **새 테스트**: `tests/browser-auth-smoke-contract.test.mjs` (B1-B10 정적 계약 테스트)
+
+### js/config.js 예시 (로컬에서만 생성)
+```javascript
+(function (global) {
+    'use strict';
+    global.LESOUL_CONFIG = Object.freeze({
+        SUPABASE_ENABLED: true,
+        SUPABASE_URL: 'http://127.0.0.1:54321',
+        SUPABASE_CLIENT_KEY: '<LOCAL_ANON_KEY_ONLY>'
+    });
+})(typeof window !== 'undefined' ? window : globalThis);
+```
+
+### 중요 제약
+- `js/config.js` commit 금지
+- `service_role` key 브라우저 사용 금지 (로컬 test user 생성에만 사용)
+- 원격 Supabase 연결 금지
+- business modules(js/db.js 등) 변경 금지
+- localStorage 기반 업무 데이터 유지
+
+### 브라우저 smoke 테스트 단계
+1. `SUPABASE_ENABLED=true` 상태에서 legacy app이 바로 뜨지 않음
+2. 로그인 화면 표시
+3. dummy local test user로 로그인
+4. membership 없으면 store onboarding 화면
+5. 매장 생성
+6. 앱 진입
+7. header auth badge 표시
+8. 새로고침 후 세션 유지
+9. logout 버튼 클릭 시 signed-out 화면
+10. 재로그인 가능
+
+### 수동 확인 결과 (2026-07-19)
+| 항목 | 상태 |
+|---|---|
+| 로그인 화면 표시 | ✅ |
+| 로그인 성공 | ✅ |
+| onboarding 화면 표시 | ✅ |
+| 매장 생성 성공 | ✅ |
+| 앱 진입 | ✅ |
+| auth badge 표시 | ✅ |
+| 새로고침 세션 유지 | ✅ |
+| logout 성공 | ✅ |
+| 재로그인 가능 | ✅ |
+| token console 출력 | ❌ (없음) |
+| service_role 브라우저 | ❌ (없음) |
+| 원격 Supabase 연결 | ❌ (없음) |
