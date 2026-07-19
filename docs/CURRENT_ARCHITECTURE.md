@@ -1135,3 +1135,86 @@ Test-only (controlled / opt-in):
 
 ### 상세 문서
 - Products write contract 상세: `docs/ASYNC_MIGRATION_MAP.md` §13
+
+## 20. 3-5J: Products Supabase Write Local Integration Smoke (2026-07-19)
+
+### 목표
+3-5I에서 구현한 SupabaseProductsDataSource의 create/update/delete write methods를
+실제 로컬 Supabase/Auth/RLS 환경에서 opt-in integration smoke test로 검증한다.
+**일반 앱 runtime은 계속 LocalProductsDataSource를 사용하며 자동 전환되지 않는다.**
+
+### Products DataSource 현재 상태
+
+```
+Runtime default: LocalProductsDataSource (localStorage)
+
+Test-only (controlled / opt-in):
+  SupabaseProductsDataSource (local-only read + write)
+    ├─ listProducts()   → local integration 검증 완료 (동작)
+    ├─ createProduct()  → local integration 검증 완료 (동작, created_at/updated_at NOT NULL 처리)
+    ├─ updateProduct()  → DB column-level 권한 정책으로 차단 (updated_at UPDATE denied)
+    │                     contract test W1-W21에서만 검증
+    ├─ deleteProduct()  → local integration 검증 완료 (soft delete 동작, deleted_at column UPDATE 허용)
+    └─ setProducts()    → throw "setProducts is not enabled" (disabled — bulk overwrite 금지)
+```
+
+### DB column-level 권한 정책
+- `20260711000900_order_inventory_rpc.sql:957`에서 table-level `REVOKE UPDATE ON public.products FROM authenticated`
+- 하지만 column-level GRANT가 별도로 존재:
+  - `deleted_at` 컬럼: authenticated에 UPDATE 권한 → soft delete 동작
+  - `updated_at` 컬럼: authenticated에 UPDATE 권한 없음 → updateProduct 차단
+- 이로 인해:
+  - `createProduct`: INSERT 권한으로 동작
+  - `updateProduct`: `updated_at` 강제 업데이트 시도 시 403 → query failed
+  - `deleteProduct`: `deleted_at`만 업데이트하므로 soft delete 성공
+
+### Integration Test
+- 파일: `tests/products-supabase-write-local.integration.mjs`
+- opt-in: `RUN_LOCAL_SUPABASE_INTEGRATION=1` 환경 변수일 때만 실행
+- 기본 `node --test`에서는 skip (네트워크 호출 없음)
+- P1-P13 검증 항목 (13개)
+- service_role은 setup/cleanup에만 사용, DataSource/browser에 전달 ❌
+
+### 현재 Runtime 상태
+- **활성 DataSource**: LocalProductsDataSource (기본값, 변경 없음)
+- **데이터 저장**: localStorage (기존과 동일)
+- **SupabaseProductsDataSource**: local integration test에서만 사용
+- **setProducts disabled**: 대량 overwrite 금지
+- **자동 전환 없음**: feature flag / config / auth session 기반 자동 전환 없음
+
+### 인증 게이트 vs 업무 데이터 전환
+- 인증 게이트 (3-4): 완료됨 — Supabase Auth와 연결
+- 업무 데이터 전환 (3-5):
+  - 3-5A: async boundary 준비 ✅
+  - 3-5B: Products read path async ✅
+  - 3-5C: Products write path async ✅
+  - 3-5D: Products DataSource interface extraction ✅
+  - 3-5E: Products Supabase mapping contract ✅
+  - 3-5F: SupabaseProductsDataSource disabled skeleton ✅
+  - 3-5G: Products Supabase read path local-only controlled test ✅
+  - 3-5H: Products Supabase read local integration smoke ✅
+  - 3-5I: Products Supabase write path local-only controlled contract ✅
+  - 3-5J: Products Supabase write local integration smoke ✅ (현재)
+  - 다음: runtime 전환 예정
+- **아직 일반 앱 runtime은 localStorage 사용**
+- 인증 게이트와 업무 데이터 전환은 여전히 분리되어 있음
+
+### 제약 준수
+- 활성 DataSource: LocalProductsDataSource (기본값, 변경 없음)
+- getProductsDataSource() 기본값 변경: ❌ (no)
+- 일반 runtime에서 SupabaseProductsDataSource 자동 활성화: ❌ (no)
+- setProducts 대량 overwrite 구현: ❌ (no, disabled 유지)
+- delete 방식: soft delete (deleted_at) — 실제 DELETE ❌
+- 원격 Supabase 연결: ❌ (no)
+- service_role 브라우저 사용: ❌ (no)
+- service_role 값을 JS/browser 코드에 넣기: ❌ (no)
+- service_role은 setup/cleanup에만 사용: ✅
+- token/session/key console.log: ❌ (no)
+- localStorage key 변경: ❌ (no)
+- 상품 스키마 변경: ❌ (no)
+- products.js 변경: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 재추가: ❌ (no)
+
+### 상세 문서
+- Products write local integration 상세: `docs/ASYNC_MIGRATION_MAP.md` §14

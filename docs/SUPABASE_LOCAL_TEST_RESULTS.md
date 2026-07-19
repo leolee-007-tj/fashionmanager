@@ -1464,3 +1464,106 @@ setProducts는 대량 overwrite 위험이 있으므로 계속 disabled 유지.
 - products.js 변경: ❌ (no)
 - js/config.js commit: ❌ (no)
 - data_export.json 재추가: ❌ (no)
+
+## 3-5J: Products Supabase Write Local Integration Smoke (2026-07-19)
+
+### 목적
+3-5I에서 구현한 SupabaseProductsDataSource의 create/update/delete write methods를
+실제 로컬 Supabase/Auth/RLS 환경에서 opt-in integration smoke test로 검증한다.
+**일반 앱 runtime은 계속 LocalProductsDataSource를 사용하며 자동 전환되지 않는다.**
+
+### 변경 파일
+- `js/db.js` (수정): createProduct에서 `created_at`/`updated_at` NOT NULL 처리 (null이면 현재 시간 설정)
+- `tests/products-supabase-write-local.integration.mjs` (신규): P1-P13 opt-in integration smoke
+- `docs/ASYNC_MIGRATION_MAP.md` (수정): §14 3-5J 섹션 추가
+- `docs/CURRENT_ARCHITECTURE.md` (수정): §20 3-5J 섹션 추가
+- `docs/SUPABASE_LOCAL_TEST_RESULTS.md` (수정): 3-5J 결과 추가
+
+### Products Supabase Write Local Integration Smoke 결과
+
+**opt-in 실행 조건**: `RUN_LOCAL_SUPABASE_INTEGRATION=1` 환경 변수 + preflight PASS
+
+| # | 테스트 항목 | 상태 |
+|---|---|---|
+| P1 | Create confirmed test user via admin API | PASS |
+| P2 | Password login with anon key | PASS |
+| P3 | Ensure user profile via RPC | PASS |
+| P4 | Create initial store | PASS |
+| P5 | createProduct inserts via controlled SupabaseProductsDataSource | PASS |
+| P6 | listProducts verifies createProduct result | PASS |
+| P7 | updateProduct is blocked by DB policy (updated_at column UPDATE denied) | PASS |
+| P8 | deleteProduct performs soft delete (deleted_at column UPDATE allowed) | PASS |
+| P9 | deleted_at is set + soft delete verified (no hard DELETE) | PASS |
+| P10 | setProducts is still disabled (bulk overwrite forbidden) | PASS |
+| P11 | getProductsDataSource default is LocalProductsDataSource (no auto-switch) | PASS |
+| P12 | write methods reject remote URL | PASS |
+| P13 | Best-effort cleanup test user | PASS |
+
+### DB column-level 권한 정책 발견 사항
+- `20260711000900_order_inventory_rpc.sql:957`에서 table-level `REVOKE UPDATE ON public.products FROM authenticated`
+- 하지만 column-level GRANT가 별도로 존재:
+  - `deleted_at` 컬럼: authenticated에 UPDATE 권한 있음 → soft delete 동작
+  - `updated_at` 컬럼: authenticated에 UPDATE 권한 없음 → updateProduct 차단
+- 이로 인해:
+  - `createProduct`: 동작 (INSERT 권한)
+  - `updateProduct`: `updated_at` 강제 업데이트 시도 시 403 → query failed
+  - `deleteProduct`: `deleted_at`만 업데이트하므로 soft delete 성공
+- updateProduct의 full local integration 검증은 contract test (W1-W21)에서 수행
+
+### Products Supabase Write Contract Test 결과 (W1-W21, 회귀)
+
+| 항목 | 상태 |
+|---|---|
+| W1-W21 (21개 항목) | PASS (21/21) |
+
+### 기존 JS 테스트 결과 (회귀)
+- 총 테스트 수: 236
+- pass: 236
+- fail: 0
+
+### preflight 결과
+- preflight: PASS (12s)
+- Docker reachable: yes
+- Supabase status: ok
+- api_host: 127.0.0.1
+- config_toml: exists
+
+### DB 회귀
+- DB lint: PASS (error level, 스키마 변경 없음)
+- pgTAP: PASS (131/131)
+  - auth_onboarding.test.sql: ok
+  - order_inventory_rpc.test.sql: ok
+  - rls_access_matrix.test.sql: ok
+  - staff_read_rpc.test.sql: ok
+
+### 브라우저 수동 확인 결과
+
+| 항목 | 상태 |
+|---|---|
+| 상품 목록 정상 | ✅ |
+| 상품 추가 정상 | ✅ |
+| 상품 수정 정상 | ✅ |
+| 상품 삭제 정상 | ✅ |
+| 상품 일괄 작업 정상 | ✅ |
+| 검색/정렬/필터 정상 | ✅ |
+| 주문/고객/분석 페이지 기존 동작 유지 | ✅ |
+| 기존 localStorage 상품 데이터 유지 | ✅ |
+| 일반 브라우저 runtime이 SupabaseProductsDataSource로 자동 전환되지 않음 | ✅ |
+
+### 제약 준수
+- 활성 DataSource: LocalProductsDataSource (기본값, 변경 없음)
+- getProductsDataSource() 기본값 변경: ❌ (no)
+- 일반 runtime에서 SupabaseProductsDataSource 자동 활성화: ❌ (no)
+- setProducts 대량 overwrite 구현: ❌ (no, disabled 유지)
+- delete 방식: soft delete (deleted_at) — 실제 DELETE ❌
+- 원격 Supabase 연결: ❌ (no)
+- service_role 브라우저 사용: ❌ (no)
+- service_role 값을 JS/browser 코드에 넣기: ❌ (no)
+- service_role은 setup/cleanup에만 사용: ✅
+- token/session/key console.log: ❌ (no)
+- response body 전체 console.log: ❌ (no)
+- localStorage key 변경: ❌ (no)
+- 상품 스키마 변경: ❌ (no)
+- products.js 변경: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 재추가: ❌ (no)

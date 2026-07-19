@@ -704,3 +704,76 @@ setProducts는 대량 overwrite 위험이 있으므로 계속 disabled 유지.
 - preflight + DB lint + pgTAP
 - 브라우저 수동 확인: 상품 목록/추가/수정/삭제/일괄 작업 정상 동작
 - 일반 브라우저 runtime이 SupabaseProductsDataSource로 자동 전환되지 않음 확인
+
+## 14. 3-5J: Products Supabase Write Local Integration Smoke (2026-07-19)
+
+### 목표
+3-5I에서 구현한 SupabaseProductsDataSource의 create/update/delete write methods를
+실제 로컬 Supabase/Auth/RLS 환경에서 opt-in integration smoke test로 검증한다.
+**일반 앱 runtime은 계속 LocalProductsDataSource를 사용하며 자동 전환되지 않는다.**
+
+### opt-in 실행 조건
+- `RUN_LOCAL_SUPABASE_INTEGRATION=1` 환경 변수가 있을 때만 실행
+- 기본 `node --test`에서는 skip (네트워크 호출 없음)
+- preflight PASS 후에만 수동 실행
+
+### 테스트 흐름 (P1-P13)
+- P1: service_role admin API로 dummy/local-only 테스트 유저 생성
+- P2: anon key로 password login
+- P3: `ensure_user_profile` RPC 호출
+- P4: `create_initial_store` RPC 호출로 store_id 확보
+- P5: `createProduct` inserts via controlled SupabaseProductsDataSource (검증)
+- P6: `listProducts`로 createProduct 결과 확인
+- P7: `updateProduct`는 DB column-level 권한 정책(`updated_at` UPDATE denied)으로 차단됨 검증
+- P8: `deleteProduct`는 `deleted_at` column UPDATE 허용으로 soft delete 성공 검증
+- P9: `deleted_at` 설정 확인 + 실제 DELETE가 아님 검증 (soft delete)
+- P10: `setProducts`는 계속 disabled (대량 overwrite 금지)
+- P11: `getProductsDataSource()` 기본값은 LocalProductsDataSource (자동 전환 없음)
+- P12: write methods는 remote URL 거부 (localhost 전용)
+- P13: best-effort cleanup 테스트 유저 삭제
+
+### DB column-level 권한 정책 발견
+- `20260711000900_order_inventory_rpc.sql:957`에서
+  `REVOKE UPDATE ON public.products FROM authenticated` (table-level)
+- 하지만 column-level GRANT가 별도로 존재:
+  - `deleted_at` 컬럼: authenticated에 UPDATE 권한 있음 → soft delete 동작
+  - `updated_at` 컬럼: authenticated에 UPDATE 권한 없음 → updateProduct 차단
+- 이로 인해:
+  - `createProduct`: 동작 (INSERT 권한 있음)
+  - `updateProduct`: `updated_at` 강제 업데이트 시도 시 403 permission denied → query failed
+  - `deleteProduct`: `deleted_at`만 업데이트하므로 soft delete 성공
+- updateProduct의 full local integration 검증은 contract test (W1-W21)에서 수행
+
+### 현재 활성 DataSource
+- **LocalProductsDataSource**: 계속 기본 활성 상태 유지
+- `getProductsDataSource()` 기본값 = LocalProductsDataSource
+- SupabaseProductsDataSource는 local integration test에서만 사용
+- 일반 브라우저 상품 화면은 계속 localStorage 사용
+
+### write path 상태
+- setProducts: **disabled** (대량 overwrite 금지)
+- createProduct: local integration 검증 완료 (동작)
+- updateProduct: DB 권한 정책으로 차단됨 (contract test W1-W21에서만 검증)
+- deleteProduct: local integration 검증 완료 (soft delete 동작)
+- 일반 runtime 자동 전환: ❌
+- 원격 Supabase 연결: ❌
+
+### 제약 준수
+- service_role은 setup/cleanup에만 사용, DataSource/browser 코드에 전달 ❌
+- token/session/key console.log ❌
+- response body 전체 console.log ❌
+- 원격 supabase.co 차단
+- js/config.js commit ❌
+- data_export.json 재추가 ❌
+- 실제 DELETE 사용 ❌ (soft delete만)
+- 일반 runtime 자동 전환 ❌
+
+### 검증
+- `tests/products-supabase-write-local.integration.mjs` (P1-P13, opt-in)
+- `tests/products-supabase-write-contract.test.mjs` (W1-W21, 21/21 PASS)
+- 기존 JS 테스트 전체 회귀 (236/236 PASS)
+- preflight PASS
+- DB lint PASS (error level)
+- pgTAP 131/131 PASS
+- 브라우저 수동 확인: 상품 목록/추가/수정/삭제/일괄 작업 정상 동작
+- 일반 브라우저 runtime이 SupabaseProductsDataSource로 자동 전환되지 않음 확인

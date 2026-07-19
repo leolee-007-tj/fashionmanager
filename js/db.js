@@ -315,6 +315,10 @@ const DB = {
                 const row = db.mapLegacyProductToSupabaseRow(product || {});
                 row.store_id = context.storeId;
                 delete row.id;
+                // DB NOT NULL 제약 준수: created_at/updated_at이 없으면 현재 시간 설정
+                const nowIso = new Date().toISOString();
+                if (!row.created_at) row.created_at = nowIso;
+                if (!row.updated_at) row.updated_at = nowIso;
                 return client.from('products')
                     .insert(row)
                     .select()
