@@ -15,7 +15,7 @@
 | `lesoul_gh_inventory_logs` | `Array<InventoryLog>` | db.js `setInventoryLogs` / orders.js `submitShip` (`addInventoryLog`) | db.js `getInventoryLogs` | (수정 메서드 없음) | db.js `clearAllData` (개별 삭제 없음) | `[]` | JSON.parse 실패 시 `[]` |
 | `lesoul_gh_expenses` | `Array<Expense>` | db.js `setExpenses` / expenses.js `submitForm` | db.js `getExpenses` (expenses.js, analytics.js) | expenses.js `submitForm` (edit) | expenses.js `delete`, `batchDelete`, db.js `clearAllData` | `[]` | JSON.parse 실패 시 `[]` |
 | `lesoul_gh_keywords` | `Array<Keyword>` | db.js `setKeywords` / `initDefaultKeywords` / app.js 키워드 추가 / excel.js `importKeywords` | db.js `getKeywords` (classification.js, app.js) | db.js `updateKeyword`, app.js 인라인 편집 | db.js `deleteKeyword`, app.js 삭제, `cleanupKeywordDuplicates` | (없으면 `initDefaultKeywords` 실행) | JSON.parse 실패 시 `null` → `initDefaultKeywords` |
-| `lesoul_gh_settings` | `Object<Settings>` | db.js `setSettings` / settings.js `save` | db.js `getSettings` (여러 모듈) | settings.js `save` | (삭제 메서드 없음) | `{store_name:'LES SOUL', store_subtitle:'Store Management', exchange_divisor:165, price_multiplier:3, fixed_addition:40, base_discount_rate:20}` | JSON.parse 실패 시 기본값 객체 |
+| `lesoul_gh_settings` | `Object<Settings>` | db.js `setSettings` / settings.js `save` | db.js `getSettings` (여러 모듈) | settings.js `save` | (삭제 메서드 없음) | `{store_name:'LESOUL', store_subtitle:'Store Management', exchange_divisor:165, price_multiplier:3, fixed_addition:40, base_discount_rate:20}` | JSON.parse 실패 시 기본값 객체 |
 
 ### DB 계층을 거치지 않는 키 (직접 localStorage 접근)
 
@@ -237,7 +237,7 @@
 
 | 필드 | 타입 | 필수 | 기본값 | 비고 |
 |---|---|---|---|---|
-| `store_name` | string | 필수 | `'LES SOUL'` | 매장명 |
+| `store_name` | string | 필수 | `'LESOUL'` | 매장명 |
 | `store_subtitle` | string \| object | 필수 | `'Store Management'` 또는 `{ko,zh,en,ja}` | 부제목. **문자열이거나 다국어 객체일 수 있음** |
 | `exchange_divisor` | number | 필수 | `165` | 환율 나눗수 (KRW→CNY) |
 | `price_multiplier` | number | 필수 | `3` | 판매가 배수 |

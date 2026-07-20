@@ -2213,3 +2213,78 @@ preflight=PASS
 - js/config.js commit: ❌ (no)
 - 원격 Supabase 연결: ❌ (no)
 - Orders/Customers/Analytics 전환: ❌ (no)
+
+## 3-5O.1: Fix LESOUL Brand Setting & Re-run Local Browser Smoke (2026-07-20)
+
+### 변경 파일
+- `index.html`: 브랜드명 "LES SOUL" → "LESOUL"
+- `js/auth-ui.js`: 로그인 logo "LES SOUL" → "LESOUL"
+- `js/db.js`: `getBrandName()` / `setBrandName()` resolver 추가, 기본값 수정
+- `js/app.js`: `updateHeader()`에서 `DB.getBrandName()` 사용
+- `js/i18n.js`: `app_brand_name` 번역 추가
+- `js/settings.js`: 설정 화면에 브랜드명 입력 필드 추가
+- `js/config.example.js`: `APP_BRAND_NAME: 'LESOUL'` 추가
+- `docs/CURRENT_DATA_MODEL.md`: 기본값 문서 업데이트
+- `docs/CURRENT_ARCHITECTURE.md`: §25 3-5O.1 진행 상태 추가
+- `docs/ASYNC_MIGRATION_MAP.md`: §20 3-5O.1 섹션 추가
+- `docs/SUPABASE_PRODUCTS_LOCAL_BROWSER_RUNTIME_SMOKE.md`: 3-5O.1 섹션 추가
+- `tests/brand-setting-contract.test.mjs`: 신규 contract test
+
+### brand-setting contract 테스트 결과
+`node --test tests/brand-setting-contract.test.mjs`
+- **13/13 PASS**
+
+### products runtime local integration 결과
+`RUN_LOCAL_SUPABASE_INTEGRATION=1 node --test tests/products-runtime-local.integration.mjs`
+- **16/16 PASS** (PGRST202 문제 해결)
+
+### 기존 JS 테스트 전체
+```
+node --test \
+tests/supabase-client.test.js \
+tests/auth-service.test.js \
+tests/auth-ui.test.js \
+tests/app-bootstrap.test.js \
+tests/local-runner-contract.test.mjs \
+tests/browser-auth-smoke-contract.test.mjs \
+tests/browser-auth-recovery-contract.test.mjs \
+tests/data-gateway-async-contract.test.mjs \
+tests/products-read-async-contract.test.mjs \
+tests/products-write-async-contract.test.mjs \
+tests/products-datasource-contract.test.mjs \
+tests/products-supabase-mapping-contract.test.mjs \
+tests/products-supabase-datasource-skeleton-contract.test.mjs \
+tests/products-supabase-read-contract.test.mjs \
+tests/products-supabase-write-contract.test.mjs \
+tests/products-runtime-feature-flag-contract.test.mjs \
+tests/brand-setting-contract.test.mjs
+```
+- **259/259 PASS (회귀 없음)**
+
+### DB lint / pgTAP 결과
+- DB 변경 없음
+- DB lint: PASS (error level)
+- pgTAP: 161/161 PASS
+
+### 브랜드 표기 검색 결과
+```
+grep -RIn "LES SOUL\|Les Soul\|les soul\|LES-SOUL\|LES_SOUL" . \
+  --exclude-dir=.git \
+  --exclude-dir=node_modules \
+  --exclude=js/config.js \
+  --exclude=data_export.json
+```
+- **결과**: app_backup.js 제외하고 "LES SOUL" 표기 없음
+
+### 제약 준수
+- "LES SOUL" 표기 제거: ✅
+- 기본 브랜드명 LESOUL: ✅
+- 처음 실행 시 브랜드 설정 가능: ✅
+- localStorage 저장: ✅
+- 빈 브랜드명 처리: ✅ (LESOUL로 복구)
+- products.js 변경: ❌ (no)
+- css/style.css 변경: ❌ (no)
+- supabase migrations/tests 변경: ❌ (no)
+- 원격 Supabase 연결: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 포함: ❌ (no)

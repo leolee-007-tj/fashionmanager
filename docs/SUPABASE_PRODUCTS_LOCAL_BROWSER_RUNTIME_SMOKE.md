@@ -85,3 +85,66 @@
    - flag-off 시 `LocalProductsDataSource`로 정상 복귀함 ✅
    - `legacy_id` 생성 버그 수정 완료 ✅
    - 기존 JS 테스트 259/259 PASS ✅
+
+## 3-5O.1: Brand Setting Fix & Local Browser Smoke Re-run (2026-07-20)
+
+### 브랜드명 LESOUL 설정 관련 변경
+
+#### 변경 파일
+- `index.html`: `<title>`과 `<h1 class="store-name">`에서 "LES SOUL" → "LESOUL"로 수정
+- `js/auth-ui.js`: 로그인 화면 logo에서 "LES SOUL" → "LESOUL"로 수정
+- `js/db.js`: `getSettings()` 기본값 `store_name: 'LES SOUL'` → `LESOUL`; `getBrandName()` / `setBrandName()` resolver 추가
+- `js/app.js`: `updateHeader()`에서 `DB.getBrandName()` 사용하도록 변경
+- `js/i18n.js`: `app_brand_name` 번역 추가
+- `js/settings.js`: 설정 화면에 브랜드명 입력 필드 추가
+- `js/config.example.js`: `APP_BRAND_NAME: 'LESOUL'` 기본값 추가
+- `docs/CURRENT_DATA_MODEL.md`: 기본값 문서 업데이트
+- `tests/brand-setting-contract.test.mjs`: 신규 contract test
+
+#### 브랜드 resolver 동작 규칙
+1. localStorage (`lesoul_gh_app_brand_name`)에 사용자가 저장한 브랜드명이 있으면 그 값을 사용
+2. 없으면 `LESOUL_CONFIG.APP_BRAND_NAME` 사용
+3. 그것도 없으면 "LESOUL" 사용
+4. 빈 문자열, null, undefined, 공백만 있는 값은 무시하고 "LESOUL"로 복구
+
+#### 브랜드 설정 구조
+- 설정 화면("매장명 설정")에 "앱 브랜드명" 입력 필드 추가
+- 사용자가 브랜드명을 저장하면 localStorage에 저장됨
+- 저장 후 페이지 새로고침 시 변경된 브랜드명이 header/login 화면에 표시됨
+- 빈 값 저장 시 LESOUL로 복구
+
+### PGRST202 문제 해결
+
+**해결 여부**: ✅ 해결됨
+
+**원인**: 3-5O 초기 실행 시 Supabase Docker 컨테이너가 제대로 실행되지 않았음
+
+**해결 방법**:
+- `supabase status`로 Supabase가 실행 중인지 확인
+- `RUN_LOCAL_SUPABASE_INTEGRATION=1 node --test tests/products-runtime-local.integration.mjs` 실행
+- **결과**: 16/16 PASS — `create_product` RPC가 정상 동작
+
+### 브라우저 flag-on smoke 재수행 예정
+
+인프라 복구 후 브라우저에서 다음 시나리오 재수행 예정:
+- 로그인 → store 선택 → Products 페이지 진입 → `DB.getProductsDataSource().name === SupabaseProductsDataSource` 확인
+- 상품 추가 → 새로고침 후 유지 확인
+- 상품 수정 → 변경 확인
+- 상품 삭제 (soft delete) → 목록에서 제외 확인
+- 로그아웃 / 재로그인 후 데이터 유지 확인
+
+### brand-setting contract 테스트 결과
+
+`node --test tests/brand-setting-contract.test.mjs`
+- **13/13 PASS**
+
+### 제약 준수
+- "LES SOUL" 표기 제거: ✅ (app_backup.js 제외)
+- 기본 브랜드명 LESOUL: ✅
+- 처음 실행 시 브랜드 설정 가능: ✅
+- localStorage 저장: ✅
+- 빈 브랜드명 처리: ✅ (LESOUL로 복구)
+- products.js 변경: ❌ 없음
+- css/style.css 변경: ❌ 없음
+- supabase migrations/tests 변경: ❌ 없음
+- 원격 Supabase 연결: ❌ 없음

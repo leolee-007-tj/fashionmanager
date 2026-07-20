@@ -815,7 +815,7 @@ const DB = {
 
     getSettings() {
         return this.get('settings', {
-            store_name: 'LES SOUL',
+            store_name: 'LESOUL',
             store_subtitle: 'Store Management',
             exchange_divisor: 165,
             price_multiplier: 3,
@@ -827,6 +827,27 @@ const DB = {
     getSetting(key) {
         const settings = this.getSettings();
         return settings[key];
+    },
+
+    getBrandName() {
+        const stored = localStorage.getItem(this.prefix + 'app_brand_name');
+        if (stored && stored.trim()) {
+            return stored.trim();
+        }
+        if (typeof LESOUL_CONFIG !== 'undefined' && LESOUL_CONFIG.APP_BRAND_NAME && LESOUL_CONFIG.APP_BRAND_NAME.trim()) {
+            return LESOUL_CONFIG.APP_BRAND_NAME.trim();
+        }
+        return 'LESOUL';
+    },
+
+    setBrandName(name) {
+        const trimmed = name && name.trim();
+        if (trimmed) {
+            localStorage.setItem(this.prefix + 'app_brand_name', trimmed);
+        } else {
+            localStorage.removeItem(this.prefix + 'app_brand_name');
+        }
+        return this.getBrandName();
     },
 
     setSettings(settings) { this.set('settings', settings); },

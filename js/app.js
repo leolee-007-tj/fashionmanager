@@ -18,15 +18,15 @@ const App = {
 
     updateHeader() {
         const s = DB.getSettings();
-        const storeName = s.store_name || 'LES SOUL';
+        const brandName = DB.getBrandName();
         let storeSubtitle = s.store_subtitle || 'Store Management';
         if (typeof storeSubtitle === 'object') {
             storeSubtitle = storeSubtitle[currentLang] || storeSubtitle.ko || storeSubtitle.en || 'Store Management';
         }
-        document.title = storeName + (storeSubtitle ? ' - ' + storeSubtitle : '');
+        document.title = brandName + (storeSubtitle ? ' - ' + storeSubtitle : '');
         const nameEl = document.querySelector('.store-name');
         const subEl = document.querySelector('.store-subtitle');
-        if (nameEl) nameEl.textContent = storeName;
+        if (nameEl) nameEl.textContent = brandName;
         if (subEl) subEl.textContent = storeSubtitle;
     },
 

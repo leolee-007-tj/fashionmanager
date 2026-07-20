@@ -1608,7 +1608,7 @@ getProductsDataSource()
 - 3-5M: Products Runtime DataSource Feature Flag Gate ✅
 - 3-5N: Products Local Runtime Activation Smoke ✅
 - 3-5O: Products Local Browser Runtime Smoke ⚠️ (flag-on write blocked by infra)
-- 다음: local Supabase 인프라 복구 후 브라우저 write smoke 재수행
+- 3-5O.1: Fix LESOUL Brand Setting & Re-run Local Browser Smoke ✅
 - 다음: 원격 Supabase 연결 허용 검토, Orders/Customers/Analytics 전환
 - **일반 앱 기본 runtime은 여전히 LocalProductsDataSource (localStorage)**
 - 인증 게이트와 업무 데이터 전환은 여전히 분리되어 있음

@@ -72,9 +72,20 @@
         return btn;
     }
 
+    function _getBrandName() {
+        var stored = localStorage.getItem('lesoul_gh_app_brand_name');
+        if (stored && stored.trim()) {
+            return stored.trim();
+        }
+        if (typeof LESOUL_CONFIG !== 'undefined' && LESOUL_CONFIG.APP_BRAND_NAME && LESOUL_CONFIG.APP_BRAND_NAME.trim()) {
+            return LESOUL_CONFIG.APP_BRAND_NAME.trim();
+        }
+        return 'LESOUL';
+    }
+
     function _panel() {
         var panel = _el('div', 'auth-panel');
-        var logo = _el('div', 'auth-logo', 'LES SOUL');
+        var logo = _el('div', 'auth-logo', _getBrandName());
         panel.appendChild(logo);
         return panel;
     }

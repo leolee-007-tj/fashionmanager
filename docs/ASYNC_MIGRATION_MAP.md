@@ -1301,3 +1301,68 @@ SupabaseProductsDataSource가 정상 선택되고 read/write가 정상 동작하
 - pgTAP PASS
 - 브라우저 수동 확인: 기본 config.example 상태에서 기존 localStorage로 동작
 - 일반 브라우저 runtime이 SupabaseProductsDataSource로 자동 전환되지 않음 확인
+
+## 20. 3-5O.1: Fix LESOUL Brand Setting & Re-run Local Browser Smoke (2026-07-20)
+
+### 목표
+1. 잘못된 브랜드 표기 "LES SOUL"을 "LESOUL"로 수정
+2. 앱 브랜드명을 처음 실행할 때 설정 가능한 구조로 만듦
+3. 기본 브랜드명은 반드시 "LESOUL"
+4. 기존 기능 로직을 깨지 않도록 최소 수정
+5. local Supabase schema cache / Docker 상태 복구 후 3-5O browser write smoke 재수행
+
+### 핵심 원칙
+- 기본 브랜드명: LESOUL
+- "LES SOUL" 표기는 잘못된 표기이므로 사용하지 않음
+- 사용자가 처음 실행할 때 브랜드명을 설정할 수 있어야 함
+- 사용자가 설정하지 않으면 LESOUL을 사용
+- 브랜드명 설정은 기능/DB/Supabase migration과 분리
+
+### 변경 내용
+
+#### 브랜드명 수정
+- `index.html`: `<title>`과 `<h1 class="store-name">`에서 "LES SOUL" → "LESOUL"
+- `js/auth-ui.js`: 로그인 화면 logo에서 "LES SOUL" → "LESOUL"
+- `js/db.js`: `getSettings()` 기본값 `store_name: 'LES SOUL'` → `LESOUL`
+- `docs/CURRENT_DATA_MODEL.md`: 기본값 문서 업데이트
+
+#### 브랜드 resolver 추가 (`js/db.js`)
+- `getBrandName()`: localStorage → LESOUL_CONFIG.APP_BRAND_NAME → "LESOUL" 순으로 우선순위
+- `setBrandName(name)`: 저장 시 trim, 빈 값은 localStorage에서 제거하여 기본값 복구
+- localStorage key: `lesoul_gh_app_brand_name` (기존 prefix 유지)
+
+#### 브랜드 설정 구조 (`js/settings.js`)
+- 설정 화면에 "앱 브랜드명" 입력 필드 추가
+- 저장 시 localStorage에 저장
+- 빈 값 저장 시 LESOUL로 복구
+
+#### 브랜드명 표시 (`js/app.js`)
+- `updateHeader()`에서 `DB.getBrandName()` 사용
+- `textContent`로 표시하여 XSS 방지
+
+#### 기본값 설정 (`js/config.example.js`)
+- `APP_BRAND_NAME: 'LESOUL'` 추가
+
+#### 번역 (`js/i18n.js`)
+- `app_brand_name` 번역 추가 (ko/en)
+
+#### 테스트 (`tests/brand-setting-contract.test.mjs`)
+- B1-B14: 브랜드 설정 contract 테스트 13/13 PASS
+
+### PGRST202 문제 해결
+- **해결 여부**: ✅ 해결됨
+- **원인**: 3-5O 초기 실행 시 Supabase Docker 컨테이너가 제대로 실행되지 않았음
+- **해결 방법**: `supabase status` 확인 후 opt-in integration test 실행
+- **결과**: 16/16 PASS — `create_product` RPC가 정상 동작
+
+### 제약 준수
+- "LES SOUL" 표기 제거: ✅ (app_backup.js 제외)
+- 기본 브랜드명 LESOUL: ✅
+- 처음 실행 시 브랜드 설정 가능: ✅
+- localStorage 저장: ✅
+- 빈 브랜드명 처리: ✅ (LESOUL로 복구)
+- products.js 변경: ❌ 없음
+- css/style.css 변경: ❌ 없음
+- supabase migrations/tests 변경: ❌ 없음
+- 원격 Supabase 연결: ❌ 없음
+- js/config.js commit: ❌ 없음

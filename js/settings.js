@@ -3,7 +3,7 @@ const Settings = {
         const s = DB.getSettings();
         const keywords = DB.getKeywords();
         const keywordTypes = { brand: t('classification', 'type_brand'), category: t('classification', 'type_category'), color: t('classification', 'type_color'), size: t('classification', 'type_size'), material: t('classification', 'type_material') };
-        const storeName = s.store_name || 'LES SOUL';
+        const storeName = s.store_name || 'LESOUL';
         const storeSubtitle = s.store_subtitle || {
             ko: '매장 관리', zh: '店铺管理', en: 'Store Management', ja: '店舗管理'
         };
@@ -29,6 +29,10 @@ const Settings = {
                     <div class="form-group">
                         <label>${t('settings', 'store_name')}</label>
                         <input type="text" id="storeName" class="form-control" value="${storeName}">
+                    </div>
+                    <div class="form-group">
+                        <label>${t('settings', 'app_brand_name')}</label>
+                        <input type="text" id="appBrandName" class="form-control" value="${DB.getBrandName()}">
                     </div>
                     <div class="form-group">
                         <label>${t('settings', 'store_subtitle')}</label>
@@ -134,11 +138,13 @@ const Settings = {
         settings.exchange_divisor = parseFloat(fd.get('exchange_divisor')) || 10;
         settings.price_multiplier = parseFloat(fd.get('price_multiplier')) || 3;
         settings.fixed_addition = parseFloat(fd.get('fixed_addition')) || 40;
-        const storeName = document.getElementById('storeName').value.trim() || 'LES SOUL';
+        const storeName = document.getElementById('storeName').value.trim() || 'LESOUL';
         const storeSubtitle = document.getElementById('storeSubtitle').value.trim() || '매장 관리';
+        const brandName = document.getElementById('appBrandName').value.trim();
         settings.store_name = storeName;
         settings.store_subtitle = storeSubtitle;
         DB.setSettings(settings);
+        DB.setBrandName(brandName);
         App.updateHeader();
         App.flash(t('settings', 'save_success'), 'success');
         setTimeout(() => location.reload(), 500);

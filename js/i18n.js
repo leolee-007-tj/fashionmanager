@@ -442,6 +442,7 @@ const TRANSLATIONS = {
         language_en: { ko: '🇺🇸 English', zh: '🇺🇸 英语', en: '🇺🇸 English', ja: '🇺🇸 英語' },
         language_ja: { ko: '🇯🇵 日本語', zh: '🇯🇵 日语', en: '🇯🇵 Japanese', ja: '🇯🇵 日本語' },
         store_name: { ko: '매장명', zh: '店铺名', en: 'Store Name', ja: '店名' },
+        app_brand_name: { ko: '앱 브랜드명', zh: '应用品牌名', en: 'App Brand Name', ja: 'アプリブランド名' },
         store_subtitle: { ko: '부제목', zh: '副标题', en: 'Subtitle', ja: 'サブタイトル' },
         exchange_rate: { ko: '환율나눗수', zh: '汇率除数', en: 'Exchange Rate', ja: '為替レート' },
         price_multiplier: { ko: '판매가배수', zh: '售价倍数', en: 'Price Multiplier', ja: '価格倍数' },
@@ -635,7 +636,7 @@ function updateAllTranslations() {
     });
     // store name/subtitle
     if (typeof DB !== 'undefined') {
-        const storeName = DB.getSetting('store_name') || 'LES SOUL';
+        const storeName = DB.getSetting('store_name') || 'LESOUL';
         const storeSubtitle = DB.getSetting('store_subtitle') || {
             ko: '매장 관리', zh: '店铺管理', en: 'Store Management', ja: '店舗管理'
         };

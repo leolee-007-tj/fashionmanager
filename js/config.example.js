@@ -7,6 +7,7 @@
             SUPABASE_ENABLED: false,
             SUPABASE_URL: '',
             SUPABASE_CLIENT_KEY: '',
+            APP_BRAND_NAME: 'LESOUL',
             // 3-5M: Products runtime feature flag gate.
             // 기본값 false — 일반 runtime은 LocalProductsDataSource를 유지한다.
             // true로 설정하더라도 SUPABASE_ENABLED, localhost URL, 초기화된 client,
