@@ -1864,3 +1864,128 @@ supabase db lint --local --level error --fail-on error
 - deleteProduct: RPC 기반 (`client.rpc('soft_delete_product')`)
 - 일반 runtime 자동 전환: ❌
 - 원격 Supabase 연결: ❌
+
+## 3-5M: Products Runtime DataSource Feature Flag Gate (2026-07-20)
+
+### 목적
+Products DataSource runtime 전환을 위한 feature flag gate만 추가한다.
+**아직 실제 원격 Supabase 전환, UI 리뉴얼, Orders/Customers 전환은 하지 않는다.**
+
+### 변경 파일
+- `js/config.example.js` (수정): PRODUCTS_SUPABASE_ENABLED 기본값 false 추가
+- `js/db.js` (수정): Products runtime feature flag gate 추가
+- `tests/products-runtime-feature-flag-contract.test.mjs` (신규): FF1-FF21
+- `tests/data-gateway-async-contract.test.mjs` (최소 수정): A2 service_role 검사 업데이트
+- `tests/products-datasource-contract.test.mjs` (최소 수정): D15, S5 업데이트
+- `tests/products-read-async-contract.test.mjs` (최소 수정): P12 업데이트
+- `tests/products-supabase-mapping-contract.test.mjs` (최소 수정): M10, M14 업데이트
+- `tests/products-write-async-contract.test.mjs` (최소 수정): W14 업데이트
+- `tests/products-supabase-read-contract.test.mjs` (최소 수정): R5 업데이트
+- `docs/ASYNC_MIGRATION_MAP.md` (수정): §17 3-5M 섹션 추가
+- `docs/CURRENT_ARCHITECTURE.md` (수정): §23 3-5M 섹션 추가
+- `docs/SUPABASE_LOCAL_TEST_RESULTS.md` (수정): 3-5M 결과 추가
+
+### PRODUCTS_SUPABASE_ENABLED 기본값
+- 기본값: `false` (js/config.example.js)
+- `true`로 설정하더라도 다른 필수 조건이 모두 충족되어야 SupabaseProductsDataSource 후보가 됨
+
+### SupabaseProductsDataSource 활성화 조건
+| # | 조건 | 실패 시 동작 |
+|---|------|-------------|
+| 1 | LESOUL_CONFIG 존재 | null (조용히 Local) |
+| 2 | SUPABASE_ENABLED === true | throw Error |
+| 3 | PRODUCTS_SUPABASE_ENABLED === true | null (조용히 Local) |
+| 4 | LESOULSupabase.isInitialized() | throw Error |
+| 5 | getClient() 존재 | throw Error |
+| 6 | activeMembership.storeId 존재 | throw Error |
+| 7 | URL이 localhost / 127.0.0.1 | throw Error |
+| 8 | service_role key가 아님 | throw Error |
+| 9 | client 명시적 존재 | throw Error |
+
+### products runtime feature flag contract 결과 (FF1-FF21)
+
+| 테스트 ID | 설명 | 상태 |
+|---|---|---|
+| FF1 | config.example.js has PRODUCTS_SUPABASE_ENABLED default false | PASS |
+| FF2 | SUPABASE_ENABLED false → LocalProductsDataSource | PASS |
+| FF3 | PRODUCTS_SUPABASE_ENABLED false → LocalProductsDataSource | PASS |
+| FF4 | SUPABASE_ENABLED true + PRODUCTS_SUPABASE_ENABLED false → Local | PASS |
+| FF5 | PRODUCTS_SUPABASE_ENABLED true + no storeId → throws | PASS |
+| FF6 | PRODUCTS_SUPABASE_ENABLED true + no client → throws | PASS |
+| FF7 | PRODUCTS_SUPABASE_ENABLED true + remote URL → throws | PASS |
+| FF8 | localhost + client + storeId → SupabaseProductsDataSource | PASS |
+| FF9 | getProductsDataSource default is LocalProductsDataSource | PASS |
+| FF10 | setProductsDataSourceForTesting hook preserved | PASS |
+| FF11 | resetProductsDataSourceForTesting hook preserved | PASS |
+| FF12 | products.js not modified | PASS |
+| FF13 | app.js not modified | PASS |
+| FF14 | no service_role string in runtime activation path (forbid context) | PASS |
+| FF15 | no token/session/key console.log in runtime activation path | PASS |
+| FF16 | localStorage prefix unchanged | PASS |
+| FF17 | js/config.js is gitignored | PASS |
+| FF18 | data_export.json is not in repo | PASS |
+| FF19 | PRODUCTS_SUPABASE_ENABLED true + SUPABASE_ENABLED false → throws | PASS |
+| FF20 | PRODUCTS_SUPABASE_ENABLED true + service_role JWT → throws | PASS |
+| FF21 | localhost URL with port → activates | PASS |
+
+### 기존 JS 테스트 결과
+
+| 테스트 파일 | 테스트 수 | 상태 |
+|---|---|---|
+| tests/supabase-client.test.js | 7 | PASS |
+| tests/auth-service.test.js | 15 | PASS |
+| tests/auth-ui.test.js | 10 | PASS |
+| tests/app-bootstrap.test.js | 35 | PASS |
+| tests/local-runner-contract.test.mjs | 18 | PASS |
+| tests/browser-auth-smoke-contract.test.mjs | 10 | PASS |
+| tests/browser-auth-recovery-contract.test.mjs | 12 | PASS |
+| tests/data-gateway-async-contract.test.mjs | 13 | PASS |
+| tests/products-read-async-contract.test.mjs | 13 | PASS |
+| tests/products-write-async-contract.test.mjs | 15 | PASS |
+| tests/products-datasource-contract.test.mjs | 16 | PASS |
+| tests/products-supabase-mapping-contract.test.mjs | 18 | PASS |
+| tests/products-supabase-datasource-skeleton-contract.test.mjs | 16 | PASS |
+| tests/products-supabase-read-contract.test.mjs | 19 | PASS |
+| tests/products-supabase-write-contract.test.mjs | 21 | PASS |
+| tests/products-runtime-feature-flag-contract.test.mjs | 21 | PASS |
+| **전체** | **257** | **PASS** |
+
+### preflight 결과
+
+```
+bash scripts/run-local-auth-rpc-integration.sh --preflight
+preflight=PASS
+```
+
+### DB lint / pgTAP 결과
+- DB 변경 없음 — 3-5K 결과와 동일
+- DB lint: PASS (error level)
+- pgTAP: 161/161 PASS
+
+### 브라우저 수동 확인 결과
+
+| 항목 | 상태 |
+|---|---|
+| 기본 config.example 상태에서 앱이 기존 localStorage로 동작 | ✅ |
+| 상품 목록 정상 | ✅ |
+| 상품 추가 정상 | ✅ |
+| 상품 수정 정상 | ✅ |
+| 상품 삭제 정상 | ✅ |
+| 검색/정렬/필터 정상 | ✅ |
+| 주문/고객/분석 페이지 기존 동작 유지 | ✅ |
+| 로그인/로그아웃 기존 동작 유지 | ✅ |
+| PRODUCTS_SUPABASE_ENABLED 기본값 false 확인 | ✅ |
+| 일반 브라우저 runtime이 SupabaseProductsDataSource로 자동 전환되지 않음 | ✅ |
+
+### 제약 준수
+- PRODUCTS_SUPABASE_ENABLED 기본값 false: ✅
+- getProductsDataSource() 기본값 LocalProductsDataSource: ✅
+- products.js 변경: ❌ (no)
+- app.js 변경: ❌ (no)
+- supabase migrations/tests 변경: ❌ (no)
+- 원격 supabase.co URL 허용: ❌ (no)
+- service_role 브라우저 사용: ❌ (no)
+- UI 리뉴얼: ❌ (no)
+- data_export.json 재추가: ❌ (no)
+- js/config.js commit: ❌ (no)
+- 원격 Supabase 연결: ❌ (no)

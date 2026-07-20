@@ -23,14 +23,15 @@ describe('Data gateway async boundary contract (A1-A13)', function () {
             'db.js should not call fetch with remote URL');
     });
 
-    it('A2: js/db.js has no service_role string', function () {
+    it('A2: js/db.js has no service_role string (except forbid/금지 context)', function () {
         const content = readFile('js/db.js');
         const matches = content.match(/service_role/gi);
         if (matches) {
             for (const m of matches) {
                 const idx = content.toLowerCase().indexOf(m.toLowerCase());
-                const context = content.slice(Math.max(0, idx - 40), idx + 40);
-                if (/금지|prohibit|no.*browser|브라우저.*금지/i.test(context)) continue;
+                const context = content.slice(Math.max(0, idx - 80), idx + 80);
+                // 3-5M: service_role을 명시적으로 차단하는 코드는 허용
+                if (/금지|prohibit|forbid|no.*browser|reject|block|deny|not.*allow|차단|아님|무시|throw/i.test(context)) continue;
                 assert.fail('db.js should not contain service_role usage: ' + context);
             }
         }

@@ -1007,3 +1007,105 @@ JS SupabaseProductsDataSource의 write methods에 연결합니다.
 - pgTAP PASS
 - 브라우저 수동 확인: 상품 목록/추가/수정/삭제/일괄 작업 정상 동작
 - 일반 브라우저 runtime이 SupabaseProductsDataSource로 자동 전환되지 않음 확인
+
+## 17. 3-5M: Products Runtime DataSource Feature Flag Gate (2026-07-20)
+
+### 목표
+Products DataSource runtime 전환을 위한 feature flag gate만 추가한다.
+**아직 실제 원격 Supabase 전환, UI 리뉴얼, Orders/Customers 전환은 하지 않는다.**
+
+### 핵심 원칙
+- 기본 runtime은 반드시 LocalProductsDataSource 유지
+- PRODUCTS_SUPABASE_ENABLED가 명시적으로 true일 때만 Products Supabase DataSource 후보가 될 수 있음
+- SUPABASE_ENABLED도 true여야 함
+- Supabase client가 정상 초기화되어야 함
+- selected storeId가 안전하게 확인되어야 함
+- 현재 단계에서는 localhost / 127.0.0.1 local-only 제한 유지
+- 원격 supabase.co 연결 금지
+- 실패하면 조용히 LocalProductsDataSource로 fallback하지 않고, 명확한 error throw
+- 단, 기본값 false에서는 기존 앱 동작이 절대 바뀌지 않음
+
+### 변경 내용
+
+#### js/config.example.js — PRODUCTS_SUPABASE_ENABLED 기본값 false 추가
+```js
+PRODUCTS_SUPABASE_ENABLED: false
+```
+
+#### js/db.js — Products runtime feature flag gate 추가
+- `getProductsDataSource()`: `_resolveRuntimeProductsDataSource()`를 시도, null이면 LocalProductsDataSource
+- `_resolveRuntimeProductsDataSource()`: 모든 필수 조건 검사
+  - LESOUL_CONFIG.PRODUCTS_SUPABASE_ENABLED !== true → null (조용히 Local)
+  - LESOUL_CONFIG.SUPABASE_ENABLED !== true → throw
+  - LESOULSupabase 미초기화 → throw
+  - client 없음 → throw
+  - remote URL → throw
+  - service_role key → throw
+  - active storeId 없음 → throw
+  - 모든 조건 충족 → SupabaseProductsDataSource 반환
+- `_resolveActiveStoreId()`: LESOULAppBootstrap.getContext().activeMembership.storeId
+- `setProductsDataSourceForTesting()`, `resetProductsDataSourceForTesting()` 유지
+
+#### tests/products-runtime-feature-flag-contract.test.mjs (신규)
+- FF1-FF21: feature flag gate 조건 검증
+
+### SupabaseProductsDataSource 활성화 조건 (모두 true 필요)
+1. LESOUL_CONFIG 존재
+2. LESOUL_CONFIG.SUPABASE_ENABLED === true
+3. LESOUL_CONFIG.PRODUCTS_SUPABASE_ENABLED === true
+4. LESOULSupabase.isInitialized() === true
+5. LESOULSupabase.getClient() 존재
+6. activeMembership.storeId 존재
+7. URL이 localhost / 127.0.0.1
+8. service_role key가 아님
+9. client 명시적 존재
+
+### 현재 활성 DataSource
+- **LocalProductsDataSource**: 계속 기본 활성 상태 유지
+- `getProductsDataSource()` 기본값 = LocalProductsDataSource
+- PRODUCTS_SUPABASE_ENABLED === false → LocalProductsDataSource (조용히)
+- PRODUCTS_SUPABASE_ENABLED === true + 조건 충족 → SupabaseProductsDataSource
+- PRODUCTS_SUPABASE_ENABLED === true + 조건 실패 → error throw (조용히 fallback하지 않음)
+
+### 제약 준수
+- products.js 변경 없음
+- app.js 변경 없음
+- supabase migrations/tests 변경 없음
+- 원격 supabase.co URL 허용하지 않음
+- service_role 브라우저 사용 금지
+- localStorage prefix 변경 없음
+- UI 리뉴얼 없음
+- data_export.json 없음
+- js/config.js commit 없음
+
+### 다음 단계 예정
+- 원격 Supabase 연결 허용 (supabase.co URL)
+- Orders/Customers/Analytics 전환
+- UI 리뉴얼
+- 실제 browser runtime에서 PRODUCTS_SUPABASE_ENABLED=true로 활성화 테스트
+
+### 이번 단계에서 하지 않는 일
+- 실제 원격 Supabase 연결 ❌
+- supabase.co URL 허용 ❌
+- Products 화면을 기본값으로 Supabase 전환 ❌
+- Orders/Customers/Analytics 전환 ❌
+- UI 리뉴얼 ❌
+- products.js 변경 ❌
+- app.js 라우팅 변경 ❌
+- form id / button id / input id 변경 ❌
+- service_role 브라우저 사용 ❌
+- token/session/key console.log ❌
+- localStorage prefix 변경 ❌
+- supabase migration 추가/수정 ❌
+- supabase test SQL 추가/수정 ❌
+- data_export.json 재추가 ❌
+- js/config.js commit ❌
+
+### 검증
+- `tests/products-runtime-feature-flag-contract.test.mjs` (FF1-FF21, 21/21 PASS)
+- 기존 JS 테스트 전체 회귀 (257/257 PASS)
+- preflight PASS
+- DB lint PASS (error level) — DB 변경 없음
+- pgTAP PASS — DB 변경 없음
+- 브라우저 수동 확인: 기본 config.example 상태에서 기존 localStorage로 동작
+- 일반 브라우저 runtime이 SupabaseProductsDataSource로 자동 전환되지 않음 확인

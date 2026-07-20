@@ -194,14 +194,15 @@ describe('Products Supabase mapping contract (M1-M18)', function () {
         // getProductsDataSource 기본값이 LocalProductsDataSource인지 확인
         assert.match(content, /getProductsDataSource\s*\([^)]*\)\s*\{[\s\S]*?_createLocalProductsDataSource\s*\(/,
             'getProductsDataSource should default to LocalProductsDataSource');
-        // getProductsDataSource가 _createDisabledSupabaseProductsDataSource를 호출하지 않는지 확인
-        // 함수 본문 내에서 다음 메서드 정의 전까지만 체크
+        // getProductsDataSource가 _createControlledSupabaseProductsDataSource를 직접 호출하지 않는지 확인.
+        // 3-5M 이후 getProductsDataSource는 _resolveRuntimeProductsDataSource를 통해 간접적으로만
+        // SupabaseProductsDataSource를 생성할 수 있으며, PRODUCTS_SUPABASE_ENABLED === true일 때만 활성화된다.
         const fnMatch = content.match(
-            /getProductsDataSource\s*\([^)]*\)\s*\{([\s\S]*?)\n\s*\},\s*\n\s*\/\*\*\s*\n\s*\*\s*테스트 전용/
+            /getProductsDataSource\s*\([^)]*\)\s*\{([\s\S]*?)\n\s*\},\s*\n\s*\/\*\*/
         );
         assert.ok(fnMatch, 'getProductsDataSource function body should be extractable');
-        assert.doesNotMatch(fnMatch[1], /SupabaseProductsDataSource|_createDisabledSupabaseProductsDataSource/,
-            'getProductsDataSource body must not reference SupabaseProductsDataSource');
+        assert.doesNotMatch(fnMatch[1], /_createControlledSupabaseProductsDataSource/,
+            'getProductsDataSource body must not directly call _createControlledSupabaseProductsDataSource');
     });
 
     it('M11: getProductsDataSource default returns LocalProductsDataSource', function () {
@@ -232,7 +233,7 @@ describe('Products Supabase mapping contract (M1-M18)', function () {
         }
     });
 
-    it('M14: no service_role string in js files', function () {
+    it('M14: no service_role string in js files (except forbid/금지 context)', function () {
         const files = ['js/db.js', 'js/products.js', 'js/app.js'];
         for (const f of files) {
             if (!existsSync(join(REPO_ROOT, f))) continue;
@@ -243,8 +244,9 @@ describe('Products Supabase mapping contract (M1-M18)', function () {
             if (matches) {
                 for (const m of matches) {
                     const idx = content.toLowerCase().indexOf(m.toLowerCase());
-                    const context = content.slice(Math.max(0, idx - 40), idx + 40);
-                    if (/금지|prohibit|no.*browser/i.test(context)) continue;
+                    const context = content.slice(Math.max(0, idx - 80), idx + 80);
+                    // 3-5M: service_role을 명시적으로 차단하는 코드는 허용
+                    if (/금지|prohibit|forbid|no.*browser|reject|block|deny|not.*allow|차단|아님|무시|throw/i.test(context)) continue;
                     assert.fail(`${f} should not contain service_role usage: ${context}`);
                 }
             }

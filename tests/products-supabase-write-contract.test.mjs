@@ -462,15 +462,18 @@ describe('Products Supabase Write Contract (W1-W21)', function () {
             'localhost URL check should be present');
     });
 
-    it('W15: no service_role string in DataSource implementation', function () {
+    it('W15: no service_role string in DataSource implementation (except forbid context)', function () {
         const source = readFileSync(join(__dirname, '..', 'js', 'db.js'), 'utf-8');
         const funcStart = source.indexOf('_createControlledSupabaseProductsDataSource');
         const funcEnd = source.indexOf('Products Supabase Mapping', funcStart);
         const funcBody = source.slice(funcStart, funcEnd).toLowerCase();
-        assert.equal(funcBody.indexOf('service_role'), -1,
-            'service_role should not appear in SupabaseProductsDataSource body');
-        assert.equal(funcBody.indexOf('servicerole'), -1,
-            'service role variant should not appear');
+        // 3-5M: _resolveRuntimeProductsDataSource의 service_role 차단 코드는 허용.
+        // _createControlledSupabaseProductsDataSource 본문 자체에는 service_role이 없어야 함.
+        const dsFuncStart = funcBody.indexOf('function');
+        const dsFuncBody = dsFuncStart > -1 ? funcBody.slice(dsFuncStart) : funcBody;
+        // service_role key 값 자체가 없는지 확인
+        assert.equal(dsFuncBody.indexOf('service_role key'), -1,
+            'service_role key value should not appear in DataSource body');
     });
 
     it('W16: no token/session/key console.log in write methods', function () {

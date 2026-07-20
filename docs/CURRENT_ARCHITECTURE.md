@@ -1375,3 +1375,78 @@ JS SupabaseProductsDataSource의 write methods에 연결합니다.
 ### 상세 문서
 - Products write RPC 상세: `docs/SUPABASE_PRODUCTS_WRITE_RPC.md`
 - ASYNC_MIGRATION_MAP: `docs/ASYNC_MIGRATION_MAP.md` §16
+
+## 23. 3-5M: Products Runtime DataSource Feature Flag Gate (2026-07-20)
+
+### 목표
+Products DataSource runtime 전환을 위한 feature flag gate만 추가한다.
+**아직 실제 원격 Supabase 전환, UI 리뉴얼, Orders/Customers 전환은 하지 않는다.**
+
+### 핵심 원칙
+- 기본 runtime은 반드시 LocalProductsDataSource 유지
+- PRODUCTS_SUPABASE_ENABLED가 명시적으로 true일 때만 Products Supabase DataSource 후보가 될 수 있음
+- 실패하면 조용히 LocalProductsDataSource로 fallback하지 않고, 명확한 error throw
+- 단, 기본값 false에서는 기존 앱 동작이 절대 바뀌지 않음
+
+### LESOUL_CONFIG.PRODUCTS_SUPABASE_ENABLED
+- 기본값: `false` (js/config.example.js)
+- `true`로 설정하더라도 다른 필수 조건이 모두 충족되어야 SupabaseProductsDataSource 후보가 됨
+
+### SupabaseProductsDataSource 활성화 조건 (모두 true 필요)
+1. LESOUL_CONFIG 존재
+2. LESOUL_CONFIG.SUPABASE_ENABLED === true
+3. LESOUL_CONFIG.PRODUCTS_SUPABASE_ENABLED === true
+4. LESOULSupabase.isInitialized() === true
+5. LESOULSupabase.getClient() 존재
+6. activeMembership.storeId 존재 (LESOULAppBootstrap.getContext())
+7. URL이 localhost / 127.0.0.1
+8. service_role key가 아님
+9. client 명시적 존재
+
+### ProductsDataSource 선택 로직
+```
+getProductsDataSource()
+  → _resolveRuntimeProductsDataSource()
+    → PRODUCTS_SUPABASE_ENABLED !== true → null → LocalProductsDataSource (조용히)
+    → PRODUCTS_SUPABASE_ENABLED === true + 필수 조건 실패 → throw Error
+    → PRODUCTS_SUPABASE_ENABLED === true + 모든 조건 충족 → SupabaseProductsDataSource
+```
+
+### 현재 활성 DataSource
+- **LocalProductsDataSource**: 기본 활성 상태 유지
+- `getProductsDataSource()` 기본값 = LocalProductsDataSource
+- PRODUCTS_SUPABASE_ENABLED === false → LocalProductsDataSource
+- SupabaseProductsDataSource는 controlled (local-only, RPC-based write)
+
+### Progress
+- 3-5A: Data Gateway Async Boundary Preparation ✅
+- 3-5B: Products Read Path Async Boundary ✅
+- 3-5C: Products Write Path Async Boundary Preparation ✅
+- 3-5D: Products DataSource Interface Extraction ✅
+- 3-5E: Products Supabase mapping contract ✅
+- 3-5F: SupabaseProductsDataSource disabled skeleton ✅
+- 3-5G: Products Supabase read path local-only controlled test ✅
+- 3-5H: Products Supabase read local integration smoke ✅
+- 3-5I: Products Supabase write path local-only controlled contract ✅
+- 3-5J: Products Supabase write local integration smoke ✅
+- 3-5K: Products Write RPC Foundation ✅
+- 3-5L: Connect Controlled Products DataSource to Write RPCs ✅
+- 3-5M: Products Runtime DataSource Feature Flag Gate ✅ (현재)
+- 다음: 원격 Supabase 연결 허용, Orders/Customers/Analytics 전환
+- **아직 일반 앱 runtime은 localStorage 사용**
+- 인증 게이트와 업무 데이터 전환은 여전히 분리되어 있음
+
+### 제약 준수
+- PRODUCTS_SUPABASE_ENABLED 기본값 false: ✅
+- getProductsDataSource() 기본값 LocalProductsDataSource: ✅
+- products.js 변경: ❌ (no)
+- app.js 변경: ❌ (no)
+- supabase migrations/tests 변경: ❌ (no)
+- 원격 supabase.co URL 허용: ❌ (no)
+- service_role 브라우저 사용: ❌ (no)
+- UI 리뉴얼: ❌ (no)
+- data_export.json 재추가: ❌ (no)
+- js/config.js commit: ❌ (no)
+
+### 상세 문서
+- ASYNC_MIGRATION_MAP: `docs/ASYNC_MIGRATION_MAP.md` §17

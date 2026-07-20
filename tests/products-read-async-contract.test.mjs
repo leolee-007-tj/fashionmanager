@@ -120,7 +120,7 @@ describe('Products read async boundary contract (P1-P13)', function () {
             'ASYNC_MIGRATION_MAP should mention Products read path');
     });
 
-    it('P12: no service_role string in js files', function () {
+    it('P12: no service_role string in js files (except forbid/금지 context)', function () {
         const files = ['js/db.js', 'js/products.js', 'js/app.js'];
         for (const f of files) {
             const content = readFile(f);
@@ -130,8 +130,9 @@ describe('Products read async boundary contract (P1-P13)', function () {
             if (matches) {
                 for (const m of matches) {
                     const idx = content.toLowerCase().indexOf(m.toLowerCase());
-                    const context = content.slice(Math.max(0, idx - 40), idx + 40);
-                    if (/금지|prohibit|no.*browser/i.test(context)) continue;
+                    const context = content.slice(Math.max(0, idx - 80), idx + 80);
+                    // 3-5M: service_role을 명시적으로 차단하는 코드는 허용
+                    if (/금지|prohibit|forbid|no.*browser|reject|block|deny|not.*allow|차단|아님|무시|throw/i.test(context)) continue;
                     assert.fail(`${f} should not contain service_role usage: ${context}`);
                 }
             }

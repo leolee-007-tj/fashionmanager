@@ -128,13 +128,15 @@ describe('Products Supabase Read Contract (R1-R19)', function () {
 
     it('R5: SupabaseProductsDataSource is not auto-activated at runtime', function () {
         const content = readFile('js/db.js');
-        // getProductsDataSource 본문에 SupabaseProductsDataSource 참조가 없어야 함
+        // getProductsDataSource 본문에 _createControlledSupabaseProductsDataSource 직접 호출이 없어야 함.
+        // 3-5M 이후 getProductsDataSource는 _resolveRuntimeProductsDataSource를 통해 간접적으로만
+        // SupabaseProductsDataSource를 생성할 수 있으며, PRODUCTS_SUPABASE_ENABLED === true일 때만 활성화된다.
         const fnMatch = content.match(
-            /getProductsDataSource\s*\([^)]*\)\s*\{([\s\S]*?)\n\s*\},\s*\n\s*\/\*\*\s*\n\s*\*\s*테스트 전용/
+            /getProductsDataSource\s*\([^)]*\)\s*\{([\s\S]*?)\n\s*\},\s*\n\s*\/\*\*/
         );
         assert.ok(fnMatch, 'getProductsDataSource function body should be extractable');
-        assert.doesNotMatch(fnMatch[1], /SupabaseProductsDataSource|_createControlledSupabaseProductsDataSource/,
-            'getProductsDataSource body must not reference SupabaseProductsDataSource');
+        assert.doesNotMatch(fnMatch[1], /_createControlledSupabaseProductsDataSource/,
+            'getProductsDataSource body must not directly call _createControlledSupabaseProductsDataSource');
     });
 
     it('R6: listProducts requires explicit client', function () {

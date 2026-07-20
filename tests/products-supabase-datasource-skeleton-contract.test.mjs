@@ -116,18 +116,24 @@ describe('Products Supabase DataSource Skeleton Contract (S1-S16)', function () 
             'default DataSource must NOT be SupabaseProductsDataSource');
     });
 
-    it('S5: SupabaseProductsDataSource is not auto-activated at runtime', function () {
+    it('S5: SupabaseProductsDataSource is not auto-activated at runtime (default flag false)', function () {
         const content = readFile('js/db.js');
-        // getProductsDataSource 기본 경로에 SupabaseProductsDataSource가 없어야 함
+        // getProductsDataSource 본문에 _createControlledSupabaseProductsDataSource 직접 호출이 없어야 함.
+        // 3-5M 이후 getProductsDataSource는 _resolveRuntimeProductsDataSource를 통해 간접적으로만
+        // SupabaseProductsDataSource를 생성할 수 있으며, PRODUCTS_SUPABASE_ENABLED === true일 때만 활성화된다.
         const getDsMatch = content.match(/getProductsDataSource\s*\([^)]*\)\s*\{([\s\S]*?)\n\s*\},/);
         assert.ok(getDsMatch, 'getProductsDataSource should exist');
         const getDsBody = getDsMatch[1];
-        assert.doesNotMatch(getDsBody, /SupabaseProductsDataSource|_createControlledSupabaseProductsDataSource/,
-            'getProductsDataSource body must not reference SupabaseProductsDataSource');
+        assert.doesNotMatch(getDsBody, /_createControlledSupabaseProductsDataSource/,
+            'getProductsDataSource body must not directly call _createControlledSupabaseProductsDataSource');
 
-        // feature flag / config 기반 자동 전환이 없어야 함
-        assert.doesNotMatch(content, /SUPABASE.*ENABLED.*products|products.*SUPABASE.*ENABLED/i,
-            'no SUPABASE_ENABLED products auto-switch');
+        // 3-5M: PRODUCTS_SUPABASE_ENABLED feature flag는 존재하지만, 기본값은 false여야 함.
+        // config.example.js에서 기본값 false를 확인한다.
+        const configExample = readFile('js/config.example.js');
+        assert.match(configExample, /PRODUCTS_SUPABASE_ENABLED:\s*false/,
+            'config.example.js must have PRODUCTS_SUPABASE_ENABLED: false as default');
+
+        // session 기반 products datasource 자동 전환은 없어야 함
         assert.doesNotMatch(content, /session.*products.*datasource|products.*datasource.*session/i,
             'no session-based products datasource switch');
     });

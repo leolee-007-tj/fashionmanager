@@ -120,10 +120,30 @@ const DB = {
 
     /**
      * 3-5D: Products DataSource Interface Extraction
+     * 3-5M: Products Runtime DataSource Feature Flag Gate
      *
      * Products 전용 data source 계층을 얇게 분리한다.
      * 현재 활성 DataSource는 LocalProductsDataSource이며,
      * 내부 저장 방식은 기존 localStorage 그대로 유지한다.
+     *
+     * 3-5M에서 runtime feature flag gate를 추가했다.
+     * 기본값(LocalProductsDataSource) 동작은 절대 바뀌지 않는다.
+     *
+     * SupabaseProductsDataSource 후보가 되기 위한 필수 조건 (모두 true):
+     *   1. global LESOUL_CONFIG 존재
+     *   2. LESOUL_CONFIG.SUPABASE_ENABLED === true
+     *   3. LESOUL_CONFIG.PRODUCTS_SUPABASE_ENABLED === true
+     *   4. LESOULSupabase 초기화 정상
+     *   5. activeMembership.storeId 확인 가능
+     *   6. context.localOnly === true
+     *   7. Supabase URL이 localhost / 127.0.0.1
+     *   8. service_role key 아님
+     *   9. client 명시적 존재
+     *
+     * 조건 중 하나라도 실패하면:
+     *   - PRODUCTS_SUPABASE_ENABLED !== true → 조용히 LocalProductsDataSource 유지
+     *   - PRODUCTS_SUPABASE_ENABLED === true + 다른 필수 조건 실패 → 명확한 error throw
+     *     (조용히 데이터 저장 위치를 바꾸지 않는다)
      *
      * 원격 ProductsDataSource는 다음 단계에서 구현 예정.
      * 실제 원격 products 테이블 호출은 이번 단계에서 금지.
@@ -134,12 +154,115 @@ const DB = {
     /**
      * 현재 활성 Products DataSource를 반환한다.
      * 기본값은 LocalProductsDataSource.
+     *
+     * 3-5M: PRODUCTS_SUPABASE_ENABLED === true이고 모든 필수 조건이 충족되면
+     * SupabaseProductsDataSource를 생성한다.
      */
     getProductsDataSource() {
         if (!this._productsDataSource) {
-            this._productsDataSource = this._createLocalProductsDataSource();
+            const resolved = this._resolveRuntimeProductsDataSource();
+            this._productsDataSource = resolved === null
+                ? this._createLocalProductsDataSource()
+                : resolved;
         }
         return this._productsDataSource;
+    },
+
+    /**
+     * 3-5M: Runtime feature flag gate로 SupabaseProductsDataSource 후보를 판별한다.
+     *
+     * @returns {Object|null} SupabaseProductsDataSource 인스턴스.
+     *   null을 반환하면 LocalProductsDataSource를 사용한다.
+     *   필수 조건이 실패하면 error를 throw한다 (조용히 fallback하지 않음).
+     */
+    _resolveRuntimeProductsDataSource() {
+        const globalObj = (typeof window !== 'undefined') ? window : globalThis;
+        const config = globalObj.LESOUL_CONFIG || {};
+
+        // 기본값 false — 조용히 LocalProductsDataSource 유지.
+        if (config.PRODUCTS_SUPABASE_ENABLED !== true) {
+            return null;
+        }
+
+        // PRODUCTS_SUPABASE_ENABLED === true from here.
+        // 필수 조건을 모두 검사한다. 실패 시 명확한 error.
+
+        if (config.SUPABASE_ENABLED !== true) {
+            throw new Error('Products Supabase runtime requires SUPABASE_ENABLED=true');
+        }
+
+        const supabaseClient = globalObj.LESOULSupabase;
+        if (!supabaseClient || typeof supabaseClient.isInitialized !== 'function' || !supabaseClient.isInitialized()) {
+            throw new Error('Products Supabase runtime requires initialized Supabase client');
+        }
+
+        let client;
+        try {
+            client = supabaseClient.getClient();
+        } catch (e) {
+            throw new Error('Products Supabase runtime requires accessible Supabase client');
+        }
+        if (!client) {
+            throw new Error('Products Supabase runtime requires non-null Supabase client');
+        }
+
+        const url = String(client.supabaseUrl || config.SUPABASE_URL || '').toLowerCase();
+        if (!/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(url)) {
+            throw new Error('Products Supabase runtime requires localhost URL');
+        }
+
+        // service_role key 차단
+        const clientKey = config.SUPABASE_CLIENT_KEY || '';
+        if (typeof clientKey === 'string' && clientKey.indexOf('service_role') > -1) {
+            throw new Error('Products Supabase runtime forbids service_role key');
+        }
+        // JWT role 확인
+        if (typeof clientKey === 'string' && clientKey.split('.').length === 3) {
+            try {
+                const payload = JSON.parse(atob(clientKey.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+                if (payload && payload.role === 'service_role') {
+                    throw new Error('Products Supabase runtime forbids service_role key');
+                }
+            } catch (e) {
+                if (e && e.message && e.message.indexOf('service_role') > -1) throw e;
+                // decode 실패는 무시 (다른 검증에서 처리됨)
+            }
+        }
+
+        // active storeId 확인 (app.js/products.js 수정 없이 기존 구조 사용)
+        const storeId = this._resolveActiveStoreId();
+        if (!storeId) {
+            throw new Error('Products Supabase runtime requires active storeId');
+        }
+
+        return this._createControlledSupabaseProductsDataSource(client, {
+            localOnly: true,
+            storeId: storeId,
+            url: url
+        });
+    },
+
+    /**
+     * 3-5M: 현재 선택된 storeId를 안전하게 가져온다.
+     * 새 전역변수를 만들지 않고 기존 LESOULAppBootstrap 구조를 사용한다.
+     *
+     * @returns {string|null} storeId (UUID) 또는 null
+     */
+    _resolveActiveStoreId() {
+        const globalObj = (typeof window !== 'undefined') ? window : globalThis;
+        const bootstrap = globalObj.LESOULAppBootstrap;
+        if (!bootstrap || typeof bootstrap.getContext !== 'function') {
+            return null;
+        }
+        try {
+            const ctx = bootstrap.getContext();
+            if (ctx && ctx.activeMembership && ctx.activeMembership.storeId) {
+                return ctx.activeMembership.storeId;
+            }
+        } catch (e) {
+            // context 접근 실패 — 안전하게 null 반환
+        }
+        return null;
     },
 
     /**
