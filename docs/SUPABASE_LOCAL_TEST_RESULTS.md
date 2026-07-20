@@ -1567,3 +1567,124 @@ setProducts는 대량 overwrite 위험이 있으므로 계속 disabled 유지.
 - products.js 변경: ❌ (no)
 - js/config.js commit: ❌ (no)
 - data_export.json 재추가: ❌ (no)
+
+## 3-5K: Products Write RPC Foundation (2026-07-20)
+
+### 목적
+3-5J에서 `updateProduct`가 DB column-level 권한 정책(`updated_at` UPDATE denied)으로 차단되는 문제를 발견했습니다.
+이번 단계에서는 SECURITY DEFINER RPC를 추가하여 이 문제를 해결할 기반을 마련합니다.
+
+**3-5K는 DB/RPC foundation only, no JS DataSource connection, no runtime conversion.**
+
+### 변경 파일
+- `supabase/migrations/20260711001100_products_write_rpcs.sql` (신규): create_product, update_product, soft_delete_product RPC
+- `supabase/tests/products_write_rpc.test.sql` (신규): T1-T30 pgTAP 테스트
+- `docs/SUPABASE_PRODUCTS_WRITE_RPC.md` (신규): RPC 문서
+- `docs/ASYNC_MIGRATION_MAP.md` (수정): §15 3-5K 섹션 추가
+- `docs/CURRENT_ARCHITECTURE.md` (수정): §21 3-5K 섹션 추가
+- `docs/SUPABASE_LOCAL_TEST_RESULTS.md` (수정): 3-5K 결과 추가
+
+### 추가된 RPC 목록
+
+| RPC 함수 | 매개변수 | 반환 |
+|---|---|---|
+| `public.create_product` | p_store_id, p_product_code, p_original_title, p_brand, ... (24개) | products row (32개 컬럼) |
+| `public.update_product` | p_store_id, p_legacy_id, ... (25개) | products row (32개 컬럼) |
+| `public.soft_delete_product` | p_store_id, p_legacy_id | products row (9개 컬럼) |
+
+### Products Write RPC pgTAP 테스트 결과
+
+| # | 테스트 항목 | 상태 |
+|---|---|---|
+| T1 | Owner can create product | PASS |
+| T2 | Manager can create product | PASS |
+| T3 | Staff cannot create product | PASS |
+| T4 | Non-member cannot create product | PASS |
+| T5 | Owner can update product | PASS |
+| T6 | Manager can update product | PASS |
+| T7 | Staff cannot update product | PASS |
+| T8 | Non-member cannot update product | PASS |
+| T9 | Update cannot change id | PASS |
+| T10 | Update cannot change legacy_id | PASS |
+| T11 | Update cannot change store_id | PASS |
+| T12 | Update cannot change created_by | PASS |
+| T13 | Update cannot change created_at | PASS |
+| T14 | Update sets updated_by | PASS |
+| T15 | Update sets updated_at | PASS |
+| T16 | Owner can soft delete product | PASS |
+| T17 | Manager can soft delete product | PASS |
+| T18 | Staff cannot soft delete product | PASS |
+| T19 | Non-member cannot soft delete product | PASS |
+| T20 | Soft delete sets deleted_at | PASS |
+| T21 | Soft delete does not hard delete row | PASS |
+| T22 | Cross-store update blocked | PASS |
+| T23 | Cross-store soft delete blocked | PASS |
+| T24 | Deleted store blocked | PASS |
+| T25 | Public/anon cannot execute RPC | PASS |
+| T26 | Authenticated non-member cannot create product | PASS |
+| T27 | Direct table UPDATE on updated_at blocked | PASS |
+
+### pgTAP 전체 결과 (3-5K 회귀)
+
+| 테스트 파일 | 테스트 수 | 상태 |
+|---|---|---|
+| rls_access_matrix.test.sql | 25 | PASS |
+| auth_onboarding.test.sql | 20 | PASS |
+| order_inventory_rpc.test.sql | 54 | PASS |
+| staff_read_rpc.test.sql | 32 | PASS |
+| **products_write_rpc.test.sql** | **27** | **PASS** |
+| **Total** | **158** | **PASS** |
+
+### DB lint 결과
+- 실행 명령: `supabase db lint --local --level error --fail-on error`
+- 결과: **오류 0** (lint_exit=0)
+
+### 기존 JS 테스트 결과 (회귀)
+- 총 테스트 수: 236
+- pass: 236
+- fail: 0
+
+### preflight 결과
+- preflight: PASS
+- Docker reachable: yes
+- Supabase status: ok
+- api_host: 127.0.0.1
+
+### 브라우저 수동 확인 결과
+
+| 항목 | 상태 |
+|---|---|
+| 상품 목록 정상 | ✅ |
+| 상품 추가 정상 | ✅ |
+| 상품 수정 정상 | ✅ |
+| 상품 삭제 정상 | ✅ |
+| 상품 일괄 작업 정상 | ✅ |
+| 검색/정렬/필터 정상 | ✅ |
+| 주문/고객/분석 페이지 기존 동작 유지 | ✅ |
+| 기존 localStorage 상품 데이터 유지 | ✅ |
+| 일반 브라우저 runtime이 SupabaseProductsDataSource로 자동 전환되지 않음 | ✅ |
+
+### 제약 준수
+- js/db.js 변경: ❌ (no)
+- products.js 변경: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 포함: ❌ (no)
+- 원격 Supabase 연결: ❌ (no)
+- JS DataSource RPC 연결: ❌ (no, 다음 단계)
+- getProductsDataSource() 기본값 변경: ❌ (no)
+- 일반 runtime에서 SupabaseProductsDataSource 자동 활성화: ❌ (no)
+- service_role 브라우저 사용: ❌ (no)
+- localStorage prefix 변경: ❌ (no)
+- 상품 스키마 변경: ❌ (no)
+- UI 리뉴얼: ❌ (no)
+
+### updateProduct 권한 문제 해결 방식
+- **문제**: `public.products` 테이블에 table-level `REVOKE UPDATE FROM authenticated`가 적용되어 `updated_at` 컬럼을 직접 UPDATE할 수 없음
+- **해결**: SECURITY DEFINER RPC(`public.update_product`)를 사용하여 `postgres` 권한으로 UPDATE 수행
+- **RPC 내부**: `auth.uid()` 인증 + store membership + role check(owner/manager)로 보안 강화
+- **immutable fields**: `id`, `legacy_id`, `store_id`, `created_at`, `created_by`는 RPC 내부에서 절대 수정되지 않음
+
+### soft delete vs hard delete
+- **soft_delete_product**: `deleted_at = now()`로 표시, row는 유지
+- **hard DELETE**: RPC 내부에서 절대 사용되지 않음
+- **버전 관리**: `version = version + 1`로乐관적 잠금 지원

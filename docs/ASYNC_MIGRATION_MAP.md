@@ -777,3 +777,119 @@ setProducts는 대량 overwrite 위험이 있으므로 계속 disabled 유지.
 - pgTAP 131/131 PASS
 - 브라우저 수동 확인: 상품 목록/추가/수정/삭제/일괄 작업 정상 동작
 - 일반 브라우저 runtime이 SupabaseProductsDataSource로 자동 전환되지 않음 확인
+
+## 15. 3-5K: Products Write RPC Foundation (2026-07-20)
+
+### 목표
+3-5J에서 updateProduct가 DB column-level 권한 정책(`updated_at` UPDATE denied)으로 차단되는 문제를 발견했습니다.
+이번 단계에서는 SECURITY DEFINER RPC를 추가하여 이 문제를 해결할 기반을 마련합니다.
+
+**3-5K는 DB/RPC foundation only, no JS DataSource connection, no runtime conversion.**
+
+### 배경
+- `public.products` 테이블은 `authenticated` 역할에 대해 table-level UPDATE가 차단되어 있습니다.
+- column-level GRANT로 `deleted_at` soft delete는 동작하지만, `updated_at` UPDATE 권한 부족으로 `updateProduct`가 차단됩니다.
+- 따라서 `updateProduct` 성공 경로는 직접 table update가 아니라 SECURITY DEFINER RPC 기반으로 설계해야 합니다.
+
+### 변경 내용
+
+#### supabase/migrations/20260711001100_products_write_rpcs.sql (신규)
+- `public.create_product`: 상품 생성 RPC
+  - LANGUAGE plpgsql, SECURITY DEFINER, SET search_path = ''
+  - owner/manager만 허용, staff/non-member 차단
+  - auth.uid() 필수, store_id 필수
+  - store membership + role check (private.current_store_role)
+  - store_id는 p_store_id로 강제
+  - created_by/updated_by = auth.uid()
+  - created_at/updated_at = now()
+  - deleted_at = NULL
+  - 명시적 products row 컬럼 반환
+
+- `public.update_product`: 상품 업데이트 RPC
+  - LANGUAGE plpgsql, SECURITY DEFINER, SET search_path = ''
+  - owner/manager만 허용, staff/non-member 차단
+  - p_store_id + p_legacy_id 기준으로 대상 제한
+  - deleted_at IS NULL 조건
+  - immutable fields: id, legacy_id, store_id, created_at, created_by (변경 불가)
+  - updated_by = auth.uid(), updated_at = now()
+  - 허용된 상품 필드만 업데이트
+  - SECURITY DEFINER로 테이블 권한 제한 우회하여 updated_at 등 업데이트 가능
+  - 명시적 products row 컬럼 반환
+
+- `public.soft_delete_product`: 상품 soft delete RPC
+  - LANGUAGE plpgsql, SECURITY DEFINER, SET search_path = ''
+  - owner/manager만 허용, staff/non-member 차단
+  - p_store_id + p_legacy_id 기준으로 대상 제한
+  - deleted_at IS NULL 조건
+  - 실제 DELETE 금지, deleted_at = now()
+  - updated_by = auth.uid(), updated_at = now()
+  - 명시적 products row 컬럼 반환
+
+- Permissions:
+  - REVOKE ALL ON FUNCTION FROM PUBLIC
+  - GRANT EXECUTE ON FUNCTION TO authenticated
+
+#### supabase/tests/products_write_rpc.test.sql (신규)
+- T1-T30: 30개 pgTAP 테스트 케이스
+- owner/manager/staff/non-member 권한 검증
+- immutable fields protection (id, legacy_id, store_id, created_by, created_at)
+- updated_by/updated_at 설정 확인
+- soft delete behavior (deleted_at 설정, no hard delete)
+- cross-store access blocking
+- deleted store blocking
+- public/anon execution prevention
+- authenticated membership check
+- direct table UPDATE restriction verification
+
+#### docs/SUPABASE_PRODUCTS_WRITE_RPC.md (신규)
+- RPC 목적 및 설계 원칙 문서
+- 함수 시그니처 및 파라미터 설명
+- Authorization rules
+- Security properties
+- Testing coverage
+
+### 현재 활성 DataSource
+- **LocalProductsDataSource**: 계속 기본 활성 상태 유지
+- `getProductsDataSource()` 기본값 = LocalProductsDataSource
+- **JS SupabaseProductsDataSource는 RPC로 연결되지 않음** (다음 단계에서 연결 예정)
+- 일반 브라우저 상품 화면은 계속 localStorage 사용
+
+### write path 상태
+- setProducts: **disabled** (대량 overwrite 금지)
+- createProduct: local integration 검증 완료 (동작)
+- updateProduct: DB 권한 정책으로 차단됨 → **RPC로 해결할 기반 마련** (다음 단계에서 연결)
+- deleteProduct: local integration 검증 완료 (soft delete 동작)
+- 일반 runtime 자동 전환: ❌
+- 원격 Supabase 연결: ❌
+
+### 다음 단계 예정
+- JS SupabaseProductsDataSource를 RPC로 연결
+- createProduct → create_product RPC
+- updateProduct → update_product RPC
+- deleteProduct → soft_delete_product RPC
+- 실제 앱 runtime 전환 (feature flag 기반)
+- store_id와 auth session 연동
+
+### 이번 단계에서 하지 않는 일
+- JS DataSource를 RPC로 연결 ❌
+- `getProductsDataSource()` 기본값 변경 ❌
+- 일반 runtime에서 SupabaseProductsDataSource 자동 활성화 ❌
+- Products 화면을 Supabase로 자동 전환 ❌
+- UI 리뉴얼 ❌
+- 원격 Supabase 연결 ❌
+- service_role 브라우저 사용 ❌
+- service_role 값을 JS/browser 코드에 넣기 ❌
+- localStorage prefix 변경 ❌
+- products.js 변경 ❌
+- data_export.json 재추가 ❌
+- js/db.js 변경 ❌
+- js/config.js commit ❌
+
+### 검증
+- DB reset PASS
+- DB lint PASS (error level)
+- pgTAP 161/161 PASS (새 products_write_rpc.test.sql 30/30 PASS)
+- 기존 JS 테스트 전체 회귀
+- preflight PASS
+- 브라우저 수동 확인: 상품 목록/추가/수정/삭제/일괄 작업 정상 동작
+- 일반 브라우저 runtime이 SupabaseProductsDataSource로 자동 전환되지 않음 확인

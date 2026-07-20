@@ -1218,3 +1218,86 @@ Test-only (controlled / opt-in):
 
 ### 상세 문서
 - Products write local integration 상세: `docs/ASYNC_MIGRATION_MAP.md` §14
+
+## 21. 3-5K: Products Write RPC Foundation (2026-07-20)
+
+### 목표
+3-5J에서 `updateProduct`가 DB column-level 권한 정책(`updated_at` UPDATE denied)으로 차단되는 문제를 발견했습니다.
+이번 단계에서는 SECURITY DEFINER RPC를 추가하여 이 문제를 해결할 기반을 마련합니다.
+
+**3-5K는 DB/RPC foundation only, no JS DataSource connection, no runtime conversion.**
+
+### 배경
+- `public.products` 테이블은 `authenticated` 역할에 대해 table-level UPDATE가 차단되어 있습니다.
+- column-level GRANT로 `deleted_at` soft delete는 동작하지만, `updated_at` UPDATE 권한 부족으로 `updateProduct`가 차단됩니다.
+- 따라서 `updateProduct` 성공 경로는 직접 table update가 아니라 SECURITY DEFINER RPC 기반으로 설계해야 합니다.
+
+### 추가된 RPC
+
+| RPC 함수 | 목적 |
+|---|---|
+| `public.create_product` | 상품 생성 (SECURITY DEFINER, owner/manager만 허용) |
+| `public.update_product` | 상품 업데이트 (SECURITY DEFINER, immutable fields 보호) |
+| `public.soft_delete_product` | 상품 soft delete (SECURITY DEFINER, 실제 DELETE 금지) |
+
+### RPC 보안 속성
+- **SECURITY DEFINER**: `postgres`로 실행, RLS 우회
+- **SET search_path = ''**: 스키마 주입 방지
+- **auth.uid() 필수**: 인증 확인
+- **store membership + role check**: owner/manager만 허용, staff/non-member 차단
+- **deleted store check**: 삭제된 스토어 접근 차단
+- **cross-store access blocking**: 타 스토어 상품 접근 차단
+- **No dynamic SQL**: 모든 쿼리가 정적
+- **Explicit column lists**: `SELECT *` 또는 `RETURNING *` 금지
+- **Public revoke**: `REVOKE ALL FROM PUBLIC`
+- **Authenticated grant**: `GRANT EXECUTE TO authenticated`
+
+### update_product immutable fields
+- `id`: 변경 불가
+- `legacy_id`: 변경 불가
+- `store_id`: 변경 불가
+- `created_at`: 변경 불가
+- `created_by`: 변경 불가
+
+### 현재 Runtime 상태
+- **활성 DataSource**: LocalProductsDataSource (기본값, 변경 없음)
+- **데이터 저장**: localStorage (기존과 동일)
+- **JS SupabaseProductsDataSource**: RPC로 연결되지 않음 (다음 단계에서 연결 예정)
+- **일반 브라우저 상품 화면**: 계속 localStorage 사용
+
+### 인증 게이트 vs 업무 데이터 전환
+- 인증 게이트 (3-4): 완료됨 — Supabase Auth와 연결
+- 업무 데이터 전환 (3-5):
+  - 3-5A: async boundary 준비 ✅
+  - 3-5B: Products read path async ✅
+  - 3-5C: Products write path async ✅
+  - 3-5D: Products DataSource interface extraction ✅
+  - 3-5E: Products Supabase mapping contract ✅
+  - 3-5F: SupabaseProductsDataSource disabled skeleton ✅
+  - 3-5G: Products Supabase read path local-only controlled test ✅
+  - 3-5H: Products Supabase read local integration smoke ✅
+  - 3-5I: Products Supabase write path local-only controlled contract ✅
+  - 3-5J: Products Supabase write local integration smoke ✅
+  - 3-5K: Products Write RPC Foundation ✅ (현재)
+  - 다음: JS DataSource를 RPC로 연결, runtime 전환 예정
+- **아직 일반 앱 runtime은 localStorage 사용**
+- 인증 게이트와 업무 데이터 전환은 여전히 분리되어 있음
+
+### 제약 준수
+- JS DataSource RPC 연결: ❌ (no, 다음 단계)
+- getProductsDataSource() 기본값 변경: ❌ (no)
+- 일반 runtime에서 SupabaseProductsDataSource 자동 활성화: ❌ (no)
+- Products 화면 Supabase 자동 전환: ❌ (no)
+- UI 리뉴얼: ❌ (no)
+- 원격 Supabase 연결: ❌ (no)
+- service_role 브라우저 사용: ❌ (no)
+- service_role 값 JS/browser 코드에 넣기: ❌ (no)
+- localStorage prefix 변경: ❌ (no)
+- products.js 변경: ❌ (no)
+- data_export.json 재추가: ❌ (no)
+- js/db.js 변경: ❌ (no)
+- js/config.js commit: ❌ (no)
+
+### 상세 문서
+- Products write RPC 상세: `docs/SUPABASE_PRODUCTS_WRITE_RPC.md`
+- ASYNC_MIGRATION_MAP: `docs/ASYNC_MIGRATION_MAP.md` §15
