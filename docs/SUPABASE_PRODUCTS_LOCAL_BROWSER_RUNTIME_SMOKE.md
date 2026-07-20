@@ -139,7 +139,7 @@
 - **13/13 PASS**
 
 ### 제약 준수
-- "LES SOUL" 표기 제거: ✅ (app_backup.js 제외)
+- "LES SOUL" 표기 제거: ✅
 - 기본 브랜드명 LESOUL: ✅
 - 처음 실행 시 브랜드 설정 가능: ✅
 - localStorage 저장: ✅

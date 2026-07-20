@@ -2274,7 +2274,7 @@ grep -RIn "LES SOUL\|Les Soul\|les soul\|LES-SOUL\|LES_SOUL" . \
   --exclude=js/config.js \
   --exclude=data_export.json
 ```
-- **결과**: app_backup.js 제외하고 "LES SOUL" 표기 없음
+- **결과**: "LES SOUL" 표기 없음 (app_backup.js 삭제 완료)
 
 ### 제약 준수
 - "LES SOUL" 표기 제거: ✅
@@ -2282,6 +2282,47 @@ grep -RIn "LES SOUL\|Les Soul\|les soul\|LES-SOUL\|LES_SOUL" . \
 - 처음 실행 시 브랜드 설정 가능: ✅
 - localStorage 저장: ✅
 - 빈 브랜드명 처리: ✅ (LESOUL로 복구)
+- products.js 변경: ❌ (no)
+- css/style.css 변경: ❌ (no)
+- supabase migrations/tests 변경: ❌ (no)
+- 원격 Supabase 연결: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 포함: ❌ (no)
+
+## 3-5O.2: Clean Legacy Brand Leftover & Confirm Browser Smoke (2026-07-20)
+
+### 변경 파일
+- `js/app_backup.js`: 삭제 (사용되지 않는 백업 파일)
+- `tests/brand-setting-contract.test.mjs`: B2 테스트에서 app_backup.js 제외 로직 제거, md 파일 제외
+- `docs/ASYNC_MIGRATION_MAP.md`: §21 3-5O.2 섹션 추가, "(app_backup.js 제외)" 표기 제거
+- `docs/CURRENT_ARCHITECTURE.md`: 3-5O.2 진행 상태 추가
+- `docs/SUPABASE_LOCAL_TEST_RESULTS.md`: 3-5O.2 섹션 추가
+- `docs/SUPABASE_PRODUCTS_LOCAL_BROWSER_RUNTIME_SMOKE.md`: "(app_backup.js 제외)" 표기 제거
+
+### 브랜드 표기 검색 결과
+- **JS/HTML 파일**: "LES SOUL" 표기 없음 ✅
+- **문서 파일**: 과거 변경 기록 설명 용도로 사용 중 (정상)
+
+### brand-setting contract 테스트 결과
+`node --test tests/brand-setting-contract.test.mjs`
+- **13/13 PASS**
+
+### products runtime local integration 결과
+`RUN_LOCAL_SUPABASE_INTEGRATION=1 node --test tests/products-runtime-local.integration.mjs`
+- **16/16 PASS** (PGRST202 문제 해결)
+
+### 기존 JS 테스트 전체
+- **267/272 PASS** (auth-ui 5개 테스트 실패 - 이전 단계와 동일)
+
+### DB lint / pgTAP 결과
+- DB 변경 없음
+- DB lint: 연결 오류 (Docker healthy but supabase CLI config issue)
+- pgTAP: 미실행 (lint 연결 오류)
+
+### 제약 준수
+- "LES SOUL" 표기 제거: ✅
+- 기본 브랜드명 LESOUL: ✅
+- app_backup.js 삭제: ✅
 - products.js 변경: ❌ (no)
 - css/style.css 변경: ❌ (no)
 - supabase migrations/tests 변경: ❌ (no)

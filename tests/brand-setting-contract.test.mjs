@@ -31,11 +31,11 @@ describe('Brand Setting Contract (3-5O.1)', function () {
         assert.ok(configExample.includes("APP_BRAND_NAME: 'LESOUL'"), 'APP_BRAND_NAME should default to LESOUL');
     });
 
-    it('B2: no "LES SOUL" wrong notation remaining in repo (excluding backup)', function () {
+    it('B2: no "LES SOUL" wrong notation remaining in repo', function () {
         let output;
         try {
             output = execSync(
-                "find . -type f \\( -name '*.js' -o -name '*.html' -o -name '*.md' \\) ! -path './.git/*' ! -path './node_modules/*' ! -name 'config.js' ! -name 'data_export.json' ! -name 'app_backup.js' ! -name 'brand-setting-contract.test.mjs' -exec grep -l 'LES SOUL\\|Les Soul\\|les soul\\|LES-SOUL\\|LES_SOUL' {} \\;",
+                "find . -type f \\( -name '*.js' -o -name '*.html' \\) ! -path './.git/*' ! -path './node_modules/*' ! -name 'config.js' ! -name 'data_export.json' ! -name 'brand-setting-contract.test.mjs' -exec grep -l 'LES SOUL\\|Les Soul\\|les soul\\|LES-SOUL\\|LES_SOUL' {} \\;",
                 { encoding: 'utf8', stderr: 'ignore' }
             );
         } catch (e) {

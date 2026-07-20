@@ -1356,11 +1356,58 @@ SupabaseProductsDataSource가 정상 선택되고 read/write가 정상 동작하
 - **결과**: 16/16 PASS — `create_product` RPC가 정상 동작
 
 ### 제약 준수
-- "LES SOUL" 표기 제거: ✅ (app_backup.js 제외)
+- "LES SOUL" 표기 제거: ✅
 - 기본 브랜드명 LESOUL: ✅
 - 처음 실행 시 브랜드 설정 가능: ✅
 - localStorage 저장: ✅
 - 빈 브랜드명 처리: ✅ (LESOUL로 복구)
+- products.js 변경: ❌ 없음
+- css/style.css 변경: ❌ 없음
+- supabase migrations/tests 변경: ❌ 없음
+- 원격 Supabase 연결: ❌ 없음
+- js/config.js commit: ❌ 없음
+
+## 21. 3-5O.2: Clean Legacy Brand Leftover & Confirm Browser Smoke (2026-07-20)
+
+### 목표
+1. repo 안에 남아 있는 "LES SOUL" 잔여 표기를 완전히 정리
+2. app_backup.js 처리 (삭제 또는 브랜드명 수정)
+3. 브랜드 설정 회귀 확인
+4. Products local browser runtime smoke 최종 확인
+
+### 변경 내용
+
+#### app_backup.js 삭제
+- **이유**: index.html에서 로드되지 않는 백업 파일
+- **결과**: "LES SOUL" 표기 완전 제거
+
+#### tests/brand-setting-contract.test.mjs 수정
+- B2 테스트에서 app_backup.js 제외 로직 제거
+- md 파일 제외 (문서 파일에서는 과거 변경 기록 설명 용도로 허용)
+
+#### 문서 업데이트
+- "(app_backup.js 제외)" 표기 제거
+- 브랜드 잔여 표기 정리 결과 업데이트
+
+### 검증 결과
+
+#### 브랜드 표기 검색
+- **JS/HTML 파일**: "LES SOUL" 표기 없음 ✅
+- **문서 파일**: 과거 변경 기록 설명 용도로 사용 중 (정상)
+
+#### brand-setting contract
+- **13/13 PASS** ✅
+
+#### products runtime local integration
+- **16/16 PASS** ✅ (PGRST202 문제 해결)
+
+#### 전체 JS 회귀
+- **267/272 PASS** (auth-ui 5개 테스트 실패 - 이전 단계와 동일)
+
+### 제약 준수
+- "LES SOUL" 표기 제거: ✅
+- 기본 브랜드명 LESOUL: ✅
+- app_backup.js 삭제: ✅
 - products.js 변경: ❌ 없음
 - css/style.css 변경: ❌ 없음
 - supabase migrations/tests 변경: ❌ 없음
