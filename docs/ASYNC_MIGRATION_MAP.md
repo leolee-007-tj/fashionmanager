@@ -893,3 +893,117 @@ setProducts는 대량 overwrite 위험이 있으므로 계속 disabled 유지.
 - preflight PASS
 - 브라우저 수동 확인: 상품 목록/추가/수정/삭제/일괄 작업 정상 동작
 - 일반 브라우저 runtime이 SupabaseProductsDataSource로 자동 전환되지 않음 확인
+
+## 16. 3-5L: Connect Controlled Products DataSource to Write RPCs (2026-07-20)
+
+### 목표
+3-5K에서 추가한 SECURITY DEFINER RPC (`create_product`, `update_product`, `soft_delete_product`)를
+JS SupabaseProductsDataSource의 write methods에 연결합니다.
+**3-5L은 JS DataSource write methods를 RPC로 연결만 하며, 일반 앱 runtime 전환은 하지 않습니다.**
+
+### 배경
+- 3-5J에서 updateProduct가 DB column-level 권한 정책으로 차단되는 문제를 발견
+- 3-5K에서 SECURITY DEFINER RPC를 추가하여 이 문제를 해결할 기반을 마련
+- 이제 JS SupabaseProductsDataSource의 write methods가 RPC를 사용하도록 변경
+
+### 변경 내용
+
+#### js/db.js — write methods를 RPC 기반으로 변경
+- `createProduct(product)`:
+  - 기존: `client.from('products').insert(row).select().single()`
+  - 변경: `client.rpc('create_product', payload)`
+  - payload는 `p_` 접두사 파라미터 형태
+  - store_id는 context.storeId로 강제
+  - 반환 row는 mapSupabaseRowToLegacyProduct로 변환
+
+- `updateProduct(id, updates)`:
+  - 기존: `client.from('products').update(patch).eq('legacy_id', id).eq('store_id', storeId)`
+  - 변경: `client.rpc('update_product', payload)`
+  - p_store_id = context.storeId, p_legacy_id = id
+  - 위험 필드(id/legacy_id/store_id/created_at/created_by)는 payload에서 제외
+  - RPC 내부에서 updated_by/updated_at 설정
+  - 반환 row는 mapSupabaseRowToLegacyProduct로 변환
+
+- `deleteProduct(id)`:
+  - 기존: `client.from('products').update({ deleted_at: now() }).eq('legacy_id', id)`
+  - 변경: `client.rpc('soft_delete_product', payload)`
+  - p_store_id = context.storeId, p_legacy_id = id
+  - RPC 내부에서 deleted_at 설정 (soft delete)
+  - 반환 row는 mapSupabaseRowToLegacyProduct로 변환
+
+- `setProducts(products)`:
+  - 계속 disabled (대량 overwrite 금지)
+
+- `listProducts()`:
+  - 기존 local-only controlled read 유지 (direct table select)
+
+#### tests/products-supabase-write-contract.test.mjs (수정)
+- W5: createProduct가 client.rpc('create_product')를 사용하는지 검증
+- W7: updateProduct가 client.rpc('update_product')를 사용하는지 검증
+- W9: deleteProduct가 client.rpc('soft_delete_product')를 사용하는지 검증
+- W8: updateProduct RPC payload에 위험 필드가 없는지 검증
+- W19: 3-5L 문서 섹션 존재 및 RPC 연결 언급 검증
+
+#### tests/products-supabase-write-local.integration.mjs (수정)
+- P5: createProduct RPC 경로 성공
+- P7: updateProduct RPC 경로 성공 (DB 권한 문제 해결됨)
+- P8: updateProduct 결과 검증
+- P9: deleteProduct RPC soft delete 성공
+- P10: soft delete 검증 (deleted_at 설정, hard delete 아님)
+- 기존 P7의 "updateProduct는 DB 권한 정책으로 차단됨" 문구 삭제
+- 3-5L 이후 updateProduct는 RPC로 성공해야 함
+
+### 현재 활성 DataSource
+- **LocalProductsDataSource**: 계속 기본 활성 상태 유지
+- `getProductsDataSource()` 기본값 = LocalProductsDataSource
+- SupabaseProductsDataSource는 controlled (local-only, RPC-based write)
+- 일반 브라우저 상품 화면은 계속 localStorage 사용
+
+### write path 상태
+- setProducts: **disabled** (대량 overwrite 금지)
+- createProduct: RPC 기반 (`client.rpc('create_product')`)
+- updateProduct: RPC 기반 (`client.rpc('update_product')`) — **DB 권한 문제 해결됨**
+- deleteProduct: RPC 기반 (`client.rpc('soft_delete_product')`)
+- 일반 runtime 자동 전환: ❌
+- 원격 Supabase 연결: ❌
+
+### 제약 준수
+- client 명시적 주입 + localOnly: true + storeId 필요
+- localhost / 127.0.0.1만 허용
+- 원격 Supabase (supabase.co) 차단
+- service_role 브라우저/DataSource 사용 금지
+- token/session/key console.log 금지
+- 오류 메시지에 key/JWT/token/body 전체 포함 금지
+- 일반 runtime 자동 전환 금지
+- products.js 변경 없음
+- supabase migrations/tests 변경 없음
+
+### 다음 단계 예정
+- 실제 앱 runtime 전환 (feature flag 기반)
+- store_id와 auth session 연동
+- batch / classification / 월 변경 등의 복잡한 write flow 통합
+
+### 이번 단계에서 하지 않는 일
+- `getProductsDataSource()` 기본값 변경 ❌
+- 일반 runtime에서 SupabaseProductsDataSource 자동 활성화 ❌
+- Products 화면을 Supabase로 자동 전환 ❌
+- UI 리뉴얼 ❌
+- 원격 Supabase 연결 ❌
+- service_role 브라우저 사용 ❌
+- service_role 값을 JS/browser 코드에 넣기 ❌
+- localStorage prefix 변경 ❌
+- products.js 변경 ❌
+- supabase migration 추가/수정 ❌
+- supabase test SQL 추가/수정 ❌
+- data_export.json 재추가 ❌
+- js/config.js commit ❌
+
+### 검증
+- `tests/products-supabase-write-contract.test.mjs` (W1-W21, 21/21 PASS)
+- `tests/products-supabase-write-local.integration.mjs` (P1-P14, opt-in)
+- 기존 JS 테스트 전체 회귀
+- preflight PASS
+- DB lint PASS (error level)
+- pgTAP PASS
+- 브라우저 수동 확인: 상품 목록/추가/수정/삭제/일괄 작업 정상 동작
+- 일반 브라우저 runtime이 SupabaseProductsDataSource로 자동 전환되지 않음 확인

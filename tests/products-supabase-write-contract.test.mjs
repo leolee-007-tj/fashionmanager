@@ -29,6 +29,8 @@ function loadDbForTesting() {
 function createMockClient({ supabaseUrl = 'http://127.0.0.1:54321', mockData = null, mockError = null } = {}) {
     let capturedTable = null;
     let capturedMethod = null;
+    let capturedRpcName = null;
+    let capturedRpcPayload = null;
     let eqCalls = [];
     let updateData = null;
     let insertData = null;
@@ -109,9 +111,20 @@ function createMockClient({ supabaseUrl = 'http://127.0.0.1:54321', mockData = n
                 }
             };
         },
+        rpc(fnName, payload) {
+            capturedMethod = 'rpc';
+            capturedRpcName = fnName;
+            capturedRpcPayload = payload;
+            return Promise.resolve().then(() => ({
+                data: mockData,
+                error: mockError
+            }));
+        },
         _captured: {
             get table() { return capturedTable; },
             get method() { return capturedMethod; },
+            get rpcName() { return capturedRpcName; },
+            get rpcPayload() { return capturedRpcPayload; },
             get eqCalls() { return eqCalls; },
             get updateData() { return updateData; },
             get insertData() { return insertData; },
@@ -221,7 +234,7 @@ describe('Products Supabase Write Contract (W1-W21)', function () {
         assert.throws(() => dsRemote.deleteProduct(1), /requires localhost/i);
     });
 
-    it('W5: createProduct uses mapLegacyProductToSupabaseRow (store_id + legacy_id mapping)', async function () {
+    it('W5: createProduct uses client.rpc("create_product") for write', async function () {
         const DB = loadDbForTesting();
         const mockRow = {
             id: 'uuid-123',
@@ -249,18 +262,20 @@ describe('Products Supabase Write Contract (W1-W21)', function () {
 
         const result = await ds.createProduct(product);
 
-        assert.equal(client._captured.table, 'products');
-        assert.equal(client._captured.method, 'insert');
-        assert.equal(client._captured.insertData.store_id, 'test-store',
-            'store_id should be set from context, not from product');
-        assert.equal(client._captured.insertData.legacy_id, 999,
-            'legacy_id should be mapped from product.id');
-        assert.equal(client._captured.insertData.original_title, 'Test Product');
+        assert.equal(client._captured.method, 'rpc',
+            'createProduct should use client.rpc');
+        assert.equal(client._captured.rpcName, 'create_product',
+            'createProduct should call create_product RPC');
+        assert.equal(client._captured.rpcPayload.p_store_id, 'test-store',
+            'p_store_id should be context.storeId');
+        assert.equal(client._captured.rpcPayload.p_legacy_id, 999,
+            'p_legacy_id should be mapped from product.id');
+        assert.equal(client._captured.rpcPayload.p_original_title, 'Test Product');
         assert.equal(result.id, 999, 'result id should be legacy_id');
         assert.equal(result.original_title, 'Test Product');
     });
 
-    it('W6: createProduct enforces store_id = context.storeId', async function () {
+    it('W6: createProduct enforces p_store_id = context.storeId', async function () {
         const DB = loadDbForTesting();
         const client = createMockClient({
             mockData: { id: 'x', legacy_id: 1, store_id: 'test-store', original_title: 'X', brand: 'B' }
@@ -278,11 +293,11 @@ describe('Products Supabase Write Contract (W1-W21)', function () {
         };
         await ds.createProduct(product);
 
-        assert.equal(client._captured.insertData.store_id, 'forced-store-id',
-            'store_id should always be context.storeId, never from product');
+        assert.equal(client._captured.rpcPayload.p_store_id, 'forced-store-id',
+            'p_store_id should always be context.storeId, never from product');
     });
 
-    it('W7: updateProduct uses legacy_id + store_id filters', async function () {
+    it('W7: updateProduct uses client.rpc("update_product") for write', async function () {
         const DB = loadDbForTesting();
         const mockRow = {
             id: 'uuid-1',
@@ -300,16 +315,18 @@ describe('Products Supabase Write Contract (W1-W21)', function () {
 
         const result = await ds.updateProduct(42, { original_title: 'Updated' });
 
-        assert.equal(client._captured.table, 'products');
-        assert.equal(client._captured.method, 'update');
-        assert.deepEqual(client._captured.eqCalls, [
-            ['legacy_id', 42],
-            ['store_id', 'test-store']
-        ], 'update should filter by legacy_id and store_id');
+        assert.equal(client._captured.method, 'rpc',
+            'updateProduct should use client.rpc');
+        assert.equal(client._captured.rpcName, 'update_product',
+            'updateProduct should call update_product RPC');
+        assert.equal(client._captured.rpcPayload.p_store_id, 'test-store',
+            'p_store_id should be context.storeId');
+        assert.equal(client._captured.rpcPayload.p_legacy_id, 42,
+            'p_legacy_id should be the id parameter');
         assert.equal(result.id, 42);
     });
 
-    it('W8: updateProduct blocks dangerous fields (id, legacy_id, store_id, created_at)', async function () {
+    it('W8: updateProduct RPC payload does not contain dangerous fields (id, legacy_id, store_id, created_at, created_by)', async function () {
         const DB = loadDbForTesting();
         const mockRow = {
             id: 'uuid-1',
@@ -330,21 +347,24 @@ describe('Products Supabase Write Contract (W1-W21)', function () {
             legacy_id: 9999,
             store_id: 'other-store',
             created_at: '2020-01-01',
+            created_by: 'malicious-user',
             original_title: 'Safe Update',
             korea_cost: 30000
         });
 
-        const patch = client._captured.updateData;
-        assert.equal(patch.original_title, 'Safe Update');
-        assert.equal(patch.korea_cost, 30000);
-        assert.equal(patch.id, undefined, 'id should not be in update patch');
-        assert.equal(patch.legacy_id, undefined, 'legacy_id should not be in update patch');
-        assert.equal(patch.store_id, undefined, 'store_id should not be in update patch');
-        assert.equal(patch.created_at, undefined, 'created_at should not be in update patch');
-        assert.ok(patch.updated_at, 'updated_at should be set automatically');
+        const payload = client._captured.rpcPayload;
+        // RPC payload에는 안전한 필드만 있어야 함
+        assert.equal(payload.p_original_title, 'Safe Update');
+        assert.equal(payload.p_korea_cost, 30000);
+        // 위험 필드들은 payload에 아예 없거나 무시됨
+        assert.equal(payload.id, undefined, 'id should not be in RPC payload');
+        assert.equal(payload.legacy_id, undefined, 'legacy_id should not be in RPC payload');
+        assert.equal(payload.store_id, undefined, 'store_id should not be in RPC payload');
+        assert.equal(payload.created_at, undefined, 'created_at should not be in RPC payload');
+        assert.equal(payload.created_by, undefined, 'created_by should not be in RPC payload');
     });
 
-    it('W9: deleteProduct uses soft delete (deleted_at update), not actual delete()', async function () {
+    it('W9: deleteProduct uses client.rpc("soft_delete_product") for soft delete, not actual delete()', async function () {
         const DB = loadDbForTesting();
         const mockRow = {
             id: 'uuid-1',
@@ -363,17 +383,16 @@ describe('Products Supabase Write Contract (W1-W21)', function () {
 
         const result = await ds.deleteProduct(77);
 
-        assert.equal(client._captured.table, 'products');
-        assert.equal(client._captured.method, 'update',
-            'delete should use update (soft delete), not delete()');
+        assert.equal(client._captured.method, 'rpc',
+            'deleteProduct should use client.rpc');
+        assert.equal(client._captured.rpcName, 'soft_delete_product',
+            'deleteProduct should call soft_delete_product RPC');
+        assert.equal(client._captured.rpcPayload.p_store_id, 'test-store',
+            'p_store_id should be context.storeId');
+        assert.equal(client._captured.rpcPayload.p_legacy_id, 77,
+            'p_legacy_id should be the id parameter');
         assert.equal(client._captured.usedDelete, false,
             'actual delete() must not be called');
-        assert.ok(client._captured.updateData.deleted_at,
-            'deleted_at should be set for soft delete');
-        assert.deepEqual(client._captured.eqCalls, [
-            ['legacy_id', 77],
-            ['store_id', 'test-store']
-        ], 'soft delete should filter by legacy_id and store_id');
         assert.equal(result.id, 77);
     });
 
@@ -482,22 +501,22 @@ describe('Products Supabase Write Contract (W1-W21)', function () {
             'products.js should use async DB helpers');
     });
 
-    it('W19: docs mention 3-5I is local-only controlled write contract, no runtime conversion', function () {
+    it('W19: docs mention 3-5L connects DataSource write methods to RPCs, no runtime conversion', function () {
         const docFiles = [
             join(__dirname, '..', 'docs', 'ASYNC_MIGRATION_MAP.md'),
             join(__dirname, '..', 'docs', 'CURRENT_ARCHITECTURE.md')
         ];
-        let found35I = false;
-        let foundLocalOnly = false;
+        let found35L = false;
+        let foundRpcConnect = false;
         let foundNoRuntime = false;
 
         for (const f of docFiles) {
             const content = readFileSync(f, 'utf-8');
-            if (content.indexOf('3-5I') > -1) {
-                found35I = true;
+            if (content.indexOf('3-5L') > -1) {
+                found35L = true;
                 const lower = content.toLowerCase();
-                if (lower.indexOf('local-only') > -1 || lower.indexOf('local only') > -1) {
-                    foundLocalOnly = true;
+                if (lower.indexOf('rpc') > -1 && lower.indexOf('connect') > -1) {
+                    foundRpcConnect = true;
                 }
                 if (lower.indexOf('no runtime conversion') > -1 ||
                     lower.indexOf('runtime 전환 없음') > -1 ||
@@ -507,8 +526,8 @@ describe('Products Supabase Write Contract (W1-W21)', function () {
                 }
             }
         }
-        assert.ok(found35I, 'docs should contain 3-5I section');
-        assert.ok(foundLocalOnly, 'docs should mention local-only');
+        assert.ok(found35L, 'docs should contain 3-5L section');
+        assert.ok(foundRpcConnect, 'docs should mention RPC connection');
         assert.ok(foundNoRuntime, 'docs should mention no runtime conversion');
     });
 

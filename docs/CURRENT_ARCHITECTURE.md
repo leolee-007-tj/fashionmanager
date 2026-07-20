@@ -1301,3 +1301,77 @@ Test-only (controlled / opt-in):
 ### 상세 문서
 - Products write RPC 상세: `docs/SUPABASE_PRODUCTS_WRITE_RPC.md`
 - ASYNC_MIGRATION_MAP: `docs/ASYNC_MIGRATION_MAP.md` §15
+
+## 22. 3-5L: Connect Controlled Products DataSource to Write RPCs (2026-07-20)
+
+### 목표
+3-5K에서 추가한 SECURITY DEFINER RPC (`create_product`, `update_product`, `soft_delete_product`)를
+JS SupabaseProductsDataSource의 write methods에 연결합니다.
+
+**3-5L은 JS DataSource write methods를 RPC로 연결만 하며, 일반 앱 runtime 전환은 하지 않습니다.**
+
+### 변경 내용
+
+#### js/db.js — write methods를 RPC 기반으로 변경
+- `createProduct(product)`: `client.rpc('create_product', payload)` 사용
+- `updateProduct(id, updates)`: `client.rpc('update_product', payload)` 사용
+- `deleteProduct(id)`: `client.rpc('soft_delete_product', payload)` 사용
+- `setProducts(products)`: 계속 disabled
+- `listProducts()`: 기존 local-only controlled read 유지
+
+#### RPC payload 구성
+- `p_` 접두사 파라미터 사용
+- `p_store_id`: context.storeId로 강제
+- `p_legacy_id`: id 파라미터
+- 위험 필드(id/legacy_id/store_id/created_at/created_by)는 payload에서 제외
+- RPC 내부에서 updated_by/updated_at/deleted_at 설정
+
+### 현재 활성 DataSource
+- **LocalProductsDataSource**: 계속 기본 활성 상태 유지
+- `getProductsDataSource()` 기본값 = LocalProductsDataSource
+- SupabaseProductsDataSource는 controlled (local-only, RPC-based write)
+- 일반 브라우저 상품 화면은 계속 localStorage 사용
+
+### write path 상태
+- setProducts: **disabled** (대량 overwrite 금지)
+- createProduct: RPC 기반 (`client.rpc('create_product')`)
+- updateProduct: RPC 기반 (`client.rpc('update_product')`) — **DB 권한 문제 해결됨**
+- deleteProduct: RPC 기반 (`client.rpc('soft_delete_product')`)
+- 일반 runtime 자동 전환: ❌
+- 원격 Supabase 연결: ❌
+
+### Progress
+- 3-5A: Data Gateway Async Boundary Preparation ✅
+- 3-5B: Products Read Path Async Boundary ✅
+- 3-5C: Products Write Path Async Boundary Preparation ✅
+- 3-5D: Products DataSource Interface Extraction ✅
+- 3-5E: Products Supabase mapping contract ✅
+- 3-5F: SupabaseProductsDataSource disabled skeleton ✅
+- 3-5G: Products Supabase read path local-only controlled test ✅
+- 3-5H: Products Supabase read local integration smoke ✅
+- 3-5I: Products Supabase write path local-only controlled contract ✅
+- 3-5J: Products Supabase write local integration smoke ✅
+- 3-5K: Products Write RPC Foundation ✅
+- 3-5L: Connect Controlled Products DataSource to Write RPCs ✅ (현재)
+- 다음: 실제 앱 runtime 전환 (feature flag 기반)
+- **아직 일반 앱 runtime은 localStorage 사용**
+- 인증 게이트와 업무 데이터 전환은 여전히 분리되어 있음
+
+### 제약 준수
+- JS DataSource RPC 연결: ✅ (완료)
+- getProductsDataSource() 기본값 변경: ❌ (no)
+- 일반 runtime에서 SupabaseProductsDataSource 자동 활성화: ❌ (no)
+- Products 화면 Supabase 자동 전환: ❌ (no)
+- UI 리뉴얼: ❌ (no)
+- 원격 Supabase 연결: ❌ (no)
+- service_role 브라우저 사용: ❌ (no)
+- service_role 값 JS/browser 코드에 넣기: ❌ (no)
+- localStorage prefix 변경: ❌ (no)
+- products.js 변경: ❌ (no)
+- supabase migrations/tests 변경: ❌ (no)
+- data_export.json 재추가: ❌ (no)
+- js/config.js commit: ❌ (no)
+
+### 상세 문서
+- Products write RPC 상세: `docs/SUPABASE_PRODUCTS_WRITE_RPC.md`
+- ASYNC_MIGRATION_MAP: `docs/ASYNC_MIGRATION_MAP.md` §16

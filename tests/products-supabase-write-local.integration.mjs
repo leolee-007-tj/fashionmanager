@@ -223,11 +223,35 @@ function createAnonRestClient(accessToken) {
         return chain;
     }
 
+    // RPC 호출 지원 (SupabaseProductsDataSource 3-5L에서 client.rpc 사용)
+    async function rpc(fnName, payload) {
+        const url = `${apiUrl}/rest/v1/rpc/${fnName}`;
+        const resp = await fetch(url, {
+            method: 'POST',
+            headers: {
+                ...authHeaders,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+        const text = await resp.text();
+        if (!resp.ok) {
+            return { data: null, error: { message: `RPC ${fnName} HTTP ${resp.status}: ${text.substring(0, 200)}` } };
+        }
+        try {
+            const data = JSON.parse(text);
+            return { data, error: null };
+        } catch (e) {
+            return { data: null, error: { message: `RPC ${fnName} Invalid JSON: ${text.substring(0, 200)}` } };
+        }
+    }
+
     return {
         supabaseUrl: apiUrl,
         from(table) {
             return buildChain(table);
-        }
+        },
+        rpc
     };
 }
 
@@ -313,9 +337,9 @@ test('Products Supabase Write Local Integration Smoke', async (t) => {
         storeId = response;
     });
 
-    // === createProduct integration test (local-only controlled write) ===
+    // === createProduct integration test (3-5L RPC-based write) ===
 
-    await t.test('P5: createProduct inserts via controlled SupabaseProductsDataSource', async () => {
+    await t.test('P5: createProduct succeeds via create_product RPC', async () => {
         const DB = loadDbForTesting();
         const anonClient = createAnonRestClient(accessToken);
 
@@ -380,18 +404,10 @@ test('Products Supabase Write Local Integration Smoke', async (t) => {
         assertNoSensitiveLeak(JSON.stringify(products));
     });
 
-    // === update/delete: DB column-level 권한 정책 검증 ===
-    // 20260711000900_order_inventory_rpc.sql:957에서
-    // REVOKE UPDATE ON public.products FROM authenticated 실행됨 (table-level).
-    // 하지만 column-level GRANT가 별도로 존재:
-    //   - deleted_at 컬럼: authenticated에 UPDATE 권한 있음 → soft delete 동작
-    //   - updated_at 컬럼: authenticated에 UPDATE 권한 없음 → updateProduct 차단
-    // 이로 인해:
-    //   - updateProduct는 updated_at 강제 업데이트 시도 시 403 permission denied 반환
-    //   - deleteProduct는 deleted_at 업데이트만 수행하므로 soft delete 성공
-    // updateProduct의 full local integration 검증은 contract test (W1-W21)에서 수행.
+    // === update/delete: RPC-based write 검증 (3-5L) ===
+    // updateProduct는 이제 SECURITY DEFINER RPC를 사용하므로 권한 문제 해결됨.
 
-    await t.test('P7: updateProduct is blocked by DB policy (updated_at column UPDATE denied)', async () => {
+    await t.test('P7: updateProduct succeeds via update_product RPC', async () => {
         const DB = loadDbForTesting();
         const anonClient = createAnonRestClient(accessToken);
 
@@ -400,32 +416,22 @@ test('Products Supabase Write Local Integration Smoke', async (t) => {
             { localOnly: true, storeId: storeId }
         );
 
-        // updateProduct는 patch에 updated_at을 강제로 추가함 (js/db.js).
-        // DB column-level 권한 정책상 authenticated 역할은 updated_at 컬럼에
-        // UPDATE 권한이 없음 (GRANT 없음). PostgREST가 403 permission denied 반환,
-        // _wrapWriteError가 query failed로 변환.
-        await assert.rejects(
-            () => ds.updateProduct(9101, { original_title: 'Should Not Update' }),
-            (err) => {
-                assert.ok(err instanceof Error, 'must be Error instance');
-                assert.ok(/query failed/i.test(err.message),
-                    `error must indicate query failed, got: ${err.message}`);
-                // service_role token leak 방지
-                assertNoSensitiveLeak(err.message);
-                return true;
-            },
-            'updateProduct must be blocked by DB policy (updated_at column UPDATE denied)'
-        );
+        // updateProduct는 RPC 기반으로 권한 문제가 해결됨
+        const updated = await ds.updateProduct(9101, {
+            original_title: 'Updated Test Product 1',
+            korea_cost: 85000,
+            color: 'red'
+        });
 
-        // 실제 row가 변경되지 않았는지 확인
-        const products = await ds.listProducts();
-        const unchanged = products.find(p => p.id === 9101);
-        assert.ok(unchanged, 'product must still exist after blocked update');
-        assert.equal(unchanged.original_title, 'Write Test Product 1',
-            'original_title must NOT be changed by blocked updateProduct');
+        assert.equal(updated.id, 9101, 'updated product id must be 9101');
+        assert.equal(updated.original_title, 'Updated Test Product 1');
+        assert.equal(updated.korea_cost, 85000);
+        assert.equal(updated.color, 'red');
+
+        assertNoSensitiveLeak(JSON.stringify(updated));
     });
 
-    await t.test('P8: deleteProduct performs soft delete (deleted_at column UPDATE allowed)', async () => {
+    await t.test('P8: updateProduct result verified via listProducts', async () => {
         const DB = loadDbForTesting();
         const anonClient = createAnonRestClient(accessToken);
 
@@ -434,9 +440,29 @@ test('Products Supabase Write Local Integration Smoke', async (t) => {
             { localOnly: true, storeId: storeId }
         );
 
-        // deleteProduct는 soft delete (UPDATE deleted_at)를 수행.
-        // DB column-level 권한 정책상 authenticated 역할은 deleted_at 컬럼에
-        // UPDATE 권한이 부여되어 있음. 따라서 soft delete가 성공해야 함.
+        const products = await ds.listProducts();
+        const updated = products.find(p => p.id === 9101);
+        assert.ok(updated, 'product must exist after update');
+        assert.equal(updated.original_title, 'Updated Test Product 1',
+            'original_title must be updated');
+        assert.equal(updated.korea_cost, 85000,
+            'korea_cost must be updated');
+        assert.equal(updated.color, 'red',
+            'color must be updated');
+
+        assertNoSensitiveLeak(JSON.stringify(products));
+    });
+
+    await t.test('P9: deleteProduct succeeds via soft_delete_product RPC', async () => {
+        const DB = loadDbForTesting();
+        const anonClient = createAnonRestClient(accessToken);
+
+        const ds = DB._createControlledSupabaseProductsDataSource(
+            anonClient,
+            { localOnly: true, storeId: storeId }
+        );
+
+        // deleteProduct는 soft_delete_product RPC를 호출
         const result = await ds.deleteProduct(9101);
 
         // 반환값은 legacy product object (soft delete 후 상태)
@@ -446,7 +472,7 @@ test('Products Supabase Write Local Integration Smoke', async (t) => {
         assertNoSensitiveLeak(JSON.stringify(result));
     });
 
-    await t.test('P9: deleted_at is set + soft delete verified (no hard DELETE)', async () => {
+    await t.test('P10: soft delete verified (deleted_at set, no hard DELETE)', async () => {
         // 1. 직접 REST API로 row를 조회해서 deleted_at이 설정되었는지 확인
         //    owner는 deleted row도 볼 수 있음 (RLS 정책: owners can view deleted).
         const url = `${apiUrl}/rest/v1/products?legacy_id=eq.9101&store_id=eq.${storeId}&select=deleted_at,legacy_id`;
@@ -490,7 +516,7 @@ test('Products Supabase Write Local Integration Smoke', async (t) => {
 
     // === setProducts disabled 검증 ===
 
-    await t.test('P10: setProducts is still disabled (bulk overwrite forbidden)', async () => {
+    await t.test('P11: setProducts is still disabled (bulk overwrite forbidden)', async () => {
         const DB = loadDbForTesting();
         const anonClient = createAnonRestClient(accessToken);
 
@@ -508,7 +534,7 @@ test('Products Supabase Write Local Integration Smoke', async (t) => {
 
     // === runtime 기본 DataSource 확인 ===
 
-    await t.test('P11: getProductsDataSource default is LocalProductsDataSource (no auto-switch)', async () => {
+    await t.test('P12: getProductsDataSource default is LocalProductsDataSource (no auto-switch)', async () => {
         const DB = loadDbForTesting();
         const ds = DB.getProductsDataSource();
         assert.equal(ds.name, 'LocalProductsDataSource',
@@ -519,7 +545,7 @@ test('Products Supabase Write Local Integration Smoke', async (t) => {
 
     // === local-only 조건 검증 ===
 
-    await t.test('P12: write methods reject remote URL', async () => {
+    await t.test('P13: write methods reject remote URL', async () => {
         const DB = loadDbForTesting();
         const remoteClient = {
             supabaseUrl: 'https://example.supabase.co',
@@ -541,7 +567,7 @@ test('Products Supabase Write Local Integration Smoke', async (t) => {
 
     // === Cleanup: best-effort test user deletion (db reset in runner is primary cleanup) ===
 
-    await t.test('P13: Best-effort cleanup test user', async () => {
+    await t.test('P14: Best-effort cleanup test user', async () => {
         try {
             await requestJson({
                 url: `${apiUrl}/auth/v1/admin/users/${userId}`,

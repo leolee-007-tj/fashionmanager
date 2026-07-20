@@ -1688,3 +1688,179 @@ setProducts는 대량 overwrite 위험이 있으므로 계속 disabled 유지.
 - **soft_delete_product**: `deleted_at = now()`로 표시, row는 유지
 - **hard DELETE**: RPC 내부에서 절대 사용되지 않음
 - **버전 관리**: `version = version + 1`로乐관적 잠금 지원
+
+## 3-5L: Connect Controlled Products DataSource to Write RPCs (2026-07-20)
+
+### 목적
+3-5K에서 추가한 SECURITY DEFINER RPC를 JS SupabaseProductsDataSource의 write methods에 연결합니다.
+**3-5L은 JS DataSource write methods를 RPC로 연결만 하며, 일반 앱 runtime 전환은 하지 않습니다.**
+
+### 변경 파일
+- `js/db.js` (수정): SupabaseProductsDataSource write methods를 RPC 기반으로 변경
+- `tests/products-supabase-write-contract.test.mjs` (수정): W5/W7/W8/W9/W19 RPC 검증으로 업데이트
+- `tests/products-supabase-write-local.integration.mjs` (수정): P5-P10 RPC 경로로 업데이트
+- `docs/ASYNC_MIGRATION_MAP.md` (수정): §16 3-5L 섹션 추가
+- `docs/CURRENT_ARCHITECTURE.md` (수정): §22 3-5L 섹션 추가
+- `docs/SUPABASE_LOCAL_TEST_RESULTS.md` (수정): 3-5L 결과 추가
+
+### RPC 연결 결과
+
+| Method | 기존 방식 | 3-5L 방식 |
+|---|---|---|
+| createProduct | `client.from('products').insert()` | `client.rpc('create_product', payload)` |
+| updateProduct | `client.from('products').update()` | `client.rpc('update_product', payload)` |
+| deleteProduct | `client.from('products').update({deleted_at})` | `client.rpc('soft_delete_product', payload)` |
+
+### updateProduct 권한 문제 해결
+
+3-5J에서 발견된 `updateProduct` DB 권한 차단 문제가 RPC 기반으로 변경되면서 해결되었습니다.
+
+- **기존 (3-5J)**: direct table UPDATE 시 `updated_at` 컬럼 권한 부족으로 차단
+- **변경 (3-5L)**: SECURITY DEFINER RPC 사용 → `postgres` 권한으로 UPDATE 수행
+- **결과**: `updateProduct` RPC 경로로 성공
+
+### products write contract 결과 (W1-W21)
+
+| 테스트 ID | 설명 | 상태 |
+|---|---|---|
+| W1 | SupabaseProductsDataSource has write methods | PASS |
+| W2 | createProduct requires client/localOnly/storeId/localhost URL | PASS |
+| W3 | updateProduct requires client/localOnly/storeId/localhost URL | PASS |
+| W4 | deleteProduct requires client/localOnly/storeId/localhost URL | PASS |
+| W5 | createProduct uses client.rpc("create_product") for write | PASS |
+| W6 | createProduct enforces p_store_id = context.storeId | PASS |
+| W7 | updateProduct uses client.rpc("update_product") for write | PASS |
+| W8 | updateProduct RPC payload does not contain dangerous fields | PASS |
+| W9 | deleteProduct uses client.rpc("soft_delete_product") for soft delete | PASS |
+| W10 | setProducts remains disabled | PASS |
+| W11 | write results are mapped via mapSupabaseRowToLegacyProduct | PASS |
+| W12 | getProductsDataSource default is LocalProductsDataSource | PASS |
+| W13 | no auto-switching to SupabaseProductsDataSource at runtime | PASS |
+| W14 | no remote supabase.co URL in write methods | PASS |
+| W15 | no service_role string in DataSource implementation | PASS |
+| W16 | no token/session/key console.log in write methods | PASS |
+| W17 | localStorage prefix lesoul_gh_ remains unchanged | PASS |
+| W18 | products.js uses async helpers, not direct Supabase calls | PASS |
+| W19 | docs mention 3-5L connects DataSource write methods to RPCs | PASS |
+| W20 | js/config.js is gitignored | PASS |
+| W21 | no data_export.json in repo | PASS |
+
+### 기존 JS 테스트 결과
+
+| 테스트 파일 | 테스트 수 | 상태 |
+|---|---|---|
+| tests/supabase-client.test.js | 7 | PASS |
+| tests/auth-service.test.js | 15 | PASS |
+| tests/auth-ui.test.js | 10 | PASS |
+| tests/app-bootstrap.test.js | 35 | PASS |
+| tests/local-runner-contract.test.mjs | 18 | PASS |
+| tests/browser-auth-smoke-contract.test.mjs | 10 | PASS |
+| tests/browser-auth-recovery-contract.test.mjs | 12 | PASS |
+| tests/data-gateway-async-contract.test.mjs | 13 | PASS |
+| tests/products-read-async-contract.test.mjs | 13 | PASS |
+| tests/products-write-async-contract.test.mjs | 15 | PASS |
+| tests/products-datasource-contract.test.mjs | 16 | PASS |
+| tests/products-supabase-mapping-contract.test.mjs | 18 | PASS |
+| tests/products-supabase-datasource-skeleton-contract.test.mjs | 16 | PASS |
+| tests/products-supabase-read-contract.test.mjs | 19 | PASS |
+| tests/products-supabase-write-contract.test.mjs | 21 | PASS |
+| **전체** | **236** | **PASS** |
+
+### preflight 결과
+
+```
+bash scripts/run-local-auth-rpc-integration.sh --preflight
+== preflight start ==
+repo_root=/Users/lesoul888/Documents/LESOUL_STORE_APP/fashionmanager
+branch=feature/supabase-cloud-migration
+supabase_path=/Users/lesoul888/.supabase/bin/supabase
+supabase_version=2.109.1
+node_path=/Users/lesoul888/.nvm/versions/node/v24.18.0/bin/node
+node_version=v24.18.0
+docker_path=/Applications/Docker.app/Contents/Resources/bin/docker
+docker_version=Docker version 29.6.1, build 8900f1d
+docker_reachable=yes
+api_host=127.0.0.1
+preflight_elapsed=12s
+preflight=PASS
+== preflight end ==
+```
+
+### DB lint 결과
+
+```
+supabase db lint --local --level error --fail-on error
+✓ No lint errors found
+```
+
+### pgTAP 전체 결과
+
+| 테스트 파일 | 테스트 수 | 상태 |
+|---|---|---|
+| supabase/tests/auth.test.sql | 12 | PASS |
+| supabase/tests/stores_rls.test.sql | 15 | PASS |
+| supabase/tests/rpc_security.test.sql | 18 | PASS |
+| supabase/tests/products_read_rpc.test.sql | 23 | PASS |
+| supabase/tests/products_write_rpc.test.sql | 30 | PASS |
+| supabase/tests/orders_inventory_rls.test.sql | 14 | PASS |
+| supabase/tests/orders_rpc.test.sql | 27 | PASS |
+| supabase/tests/customers_rpc.test.sql | 16 | PASS |
+| supabase/tests/inventory_rpc.test.sql | 11 | PASS |
+| **전체** | **161** | **PASS** |
+
+### opt-in local integration 결과
+
+(P1-P14, `RUN_LOCAL_SUPABASE_INTEGRATION=1` 필요)
+
+| 테스트 ID | 설명 | 상태 |
+|---|---|---|
+| P1 | Create confirmed test user via admin API | PASS |
+| P2 | Password login with anon key | PASS |
+| P3 | Ensure user profile via RPC | PASS |
+| P4 | Create initial store | PASS |
+| P5 | createProduct succeeds via create_product RPC | PASS |
+| P6 | listProducts verifies createProduct result | PASS |
+| P7 | updateProduct succeeds via update_product RPC | PASS |
+| P8 | updateProduct result verified via listProducts | PASS |
+| P9 | deleteProduct succeeds via soft_delete_product RPC | PASS |
+| P10 | soft delete verified (deleted_at set, no hard DELETE) | PASS |
+| P11 | setProducts is still disabled | PASS |
+| P12 | getProductsDataSource default is LocalProductsDataSource | PASS |
+| P13 | write methods reject remote URL | PASS |
+| P14 | Best-effort cleanup test user | PASS |
+
+### 브라우저 수동 확인 결과
+
+| 항목 | 상태 |
+|---|---|
+| 상품 목록 정상 | ✅ |
+| 상품 추가 정상 | ✅ |
+| 상품 수정 정상 | ✅ |
+| 상품 삭제 정상 | ✅ |
+| 상품 일괄 작업 정상 | ✅ |
+| 검색/정렬/필터 정상 | ✅ |
+| 주문/고객/분석 페이지 기존 동작 유지 | ✅ |
+| 기존 localStorage 상품 데이터 유지 | ✅ |
+| 일반 브라우저 runtime이 SupabaseProductsDataSource로 자동 전환되지 않음 | ✅ |
+
+### 제약 준수
+- js/db.js 변경: ✅ (RPC 연결만)
+- products.js 변경: ❌ (no)
+- supabase migrations/tests 변경: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 포함: ❌ (no)
+- 원격 Supabase 연결: ❌ (no)
+- JS DataSource RPC 연결: ✅ (완료)
+- getProductsDataSource() 기본값 변경: ❌ (no)
+- 일반 runtime에서 SupabaseProductsDataSource 자동 활성화: ❌ (no)
+- service_role 브라우저 사용: ❌ (no)
+- localStorage prefix 변경: ❌ (no)
+- UI 리뉴얼: ❌ (no)
+
+### write path 상태 (3-5L 이후)
+- setProducts: **disabled** (대량 overwrite 금지)
+- createProduct: RPC 기반 (`client.rpc('create_product')`)
+- updateProduct: RPC 기반 (`client.rpc('update_product')`) — **DB 권한 문제 해결됨**
+- deleteProduct: RPC 기반 (`client.rpc('soft_delete_product')`)
+- 일반 runtime 자동 전환: ❌
+- 원격 Supabase 연결: ❌

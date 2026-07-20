@@ -221,15 +221,15 @@ const DB = {
     },
 
     /**
-     * 3-5I: SupabaseProductsDataSource Local-only Controlled Write
+     * 3-5L: SupabaseProductsDataSource Connected to Write RPCs
      *
      * listProducts read + create/update/delete write를 local-only controlled 방식으로 구현한다.
-     * 3-5I는 local-only controlled write contract only, no runtime conversion.
+     * write methods는 3-5K에서 추가한 SECURITY DEFINER RPC를 사용한다.
      *
-     * - listProducts: 구현됨 (local-only controlled)
-     * - createProduct: 구현됨 (local-only controlled, insert)
-     * - updateProduct: 구현됨 (local-only controlled, legacy_id + store_id 제한)
-     * - deleteProduct: 구현됨 (local-only controlled, soft delete via deleted_at)
+     * - listProducts: 구현됨 (local-only controlled, direct table select)
+     * - createProduct: RPC 기반 (client.rpc('create_product'))
+     * - updateProduct: RPC 기반 (client.rpc('update_product'))
+     * - deleteProduct: RPC 기반 (client.rpc('soft_delete_product'))
      * - setProducts: disabled (대량 overwrite 금지)
      * - 실제 브라우저 runtime에서 자동 생성하지 않음
      * - getProductsDataSource() 기본값은 LocalProductsDataSource 유지
@@ -249,7 +249,7 @@ const DB = {
      *
      * @param {Object} client - Supabase client (명시적 주입)
      * @param {Object} context - { localOnly: true, storeId: string, url?: string }
-     * @returns {Object} SupabaseProductsDataSource (local-only controlled read + write)
+     * @returns {Object} SupabaseProductsDataSource (local-only controlled read + write via RPC)
      */
     _createControlledSupabaseProductsDataSource(client, context) {
         const db = this;
@@ -306,82 +306,127 @@ const DB = {
             },
 
             /**
-             * Local-only controlled create.
-             * legacy product → supabase row 변환 후 insert.
+             * Local-only controlled create via RPC (3-5L).
+             * legacy product → supabase row 변환 후 create_product RPC 호출.
              * store_id는 context.storeId로 강제.
              */
             createProduct(product) {
                 _validateWriteContext('createProduct');
                 const row = db.mapLegacyProductToSupabaseRow(product || {});
-                row.store_id = context.storeId;
-                delete row.id;
-                // DB NOT NULL 제약 준수: created_at/updated_at이 없으면 현재 시간 설정
-                const nowIso = new Date().toISOString();
-                if (!row.created_at) row.created_at = nowIso;
-                if (!row.updated_at) row.updated_at = nowIso;
-                return client.from('products')
-                    .insert(row)
-                    .select()
-                    .single()
+
+                // RPC payload 구성 (p_ 접두사 파라미터)
+                const payload = {
+                    p_store_id: context.storeId,
+                    p_product_code: row.product_code || null,
+                    p_original_title: row.original_title || '',
+                    p_brand: row.brand || '',
+                    p_normalized_title: row.normalized_title || null,
+                    p_title_language: row.title_language || null,
+                    p_category: row.category || null,
+                    p_color: row.color || null,
+                    p_size: row.size || null,
+                    p_material: row.material || null,
+                    p_season: row.season || null,
+                    p_fit: row.fit || null,
+                    p_style: row.style || null,
+                    p_classification_status: row.classification_status || null,
+                    p_korea_cost: row.korea_cost || null,
+                    p_actual_converted_cost: row.actual_converted_cost || null,
+                    p_china_base_price: row.china_base_price || null,
+                    p_current_stock: row.current_stock || 0,
+                    p_reserved_stock: row.reserved_stock || 0,
+                    p_stock_year: row.stock_year || null,
+                    p_stock_month: row.stock_month || null,
+                    p_image: row.image || null,
+                    p_notes: row.notes || null,
+                    p_legacy_id: row.legacy_id || null
+                };
+
+                return client.rpc('create_product', payload)
                     .then(response => {
                         if (response.error) {
-                            throw new Error('SupabaseProductsDataSource.createProduct query failed');
+                            throw new Error('SupabaseProductsDataSource.createProduct RPC failed');
                         }
-                        return db.mapSupabaseRowToLegacyProduct(response.data);
+                        // RPC는 단일 row를 반환
+                        const returnedRow = response.data;
+                        return db.mapSupabaseRowToLegacyProduct(returnedRow);
                     })
                     .catch(err => _wrapWriteError('createProduct', err));
             },
 
             /**
-             * Local-only controlled update.
+             * Local-only controlled update via RPC (3-5L).
              * legacy_id + store_id 조건으로 제한.
-             * id/legacy_id/store_id 등 위험 필드는 patch에서 제외.
+             * id/legacy_id/store_id 등 위험 필드는 RPC 내부에서 차단.
              */
             updateProduct(id, updates) {
                 _validateWriteContext('updateProduct');
-                const DANGER_FIELDS = ['id', 'legacy_id', 'store_id', 'created_at', 'created_by'];
-                const safeUpdates = {};
                 const upd = updates || {};
-                for (const key of Object.keys(upd)) {
-                    if (DANGER_FIELDS.indexOf(key) === -1) {
-                        safeUpdates[key] = upd[key];
-                    }
-                }
-                safeUpdates.updated_at = new Date().toISOString();
-                return client.from('products')
-                    .update(safeUpdates)
-                    .eq('legacy_id', Number(id))
-                    .eq('store_id', context.storeId)
-                    .select()
-                    .single()
+
+                // RPC payload 구성 (p_ 접두사 파라미터)
+                const payload = {
+                    p_store_id: context.storeId,
+                    p_legacy_id: Number(id),
+                    p_product_code: upd.product_code || null,
+                    p_original_title: upd.original_title || null,
+                    p_normalized_title: upd.normalized_title || null,
+                    p_title_language: upd.title_language || null,
+                    p_brand: upd.brand || null,
+                    p_category: upd.category || null,
+                    p_color: upd.color || null,
+                    p_size: upd.size || null,
+                    p_material: upd.material || null,
+                    p_season: upd.season || null,
+                    p_fit: upd.fit || null,
+                    p_style: upd.style || null,
+                    p_classification_status: upd.classification_status || null,
+                    p_korea_cost: upd.korea_cost || null,
+                    p_actual_converted_cost: upd.actual_converted_cost || null,
+                    p_china_base_price: upd.china_base_price || null,
+                    p_current_stock: upd.current_stock || null,
+                    p_reserved_stock: upd.reserved_stock || null,
+                    p_stock_year: upd.stock_year || null,
+                    p_stock_month: upd.stock_month || null,
+                    p_image: upd.image || null,
+                    p_notes: upd.notes || null
+                };
+
+                return client.rpc('update_product', payload)
                     .then(response => {
                         if (response.error) {
-                            throw new Error('SupabaseProductsDataSource.updateProduct query failed');
+                            throw new Error('SupabaseProductsDataSource.updateProduct RPC failed');
                         }
-                        return db.mapSupabaseRowToLegacyProduct(response.data);
+                        // RPC는 단일 row를 반환
+                        const returnedRow = response.data;
+                        return db.mapSupabaseRowToLegacyProduct(returnedRow);
                     })
                     .catch(err => _wrapWriteError('updateProduct', err));
             },
 
             /**
-             * Local-only controlled soft delete.
-             * 실제 DELETE 대신 deleted_at = now()로 soft delete.
+             * Local-only controlled soft delete via RPC (3-5L).
+             * 실제 DELETE 대신 soft_delete_product RPC 호출.
              * legacy_id + store_id 조건으로 제한.
              */
             deleteProduct(id) {
                 _validateWriteContext('deleteProduct');
-                const patch = { deleted_at: new Date().toISOString() };
-                return client.from('products')
-                    .update(patch)
-                    .eq('legacy_id', Number(id))
-                    .eq('store_id', context.storeId)
-                    .select()
-                    .single()
+                const payload = {
+                    p_store_id: context.storeId,
+                    p_legacy_id: Number(id)
+                };
+
+                return client.rpc('soft_delete_product', payload)
                     .then(response => {
                         if (response.error) {
-                            throw new Error('SupabaseProductsDataSource.deleteProduct query failed');
+                            throw new Error('SupabaseProductsDataSource.deleteProduct RPC failed');
                         }
-                        return db.mapSupabaseRowToLegacyProduct(response.data);
+                        // RPC는 단일 row를 반환, legacy product로 변환
+                        const returnedRow = response.data;
+                        if (returnedRow) {
+                            return db.mapSupabaseRowToLegacyProduct(returnedRow);
+                        }
+                        // 반환값이 없으면 true 반환 (기존 deleteProduct 호환)
+                        return true;
                     })
                     .catch(err => _wrapWriteError('deleteProduct', err));
             }
