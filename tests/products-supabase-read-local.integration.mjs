@@ -254,11 +254,20 @@ test('Products Supabase Read Local Integration Smoke', async (t) => {
                         this._eq[column] = value;
                         return this;
                     },
+                    is(column, value) {
+                        if (!this._is) this._is = {};
+                        this._is[column] = value;
+                        return this;
+                    },
                     then(resolve, reject) {
                         const eqPairs = Object.entries(this._eq)
                             .map(([k, v]) => `${k}=eq.${encodeURIComponent(v)}`)
                             .join('&');
-                        const url = `${apiUrl}/rest/v1/${table}?${eqPairs}&select=${encodeURIComponent(this._select || '*')}`;
+                        const isPairs = this._is ? Object.entries(this._is)
+                            .map(([k, v]) => `${k}=is.${v === null ? 'null' : encodeURIComponent(v)}`)
+                            .join('&') : '';
+                        const allPairs = [eqPairs, isPairs].filter(Boolean).join('&');
+                        const url = `${apiUrl}/rest/v1/${table}?${allPairs}&select=${encodeURIComponent(this._select || '*')}`;
                         return fetch(url, {
                             method: 'GET',
                             headers: {

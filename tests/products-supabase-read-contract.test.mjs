@@ -61,6 +61,10 @@ function createMockClient(options = {}) {
                 calls.push({ method: 'eq', column, value });
                 return chain;
             },
+            is(column, value) {
+                calls.push({ method: 'is', column, value });
+                return chain;
+            },
             then(resolve, reject) {
                 calls.push({ method: 'then' });
                 return promise.then(resolve, reject);

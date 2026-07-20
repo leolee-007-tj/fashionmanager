@@ -414,6 +414,7 @@ const DB = {
                 return client.from('products')
                     .select('*')
                     .eq('store_id', context.storeId)
+                    .is('deleted_at', null)
                     .then(response => {
                         if (response.error) {
                             throw new Error('SupabaseProductsDataSource.listProducts query failed');
@@ -470,8 +471,12 @@ const DB = {
                         if (response.error) {
                             throw new Error('SupabaseProductsDataSource.createProduct RPC failed');
                         }
-                        // RPC는 단일 row를 반환
-                        const returnedRow = response.data;
+                        // RPC는 SETOF/RETURNS TABLE → 배열로 반환될 수 있음. 단일 row 추출.
+                        const raw = response.data;
+                        const returnedRow = Array.isArray(raw) ? raw[0] : raw;
+                        if (!returnedRow) {
+                            throw new Error('SupabaseProductsDataSource.createProduct returned no row');
+                        }
                         return db.mapSupabaseRowToLegacyProduct(returnedRow);
                     })
                     .catch(err => _wrapWriteError('createProduct', err));
@@ -519,8 +524,12 @@ const DB = {
                         if (response.error) {
                             throw new Error('SupabaseProductsDataSource.updateProduct RPC failed');
                         }
-                        // RPC는 단일 row를 반환
-                        const returnedRow = response.data;
+                        // RPC는 SETOF/RETURNS TABLE → 배열로 반환될 수 있음. 단일 row 추출.
+                        const raw = response.data;
+                        const returnedRow = Array.isArray(raw) ? raw[0] : raw;
+                        if (!returnedRow) {
+                            throw new Error('SupabaseProductsDataSource.updateProduct returned no row');
+                        }
                         return db.mapSupabaseRowToLegacyProduct(returnedRow);
                     })
                     .catch(err => _wrapWriteError('updateProduct', err));
@@ -543,8 +552,9 @@ const DB = {
                         if (response.error) {
                             throw new Error('SupabaseProductsDataSource.deleteProduct RPC failed');
                         }
-                        // RPC는 단일 row를 반환, legacy product로 변환
-                        const returnedRow = response.data;
+                        // RPC는 SETOF/RETURNS TABLE → 배열로 반환될 수 있음. 단일 row 추출.
+                        const raw = response.data;
+                        const returnedRow = Array.isArray(raw) ? raw[0] : raw;
                         if (returnedRow) {
                             return db.mapSupabaseRowToLegacyProduct(returnedRow);
                         }

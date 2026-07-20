@@ -41,6 +41,10 @@ function createMockClient({ supabaseUrl = 'http://127.0.0.1:54321', mockData = n
             eq(col, val) {
                 eqCalls.push([col, val]);
                 return chainable;
+            },
+            is(col, val) {
+                eqCalls.push(['is:' + col, val]);
+                return chainable;
             }
         };
         if (finalAction === 'select-single') {

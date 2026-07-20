@@ -1109,3 +1109,116 @@ PRODUCTS_SUPABASE_ENABLED: false
 - pgTAP PASS — DB 변경 없음
 - 브라우저 수동 확인: 기본 config.example 상태에서 기존 localStorage로 동작
 - 일반 브라우저 runtime이 SupabaseProductsDataSource로 자동 전환되지 않음 확인
+
+## 18. 3-5N: Products Local Runtime Activation Smoke (2026-07-20)
+
+### 목표
+3-5M에서 구현한 Products runtime feature flag gate를 **local Supabase 환경에서 실제로 활성화**하여,
+SupabaseProductsDataSource가 정상 선택되고 read/write가 정상 동작하는지 검증한다.
+
+**아직 원격 Supabase 연결, UI 리뉴얼, Orders/Customers/Analytics 전환은 하지 않는다.**
+
+### 핵심 원칙
+- 기본 runtime은 계속 LocalProductsDataSource
+- `PRODUCTS_SUPABASE_ENABLED` 기본값 false 유지
+- 실제 활성화 테스트는 opt-in / local-only로만 진행
+- `js/config.js`는 로컬 테스트용으로만 사용하고 절대 commit 금지
+- remote supabase.co URL은 계속 금지
+- service_role은 setup/cleanup에만 사용
+- service_role을 browser/DataSource/runtime에 전달 금지
+- products.js 변경 없음
+- app.js 변경 없음
+- UI 리뉴얼 없음
+
+### 변경 내용
+
+#### 테스트 신규: `tests/products-runtime-local.integration.mjs`
+- opt-in: `RUN_LOCAL_SUPABASE_INTEGRATION=1` 환경 변수가 있을 때만 실행
+- 기본 `node --test`에서는 skip
+- localhost / 127.0.0.1 URL만 허용, remote supabase.co URL이면 즉시 fail
+- service_role은 test user 생성/삭제 (setup/cleanup)에만 사용
+- runtime-selected DataSource 경로로 동작 검증
+  - S1-S4: local Supabase setup (user 생성 → login → profile → store)
+  - S5: `DB.getProductsDataSource()`가 `SupabaseProductsDataSource` 반환 확인
+  - S6: `createProduct` (RPC 경로) 성공 확인
+  - S7: `listProducts`로 생성 결과 확인
+  - S8: `updateProduct` (RPC 경로) 성공 확인
+  - S9: `deleteProduct` (soft delete, RPC 경로) 성공 확인
+  - S10: soft delete된 row가 `listProducts`에서 제외 확인
+  - S11: `setProducts`가 Supabase DataSource에서 disabled 확인
+  - S12: `resetProductsDataSourceForTesting` + config off → LocalProductsDataSource 복귀 확인
+  - S13: 기본 config (flag off) → LocalProductsDataSource 유지
+  - S14: remote supabase.co URL 차단 확인
+  - C1: best-effort test user cleanup
+
+#### 테스트 보강: `tests/products-runtime-feature-flag-contract.test.mjs`
+- FF22: runtime activation 후 reset + config off → LocalProductsDataSource 복귀
+- FF23: SupabaseProductsDataSource.setProducts disabled 확인
+
+#### `js/db.js` — runtime activation path 안정화 (최소 수정)
+- **RPC 응답 배열 처리 버그 수정**: `create_product` / `update_product` / `soft_delete_product` RPC가 `RETURNS TABLE`로 배열을 반환하므로, `Array.isArray(response.data)`이면 첫 번째 row를 추출하여 매핑
+- **listProducts soft delete 필터 추가**: controlled read 범위에 `deleted_at IS NULL` 필터를 명시적으로 추가하여, soft delete된 행이 listProducts에 포함되지 않도록 함
+
+#### `tests/products-supabase-write-local.integration.mjs` / `tests/products-supabase-read-local.integration.mjs`
+- mock client chain에 `is(column, value)` 메서드 추가 (listProducts deleted_at 필터 지원)
+- P10 soft delete 검증 로직 업데이트: listProducts에서 제외됨을 확인
+
+### Runtime Activation 조건 (모두 충족 시 SupabaseProductsDataSource)
+1. `LESOUL_CONFIG.SUPABASE_ENABLED === true`
+2. `LESOUL_CONFIG.PRODUCTS_SUPABASE_ENABLED === true`
+3. `LESOULSupabase.isInitialized() === true`
+4. `LESOULSupabase.getClient()` 존재 (anon-authenticated)
+5. `LESOULAppBootstrap.getContext().activeMembership.storeId` 존재
+6. URL이 localhost / 127.0.0.1 (local-only)
+7. client key가 service_role이 아님
+
+### 기본값 DataSource
+- **LocalProductsDataSource**: 계속 기본 활성 상태 유지
+- `PRODUCTS_SUPABASE_ENABLED` 기본값 = false → 조용히 LocalProductsDataSource
+- local-only opt-in flag true + 위 조건 모두 충족 시에만 SupabaseProductsDataSource
+
+### 제약 준수
+- products.js 변경 없음
+- app.js 변경 없음
+- supabase migrations/tests 변경 없음
+- 원격 supabase.co URL 허용하지 않음
+- service_role 브라우저 사용 금지 (setup/cleanup에만 사용)
+- localStorage prefix 변경 없음
+- UI 리뉴얼 없음
+- data_export.json 없음
+- js/config.js commit 없음
+- Orders/Customers/Analytics 전환 없음
+
+### 다음 단계 예정
+- 원격 Supabase 연결 허용 (supabase.co URL) — 단계적 진행
+- Orders/Customers/Analytics 전환
+- UI 리뉴얼
+- 기본값 전환 검토 (아직 아님)
+
+### 이번 단계에서 하지 않는 일
+- 실제 원격 Supabase 연결 ❌
+- supabase.co URL 허용 ❌
+- Products 화면을 기본값으로 Supabase 전환 ❌
+- Orders/Customers/Analytics 전환 ❌
+- UI 리뉴얼 ❌
+- products.js 변경 ❌
+- app.js 라우팅 변경 ❌
+- form id / button id / input id 변경 ❌
+- service_role 브라우저 사용 ❌
+- token/session/key console.log ❌
+- localStorage prefix 변경 ❌
+- supabase migration 추가/수정 ❌
+- supabase test SQL 추가/수정 ❌
+- data_export.json 재추가 ❌
+- js/config.js commit ❌
+
+### 검증
+- `tests/products-runtime-local.integration.mjs` (S1-S14 + C1, 16/16 PASS)
+- `tests/products-runtime-feature-flag-contract.test.mjs` (FF1-FF23, 23/23 PASS)
+- `tests/products-supabase-write-local.integration.mjs` (15/15 PASS)
+- 기존 JS 테스트 전체 회귀
+- preflight PASS
+- DB lint PASS (error level)
+- pgTAP PASS
+- 브라우저 수동 확인: 기본 config.example 상태에서 기존 localStorage로 동작
+- 일반 브라우저 runtime이 SupabaseProductsDataSource로 자동 전환되지 않음 확인

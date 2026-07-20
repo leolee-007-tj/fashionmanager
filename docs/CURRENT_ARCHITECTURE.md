@@ -1450,3 +1450,92 @@ getProductsDataSource()
 
 ### 상세 문서
 - ASYNC_MIGRATION_MAP: `docs/ASYNC_MIGRATION_MAP.md` §17
+
+## 24. 3-5N: Products Local Runtime Activation Smoke (2026-07-20)
+
+### 목표
+3-5M에서 구현한 Products runtime feature flag gate를 **local Supabase 환경에서 실제로 활성화**하여,
+SupabaseProductsDataSource가 정상 선택되고 read/write가 정상 동작하는지 end-to-end로 검증한다.
+
+**아직 원격 Supabase 연결, UI 리뉴얼, Orders/Customers/Analytics 전환은 하지 않는다.**
+
+### 핵심 원칙
+- 기본 runtime은 계속 **LocalProductsDataSource**
+- `PRODUCTS_SUPABASE_ENABLED` 기본값 **false** 유지
+- 실제 활성화 테스트는 opt-in / local-only로만 진행
+- `js/config.js`는 로컬 테스트용으로만 사용하고 절대 commit 금지
+- remote supabase.co URL은 계속 금지
+- service_role은 setup/cleanup에만 사용, browser/DataSource/runtime에 전달 금지
+- products.js 변경 없음
+- app.js 변경 없음
+- UI 리뉴얼 없음
+
+### 현재 ProductsDataSource 상태
+```
+getProductsDataSource()
+  ├─ 기본값 (PRODUCTS_SUPABASE_ENABLED=false) → LocalProductsDataSource (localStorage)
+  └─ opt-in local activation (모든 조건 충족 시) → SupabaseProductsDataSource
+       ├─ name: 'SupabaseProductsDataSource'
+       ├─ listProducts()   → client.from('products').select('*').eq('store_id', ...).is('deleted_at', null)
+       ├─ createProduct()  → client.rpc('create_product', payload)
+       ├─ updateProduct()  → client.rpc('update_product', payload)
+       ├─ deleteProduct()  → client.rpc('soft_delete_product', payload)  (soft delete)
+       └─ setProducts()   → disabled (throws)
+```
+
+### Runtime Activation 조건 (모두 충족 시 SupabaseProductsDataSource)
+1. `LESOUL_CONFIG.SUPABASE_ENABLED === true`
+2. `LESOUL_CONFIG.PRODUCTS_SUPABASE_ENABLED === true`
+3. `LESOULSupabase.isInitialized() === true`
+4. `LESOULSupabase.getClient()` 존재 (anon-authenticated)
+5. `LESOULAppBootstrap.getContext().activeMembership.storeId` 존재
+6. URL이 localhost / 127.0.0.1 (local-only)
+7. client key가 service_role이 아님
+
+### listProducts controlled read 규칙
+- `store_id = :store_id` (강제)
+- `deleted_at IS NULL` (soft delete된 행 제외)
+- owner라도 deleted 행은 listProducts에 포함되지 않음
+- 직접 raw query로는 접근 가능하나, DataSource 계층에서는 명시적 필터링
+
+### Write methods
+- `createProduct`: `create_product` RPC (SECURITY DEFINER, store_id 강제)
+- `updateProduct`: `update_product` RPC (SECURITY DEFINER, legacy_id + store_id 조건)
+- `deleteProduct`: `soft_delete_product` RPC (SECURITY DEFINER, deleted_at 설정, hard DELETE 아님)
+- `setProducts`: **disabled** (bulk overwrite 금지)
+
+### Progress
+- 3-5A: Data Gateway Async Boundary Preparation ✅
+- 3-5B: Products Read Path Async Boundary ✅
+- 3-5C: Products Write Path Async Boundary Preparation ✅
+- 3-5D: Products DataSource Interface Extraction ✅
+- 3-5E: Products Supabase mapping contract ✅
+- 3-5F: SupabaseProductsDataSource disabled skeleton ✅
+- 3-5G: Products Supabase read path local-only controlled test ✅
+- 3-5H: Products Supabase read local integration smoke ✅
+- 3-5I: Products Supabase write path local-only controlled contract ✅
+- 3-5J: Products Supabase write local integration smoke ✅
+- 3-5K: Products Write RPC Foundation ✅
+- 3-5L: Connect Controlled Products DataSource to Write RPCs ✅
+- 3-5M: Products Runtime DataSource Feature Flag Gate ✅
+- 3-5N: Products Local Runtime Activation Smoke ✅ (현재)
+- 다음: 원격 Supabase 연결 허용 검토, Orders/Customers/Analytics 전환
+- **일반 앱 기본 runtime은 여전히 LocalProductsDataSource (localStorage)**
+- 인증 게이트와 업무 데이터 전환은 여전히 분리되어 있음
+
+### 제약 준수
+- PRODUCTS_SUPABASE_ENABLED 기본값 false: ✅
+- getProductsDataSource() 기본값 LocalProductsDataSource: ✅
+- local-only opt-in activation: ✅
+- remote supabase.co URL 허용: ❌ (no)
+- products.js 변경: ❌ (no)
+- app.js 변경: ❌ (no)
+- supabase migrations/tests 변경: ❌ (no)
+- service_role 브라우저 사용: ❌ (no)
+- UI 리뉴얼: ❌ (no)
+- data_export.json 재추가: ❌ (no)
+- js/config.js commit: ❌ (no)
+- Orders/Customers/Analytics 전환: ❌ (no)
+
+### 상세 문서
+- ASYNC_MIGRATION_MAP: `docs/ASYNC_MIGRATION_MAP.md` §18

@@ -323,4 +323,67 @@ describe('Products Runtime Feature Flag Gate Contract (3-5M)', function () {
         const ds = DB.getProductsDataSource();
         assert.equal(ds.name, 'SupabaseProductsDataSource');
     });
+
+    it('FF22: after runtime activation + reset + config off → LocalProductsDataSource', function () {
+        global.LESOUL_CONFIG = {
+            SUPABASE_ENABLED: true,
+            PRODUCTS_SUPABASE_ENABLED: true,
+            SUPABASE_URL: 'http://127.0.0.1:54321',
+            SUPABASE_CLIENT_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiJ9.fake'
+        };
+        global.LESOULSupabase = {
+            isInitialized: () => true,
+            getClient: () => ({
+                supabaseUrl: 'http://127.0.0.1:54321',
+                from: () => ({ select: () => ({ eq: () => ({ is: () => ({ then: () => Promise.resolve({ data: [], error: null }) }) }) }) }),
+                rpc: () => Promise.resolve({ data: null, error: null })
+            })
+        };
+        global.LESOULAppBootstrap = {
+            getContext: () => ({ activeMembership: { storeId: 'store-uuid-ff22' } })
+        };
+        const DB = loadDbForTesting();
+        DB.resetProductsDataSourceForTesting();
+        assert.equal(DB.getProductsDataSource().name, 'SupabaseProductsDataSource');
+
+        // config 끄고 reset → 기본값 복귀
+        global.LESOUL_CONFIG = {
+            SUPABASE_ENABLED: false,
+            PRODUCTS_SUPABASE_ENABLED: false,
+            SUPABASE_URL: 'http://127.0.0.1:54321',
+            SUPABASE_CLIENT_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiJ9.fake'
+        };
+        global.LESOULSupabase = { isInitialized: () => false, getClient: () => null };
+        global.LESOULAppBootstrap = { getContext: () => ({ activeMembership: null }) };
+        DB.resetProductsDataSourceForTesting();
+        assert.equal(DB.getProductsDataSource().name, 'LocalProductsDataSource',
+            'after reset with no runtime config, default must be LocalProductsDataSource');
+    });
+
+    it('FF23: SupabaseProductsDataSource.setProducts is disabled (throws)', function () {
+        global.LESOUL_CONFIG = {
+            SUPABASE_ENABLED: true,
+            PRODUCTS_SUPABASE_ENABLED: true,
+            SUPABASE_URL: 'http://127.0.0.1:54321',
+            SUPABASE_CLIENT_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiJ9.fake'
+        };
+        global.LESOULSupabase = {
+            isInitialized: () => true,
+            getClient: () => ({
+                supabaseUrl: 'http://127.0.0.1:54321',
+                from: () => ({ select: () => ({ eq: () => ({ is: () => ({ then: () => Promise.resolve({ data: [], error: null }) }) }) }) }),
+                rpc: () => Promise.resolve({ data: null, error: null })
+            })
+        };
+        global.LESOULAppBootstrap = {
+            getContext: () => ({ activeMembership: { storeId: 'store-uuid-ff23' } })
+        };
+        const DB = loadDbForTesting();
+        DB.resetProductsDataSourceForTesting();
+        const ds = DB.getProductsDataSource();
+        assert.equal(ds.name, 'SupabaseProductsDataSource');
+        assert.throws(() => ds.setProducts([{ id: 1 }]),
+            /not enabled|disabled/i,
+            'setProducts must be disabled on SupabaseProductsDataSource');
+    });
 });

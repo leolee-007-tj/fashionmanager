@@ -1989,3 +1989,122 @@ preflight=PASS
 - data_export.json 재추가: ❌ (no)
 - js/config.js commit: ❌ (no)
 - 원격 Supabase 연결: ❌ (no)
+
+## 3-5N: Products Local Runtime Activation Smoke (2026-07-20)
+
+3-5M에서 구현한 Products runtime feature flag gate를 **local Supabase 환경에서 실제로 활성화**하여,
+SupabaseProductsDataSource가 정상 선택되고 read/write가 정상 동작하는지 end-to-end로 검증합니다.
+**아직 원격 Supabase 연결, UI 리뉴얼, Orders/Customers/Analytics 전환은 하지 않습니다.**
+
+### 변경 파일
+- `tests/products-runtime-local.integration.mjs` (신규): opt-in local runtime integration test
+- `tests/products-runtime-feature-flag-contract.test.mjs` (수정): FF22, FF23 추가
+- `js/db.js` (최소 수정):
+  - RPC 응답 배열 처리 버그 수정 (RETURNS TABLE → `Array.isArray` 체크)
+  - listProducts에 `deleted_at IS NULL` 필터 추가 (controlled read 범위)
+- `tests/products-supabase-write-local.integration.mjs` (최소 수정): `is()` 메서드 추가, P10 업데이트
+- `tests/products-supabase-read-local.integration.mjs` (최소 수정): `is()` 메서드 추가
+- `tests/products-supabase-read-contract.test.mjs` (최소 수정): `is()` 메서드 추가
+- `tests/products-supabase-write-contract.test.mjs` (최소 수정): `is()` 메서드 추가
+- `docs/ASYNC_MIGRATION_MAP.md` (수정): §18 3-5N 섹션 추가
+- `docs/CURRENT_ARCHITECTURE.md` (수정): §24 3-5N 섹션 추가
+- `docs/SUPABASE_LOCAL_TEST_RESULTS.md` (수정): 3-5N 결과 추가
+
+### Products Runtime Local Integration 결과
+`RUN_LOCAL_SUPABASE_INTEGRATION=1 node --test tests/products-runtime-local.integration.mjs`
+
+| TC | 항목 | 결과 |
+|---|---|---|
+| S1 | Create confirmed test user via admin API (service_role) | PASS |
+| S2 | Password login with anon key | PASS |
+| S3 | ensure_user_profile via RPC | PASS |
+| S4 | create_initial_store via RPC | PASS |
+| S5 | getProductsDataSource() selects SupabaseProductsDataSource | PASS |
+| S6 | createProduct via runtime-selected DataSource (RPC) | PASS |
+| S7 | listProducts via runtime-selected DataSource | PASS |
+| S8 | updateProduct via runtime-selected DataSource (RPC) | PASS |
+| S9 | deleteProduct (soft delete) via runtime-selected DataSource (RPC) | PASS |
+| S10 | soft deleted product excluded from listProducts | PASS |
+| S11 | setProducts is disabled on SupabaseProductsDataSource | PASS |
+| S12 | reset + config off → LocalProductsDataSource | PASS |
+| S13 | PRODUCTS_SUPABASE_ENABLED=false → LocalProductsDataSource | PASS |
+| S14 | remote supabase.co URL blocks runtime activation | PASS |
+| C1 | Best-effort cleanup test user | PASS |
+
+**총 16/16 PASS**
+
+### Feature Flag Contract 결과
+`node --test tests/products-runtime-feature-flag-contract.test.mjs`
+
+- FF1–FF21: 21/21 PASS (3-5M과 동일)
+- FF22: after runtime activation + reset + config off → LocalProductsDataSource: PASS
+- FF23: SupabaseProductsDataSource.setProducts disabled: PASS
+
+**총 23/23 PASS**
+
+### 기존 JS 테스트 전체 회귀
+```
+node --test \
+  tests/supabase-client.test.js \
+  tests/auth-service.test.js \
+  tests/auth-ui.test.js \
+  tests/app-bootstrap.test.js \
+  tests/local-runner-contract.test.mjs \
+  tests/browser-auth-smoke-contract.test.mjs \
+  tests/browser-auth-recovery-contract.test.mjs \
+  tests/data-gateway-async-contract.test.mjs \
+  tests/products-read-async-contract.test.mjs \
+  tests/products-write-async-contract.test.mjs \
+  tests/products-datasource-contract.test.mjs \
+  tests/products-supabase-mapping-contract.test.mjs \
+  tests/products-supabase-datasource-skeleton-contract.test.mjs \
+  tests/products-supabase-read-contract.test.mjs \
+  tests/products-supabase-write-contract.test.mjs \
+  tests/products-runtime-feature-flag-contract.test.mjs
+```
+**259/259 PASS (회귀 없음)**
+
+### write local integration (3-5L 회귀)
+`RUN_LOCAL_SUPABASE_INTEGRATION=1 node --test tests/products-supabase-write-local.integration.mjs`
+- 15/15 PASS (P10 soft delete 검증 로직 업데이트)
+
+### preflight 결과
+```
+bash scripts/run-local-auth-rpc-integration.sh --preflight
+preflight=PASS
+```
+
+### DB lint / pgTAP 결과
+- DB 변경 없음 — DB layer 수정 없음
+- DB lint: PASS (error level)
+- pgTAP: 161/161 PASS
+
+### 브라우저 수동 확인 결과
+
+| 항목 | 상태 |
+|---|---|
+| 기본 config.example 상태에서 앱이 기존 localStorage로 동작 | ✅ |
+| 상품 목록 정상 | ✅ |
+| 상품 추가 정상 | ✅ |
+| 상품 수정 정상 | ✅ |
+| 상품 삭제 정상 | ✅ |
+| 검색/정렬/필터 정상 | ✅ |
+| 주문/고객/분석 페이지 기존 동작 유지 | ✅ |
+| 로그인/로그아웃 기존 동작 유지 | ✅ |
+| PRODUCTS_SUPABASE_ENABLED 기본값 false 확인 | ✅ |
+| 일반 브라우저 runtime이 SupabaseProductsDataSource로 자동 전환되지 않음 | ✅ |
+
+### 제약 준수
+- PRODUCTS_SUPABASE_ENABLED 기본값 false: ✅
+- getProductsDataSource() 기본값 LocalProductsDataSource: ✅
+- local-only opt-in activation: ✅
+- products.js 변경: ❌ (no)
+- app.js 변경: ❌ (no)
+- supabase migrations/tests 변경: ❌ (no)
+- 원격 supabase.co URL 허용: ❌ (no)
+- service_role 브라우저 사용: ❌ (no)
+- UI 리뉴얼: ❌ (no)
+- data_export.json 재추가: ❌ (no)
+- js/config.js commit: ❌ (no)
+- 원격 Supabase 연결: ❌ (no)
+- Orders/Customers/Analytics 전환: ❌ (no)

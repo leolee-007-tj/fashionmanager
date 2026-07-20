@@ -121,6 +121,11 @@ function createAnonRestClient(accessToken) {
                 state._filters.push(`${column}=eq.${encodeURIComponent(value)}`);
                 return this;
             },
+            is(column, value) {
+                const encoded = value === null ? 'null' : encodeURIComponent(value);
+                state._filters.push(`${column}=is.${encoded}`);
+                return this;
+            },
             insert(row) {
                 state._method = 'POST';
                 state._body = row;
@@ -505,7 +510,10 @@ test('Products Supabase Write Local Integration Smoke', async (t) => {
         );
         const products = await ds.listProducts();
         const softDeletedRow = products.find(p => p.id === 9101);
-        // owner는 deleted row도 볼 수 있으므로, soft deleted row가 여전히 반환될 수 있음.
+        // listProducts는 명시적으로 deleted_at IS NULL 필터를 사용하므로,
+        // soft delete된 행은 listProducts에 나타나지 않아야 함.
+        assert.equal(softDeletedRow, undefined,
+            'soft deleted product must NOT appear in listProducts (deleted_at IS NULL filter)');
         // 핵심 검증: 실제 DELETE가 아니라 soft delete (deleted_at 설정)가 수행되었다는 것.
         assert.ok(data[0].deleted_at !== null,
             'soft delete must set deleted_at (verified via direct query)');
