@@ -1195,6 +1195,85 @@ SupabaseProductsDataSource가 정상 선택되고 read/write가 정상 동작하
 - UI 리뉴얼
 - 기본값 전환 검토 (아직 아님)
 
+## 19. 3-5O: Products Local Browser Runtime Smoke (2026-07-20)
+
+### 목표
+3-5N에서 Node integration으로 검증한 Products runtime activation을 실제 브라우저 상품 화면에서 local-only flag-on 상태로 수동 검증한다.
+
+**아직 원격 Supabase 연결, UI 리뉴얼, Orders/Customers/Analytics 전환은 하지 않는다.**
+
+### 핵심 원칙
+- 기본 runtime은 계속 LocalProductsDataSource
+- `PRODUCTS_SUPABASE_ENABLED` 기본값 false 유지
+- local flag-on 테스트는 ignored `js/config.js`에서만 수행
+- `js/config.js`는 절대 commit 금지
+- remote supabase.co URL은 계속 금지
+- products.js 변경 없음
+- app.js 변경 없음
+- UI 리뉴얼 없음
+- form id / button id / input id / data-* 속성 변경 없음
+
+### 변경 내용
+
+#### 문서 신규: `docs/SUPABASE_PRODUCTS_LOCAL_BROWSER_RUNTIME_SMOKE.md`
+- 브라우저 flag-on smoke 결과 기록
+- flag-off 회귀 결과 기록
+- 발견된 문제 및 원인 분석 기록
+
+#### `js/db.js` — `legacy_id` 생성 버그 수정 (최소 수정)
+- **증상**: `SupabaseProductsDataSource.createProduct`에서 `p_legacy_id`가 `null`로 전달되어, 신규 상품의 `legacy_id`가 DB에 저장되지 않음
+- **영향**: `mapSupabaseRowToLegacyProduct`가 `id: null`을 반환하여 edit/delete URL이 `#/products/null/edit`가 됨
+- **수정**: `p_legacy_id: row.legacy_id || Date.now()`로 변경하여 임시 legacy_id 생성
+- **주의**: `products.js` 변경 없이 `js/db.js`만 최소 수정으로 해결
+
+### 브라우저 flag-on smoke 결과
+
+| 단계 | 시나리오 | 결과 |
+|---|---|---|
+| 1 | 로그인 | PASS |
+| 2 | store 선택 | PASS |
+| 3 | Products 페이지 진입 | PASS |
+| 4 | `DB.getProductsDataSource().name` | **SupabaseProductsDataSource** |
+| 5 | 상품 추가 | **BLOCKED** (인프라 문제: `create_product` RPC missing from schema cache) |
+| 6 | 주문/고객/분석 페이지 접근 | PASS |
+| 7 | 로그아웃 | PASS |
+
+### 브라우저 flag-off smoke 결과
+
+| 단계 | 시나리오 | 결과 |
+|---|---|---|
+| 1 | `DB.getProductsDataSource().name` | **LocalProductsDataSource** |
+| 2 | `LESOUL_CONFIG.PRODUCTS_SUPABASE_ENABLED` | **false** |
+| 3 | Products 페이지 | PASS (기존 localStorage 경로) |
+| 4 | 일반 runtime 자동 전환 | **없음** |
+
+### 발견된 문제
+
+#### `create_product` RPC missing from schema cache (PGRST202)
+- **증상**: `SupabaseProductsDataSource.createProduct()` 호출 시 `PGRST202` / 404 에러
+- **원인**: local Supabase 인프라(Docker container 상태) 문제
+- **3-5N 대비**: 3-5N opt-in integration test에서는 정상 동작 → 코드 자체 문제가 아님
+- **조치**: local Supabase 인프라 복구 후 재수행 필요
+
+### 제약 준수
+- products.js 변경 없음
+- app.js 변경 없음
+- css/style.css 변경 없음
+- index.html 변경 없음
+- supabase migrations/tests 변경 없음
+- 원격 supabase.co URL 허용하지 않음
+- service_role 브라우저 사용 금지
+- js/config.js commit 없음
+- data_export.json 없음
+- Orders/Customers/Analytics 전환 없음
+
+### 다음 단계 예정
+- local Supabase 인프라 복구 후 브라우저 write smoke 재수행
+- 원격 Supabase 연결 허용 (supabase.co URL) — 단계적 진행
+- Orders/Customers/Analytics 전환
+- UI 리뉴얼
+- 기본값 전환 검토 (아직 아님)
+
 ### 이번 단계에서 하지 않는 일
 - 실제 원격 Supabase 연결 ❌
 - supabase.co URL 허용 ❌

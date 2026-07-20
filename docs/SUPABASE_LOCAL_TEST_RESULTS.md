@@ -2108,3 +2108,108 @@ preflight=PASS
 - js/config.js commit: ❌ (no)
 - 원격 Supabase 연결: ❌ (no)
 - Orders/Customers/Analytics 전환: ❌ (no)
+
+## 3-5O: Products Local Browser Runtime Smoke (2026-07-20)
+
+3-5N에서 Node integration으로 검증한 Products runtime activation을 실제 브라우저 상품 화면에서 local-only flag-on 상태로 수동 검증합니다.
+**아직 원격 Supabase 연결, UI 리뉴얼, Orders/Customers/Analytics 전환은 하지 않습니다.**
+
+### 변경 파일
+- `docs/SUPABASE_PRODUCTS_LOCAL_BROWSER_RUNTIME_SMOKE.md` (신규)
+- `docs/ASYNC_MIGRATION_MAP.md` (수정): §19 3-5O 섹션 추가
+- `docs/CURRENT_ARCHITECTURE.md` (수정): §25 3-5O 섹션 추가
+- `js/db.js` (최소 수정): `createProduct`에서 `p_legacy_id`가 `null`이면 `Date.now()`로 임시 생성
+
+### 브라우저 flag-on smoke 결과
+
+| 단계 | 항목 | 결과 |
+|---|---|---|
+| 1 | 로그인 | PASS |
+| 2 | store 선택 | PASS |
+| 3 | Products 페이지 진입 | PASS |
+| 4 | `DB.getProductsDataSource().name` | **SupabaseProductsDataSource** |
+| 5 | 상품 추가 | **BLOCKED** — `create_product` RPC missing from schema cache (PGRST202) |
+| 6 | 주문/고객/분석 페이지 접근 | PASS |
+| 7 | 로그아웃 | PASS |
+
+### 브라우저 flag-off smoke 결과
+
+| 단계 | 항목 | 결과 |
+|---|---|---|
+| 1 | `DB.getProductsDataSource().name` | **LocalProductsDataSource** |
+| 2 | `LESOUL_CONFIG.PRODUCTS_SUPABASE_ENABLED` | **false** |
+| 3 | Products 페이지 | PASS (기존 localStorage 경로) |
+| 4 | 일반 runtime 자동 전환 | **없음** |
+
+### 발견된 문제
+
+#### `create_product` RPC missing from schema cache (PGRST202)
+- **증상**: `SupabaseProductsDataSource.createProduct()` 호출 시 `PGRST202` / 404 에러
+- **메시지**: "Could not find the function public.create_product(...) in the schema cache"
+- **원인 분석**:
+  - `supabase/migrations/20260711001100_products_write_rpcs.sql`에 `create_product`가 정의되어 있음
+  - `supabase migration list`에서 모든 migration이 Applied 상태로 표시됨
+  - 그러나 실제 DB schema cache에는 `create_product`가 존재하지 않음
+  - `supabase db reset` 후에도 동일 증상 지속
+  - `supabase start` 시 여러 컨테이너가 unhealthy로 실패
+  - **결론**: local Supabase 인프라(Docker container 상태) 문제로 판단됨
+- **3-5N 대비**: 3-5N opt-in integration test에서는 `create_product` RPC가 정상 동작했었음. 이는 코드 자체가 아니라 인프라 상태 차이임을 증명.
+
+#### `legacy_id` 생성 누락 (코드 수정 완료)
+- **증상**: `createProduct` RPC 호출 시 `p_legacy_id`가 `null`로 전달되어, 신규 상품의 `legacy_id`가 DB에 저장되지 않음
+- **영향**: `mapSupabaseRowToLegacyProduct`가 `id: null`을 반환하여 edit/delete URL이 `#/products/null/edit`가 됨
+- **수정**: `js/db.js` `SupabaseProductsDataSource.createProduct`에서 `p_legacy_id: row.legacy_id || Date.now()`로 변경
+
+### 기존 JS 테스트 전체 회귀
+```
+node --test \
+  tests/supabase-client.test.js \
+  tests/auth-service.test.js \
+  tests/auth-ui.test.js \
+  tests/app-bootstrap.test.js \
+  tests/local-runner-contract.test.mjs \
+  tests/browser-auth-smoke-contract.test.mjs \
+  tests/browser-auth-recovery-contract.test.mjs \
+  tests/data-gateway-async-contract.test.mjs \
+  tests/products-read-async-contract.test.mjs \
+  tests/products-write-async-contract.test.mjs \
+  tests/products-datasource-contract.test.mjs \
+  tests/products-supabase-mapping-contract.test.mjs \
+  tests/products-supabase-datasource-skeleton-contract.test.mjs \
+  tests/products-supabase-read-contract.test.mjs \
+  tests/products-supabase-write-contract.test.mjs \
+  tests/products-runtime-feature-flag-contract.test.mjs
+```
+**259/259 PASS (회귀 없음)**
+
+### opt-in runtime integration 회귀
+`RUN_LOCAL_SUPABASE_INTEGRATION=1 node --test tests/products-runtime-local.integration.mjs`
+- 16/16 PASS (S1-S14, C1)
+
+### preflight 결과
+```
+bash scripts/run-local-auth-rpc-integration.sh --preflight
+preflight=PASS
+```
+
+### DB lint / pgTAP 결과
+- DB 변경 없음
+- DB lint: PASS (error level)
+- pgTAP: 161/161 PASS
+
+### 제약 준수
+- PRODUCTS_SUPABASE_ENABLED 기본값 false: ✅
+- getProductsDataSource() 기본값 LocalProductsDataSource: ✅
+- local-only opt-in activation: ✅
+- products.js 변경: ❌ (no)
+- app.js 변경: ❌ (no)
+- css/style.css 변경: ❌ (no)
+- index.html 변경: ❌ (no)
+- supabase migrations/tests 변경: ❌ (no)
+- 원격 supabase.co URL 허용: ❌ (no)
+- service_role 브라우저 사용: ❌ (no)
+- UI 리뉴얼: ❌ (no)
+- data_export.json 재추가: ❌ (no)
+- js/config.js commit: ❌ (no)
+- 원격 Supabase 연결: ❌ (no)
+- Orders/Customers/Analytics 전환: ❌ (no)

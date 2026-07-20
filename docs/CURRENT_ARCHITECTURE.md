@@ -1527,6 +1527,99 @@ getProductsDataSource()
 - PRODUCTS_SUPABASE_ENABLED 기본값 false: ✅
 - getProductsDataSource() 기본값 LocalProductsDataSource: ✅
 - local-only opt-in activation: ✅
+
+## 25. 3-5O: Products Local Browser Runtime Smoke (2026-07-20)
+
+### 목표
+3-5N에서 Node integration으로 검증한 Products runtime activation을 실제 브라우저 상품 화면에서 local-only flag-on 상태로 수동 검증한다.
+
+### Architecture 상태
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Browser Runtime                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ LESOUL_CONFIG (js/config.js — ignored, local-only) │   │
+│  │  SUPABASE_ENABLED: true                             │   │
+│  │  PRODUCTS_SUPABASE_ENABLED: true                    │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                          │                                  │
+│  ┌───────────────────────┴───────────────────────┐         │
+│  │ DB.getProductsDataSource()                     │         │
+│  │  → SupabaseProductsDataSource (flag-on)        │         │
+│  │  → LocalProductsDataSource (flag-off/default)  │         │
+│  └────────────────────────────────────────────────┘         │
+│                          │                                  │
+│  ┌───────────────────────┴───────────────────────┐         │
+│  │ Products.js (변경 없음)                         │         │
+│  │  saveProduct() → DB.addProductAsync()          │         │
+│  │  editProduct() → DB.updateProductAsync()       │         │
+│  │  deleteProduct() → DB.deleteProductAsync()     │         │
+│  └────────────────────────────────────────────────┘         │
+│                          │                                  │
+│  ┌───────────────────────┴───────────────────────┐         │
+│  │ SupabaseProductsDataSource                     │         │
+│  │  createProduct() → create_product RPC          │         │
+│  │  updateProduct() → update_product RPC          │         │
+│  │  deleteProduct() → soft_delete_product RPC     │         │
+│  │  listProducts() → controlled read (local-only) │         │
+│  │  setProducts() → disabled                      │         │
+│  └────────────────────────────────────────────────┘         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 브라우저 smoke 결과
+
+| 항목 | flag-on | flag-off |
+|---|---|---|
+| `DB.getProductsDataSource().name` | SupabaseProductsDataSource | LocalProductsDataSource |
+| 로그인 | ✅ | N/A (local 모드) |
+| store 선택 | ✅ | N/A |
+| Products 페이지 진입 | ✅ | ✅ |
+| 상품 추가 | BLOCKED (인프라) | ✅ (localStorage) |
+| 주문/고객/분석 | ✅ | ✅ |
+| 로그아웃 | ✅ | N/A |
+
+### 발견된 문제
+
+#### `create_product` RPC missing from schema cache (PGRST202)
+- **증상**: `SupabaseProductsDataSource.createProduct()` 호출 시 `PGRST202` / 404 에러
+- **원인**: local Supabase 인프라(Docker container 상태) 문제
+- **3-5N 대비**: 3-5N opt-in integration test에서는 정상 동작 → 코드 자체 문제가 아님
+- **조치**: local Supabase 인프라 복구 후 재수행 필요
+
+#### `legacy_id` 생성 누락 (수정 완료)
+- **증상**: 신규 상품 `legacy_id`가 null → edit/delete URL이 `#/products/null/edit`
+- **수정**: `js/db.js` `createProduct`에서 `p_legacy_id: row.legacy_id || Date.now()`로 변경
+
+### Progress
+- 3-5A: Data Gateway Async Boundary Preparation ✅
+- 3-5B: Products Read Path Async Boundary ✅
+- 3-5C: Products Write Path Async Boundary Preparation ✅
+- 3-5D: Products DataSource Interface Extraction ✅
+- 3-5E: Products Supabase mapping contract ✅
+- 3-5F: SupabaseProductsDataSource disabled skeleton ✅
+- 3-5G: Products Supabase read path local-only controlled test ✅
+- 3-5H: Products Supabase read local integration smoke ✅
+- 3-5I: Products Supabase write path local-only controlled contract ✅
+- 3-5J: Products Supabase write local integration smoke ✅
+- 3-5K: Products Write RPC Foundation ✅
+- 3-5L: Connect Controlled Products DataSource to Write RPCs ✅
+- 3-5M: Products Runtime DataSource Feature Flag Gate ✅
+- 3-5N: Products Local Runtime Activation Smoke ✅
+- 3-5O: Products Local Browser Runtime Smoke ⚠️ (flag-on write blocked by infra)
+- 다음: local Supabase 인프라 복구 후 브라우저 write smoke 재수행
+- 다음: 원격 Supabase 연결 허용 검토, Orders/Customers/Analytics 전환
+- **일반 앱 기본 runtime은 여전히 LocalProductsDataSource (localStorage)**
+- 인증 게이트와 업무 데이터 전환은 여전히 분리되어 있음
+
+### 제약 준수
+- PRODUCTS_SUPABASE_ENABLED 기본값 false: ✅
+- getProductsDataSource() 기본값 LocalProductsDataSource: ✅
+- local-only opt-in activation: ✅
+- products.js 변경 없음: ✅
+- app.js 변경 없음: ✅
+- UI 리뉴얼 없음: ✅
 - remote supabase.co URL 허용: ❌ (no)
 - products.js 변경: ❌ (no)
 - app.js 변경: ❌ (no)

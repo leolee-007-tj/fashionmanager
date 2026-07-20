@@ -463,7 +463,7 @@ const DB = {
                     p_stock_month: row.stock_month || null,
                     p_image: row.image || null,
                     p_notes: row.notes || null,
-                    p_legacy_id: row.legacy_id || null
+                    p_legacy_id: row.legacy_id || Date.now()
                 };
 
                 return client.rpc('create_product', payload)
