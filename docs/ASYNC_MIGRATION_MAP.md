@@ -1413,3 +1413,66 @@ SupabaseProductsDataSource가 정상 선택되고 read/write가 정상 동작하
 - supabase migrations/tests 변경: ❌ 없음
 - 원격 Supabase 연결: ❌ 없음
 - js/config.js commit: ❌ 없음
+
+## 22. 3-5O.3: Test Regression Recovery (2026-07-20)
+
+### 목표
+- auth-ui 테스트 5개 실패 원인을 정확히 확인하고 수정
+- DB lint 연결 오류 원인을 확인하고 복구
+- pgTAP 161/161 PASS 재확인
+- 전체 JS 테스트 272/272 PASS 달성
+
+### auth-ui 테스트 실패 원인
+
+#### 실패한 테스트 (5개)
+- T44: showError가 오류 panel을 auth-root에 추가
+- T45: onRetry가 있으면 "다시 시도" 버튼이 실제 panel에 추가
+- T46: retry button click 시 onRetry 정확히 1회 호출
+- T47: onRetry가 없으면 retry button을 생성하지 않음
+- T48: 다른 화면으로 전환하면 이전 retry listener가 제거됨
+
+#### 원인
+- **에러**: `ReferenceError: localStorage is not defined`
+- **위치**: `_getBrandName` in [js/auth-ui.js](file:///Users/lesoul888/Documents/LESOUL_STORE_APP/fashionmanager/js/auth-ui.js)
+- **상세**: 3-5O.1에서 auth-ui.js에 `_getBrandName()` 함수를 추가하여 localStorage에서 브랜드명을 읽어오도록 변경. 하지만 Node.js 테스트 환경에는 localStorage가 없어 ReferenceError 발생.
+
+#### 수정 (최소 수정)
+- `js/auth-ui.js`의 `_getBrandName()`에 localStorage 안전 가드 추가
+- `typeof localStorage !== 'undefined' && localStorage && localStorage.getItem` 체크
+- try/catch로 예외 상황 대비
+- 안전하게 localStorage에 접근하지 못하면 LESOUL_CONFIG.APP_BRAND_NAME → "LESOUL" fallback 유지
+
+### 검증 결과
+
+#### auth-ui 테스트
+- `node --test tests/auth-ui.test.js`: **5/5 PASS** ✅
+
+#### brand-setting contract
+- `node --test tests/brand-setting-contract.test.mjs`: **13/13 PASS** ✅
+
+#### 전체 JS 테스트 회귀
+- **272/272 PASS** ✅ (완전 복구)
+
+#### products runtime local integration
+- `RUN_LOCAL_SUPABASE_INTEGRATION=1 node --test tests/products-runtime-local.integration.mjs`
+- **16/16 PASS** ✅ (PGRST202 문제 해결 유지)
+
+#### DB lint
+- `supabase db lint --local --level error --fail-on error`
+- **PASS** (exit=0) ✅
+
+#### pgTAP
+- `supabase test db --local`
+- **161/161 PASS** (exit=0) ✅
+
+### 브랜드 표기 재검색
+- **JS/HTML 파일**: "LES SOUL" 표기 없음 ✅
+- **문서 파일**: 과거 변경 기록 설명 용도로만 사용 중 (정상)
+
+### 제약 준수
+- 기본 브랜드명 LESOUL: ✅
+- products.js 변경: ❌ 없음
+- css/style.css 변경: ❌ 없음
+- supabase migrations/tests 변경: ❌ 없음
+- 원격 Supabase 연결: ❌ 없음
+- js/config.js commit: ❌ 없음

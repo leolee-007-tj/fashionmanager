@@ -2329,3 +2329,89 @@ grep -RIn "LES SOUL\|Les Soul\|les soul\|LES-SOUL\|LES_SOUL" . \
 - 원격 Supabase 연결: ❌ (no)
 - js/config.js commit: ❌ (no)
 - data_export.json 포함: ❌ (no)
+
+## 3-5O.3: Test Regression Recovery (2026-07-20)
+
+### auth-ui 테스트 실패 원인 및 수정
+
+#### 실패한 테스트 (5개)
+- T44: showError가 오류 panel을 auth-root에 추가
+- T45: onRetry가 있으면 "다시 시도" 버튼이 실제 panel에 추가
+- T46: retry button click 시 onRetry 정확히 1회 호출
+- T47: onRetry가 없으면 retry button을 생성하지 않음
+- T48: 다른 화면으로 전환하면 이전 retry listener가 제거됨
+
+#### 원인
+- **에러**: `ReferenceError: localStorage is not defined`
+- **위치**: `_getBrandName` in `js/auth-ui.js:76`
+- **상세**: 3-5O.1에서 auth-ui.js에 `_getBrandName()` 함수를 추가하여 localStorage에서 브랜드명을 읽어오도록 변경. Node.js 테스트 환경에는 localStorage가 없어 ReferenceError 발생.
+
+#### 수정
+- `js/auth-ui.js`의 `_getBrandName()`에 localStorage 안전 가드 추가
+- `typeof localStorage !== 'undefined' && localStorage && localStorage.getItem` 체크
+- try/catch로 예외 상황 대비
+
+### 변경 파일
+- `js/auth-ui.js`: `_getBrandName()`에 localStorage 안전 가드 추가 (최소 수정)
+- `docs/ASYNC_MIGRATION_MAP.md`: §22 3-5O.3 섹션 추가
+- `docs/CURRENT_ARCHITECTURE.md`: 3-5O.3 진행 상태 추가
+- `docs/SUPABASE_LOCAL_TEST_RESULTS.md`: 3-5O.3 섹션 추가
+- `docs/SUPABASE_PRODUCTS_LOCAL_BROWSER_RUNTIME_SMOKE.md`: 3-5O.3 상태 기록
+
+### auth-ui 테스트 결과
+`node --test tests/auth-ui.test.js`
+- **5/5 PASS** ✅
+
+### brand-setting contract 테스트 결과
+`node --test tests/brand-setting-contract.test.mjs`
+- **13/13 PASS** ✅
+
+### 전체 JS 테스트 결과
+```
+node --test \
+tests/supabase-client.test.js \
+tests/auth-service.test.js \
+tests/auth-ui.test.js \
+tests/app-bootstrap.test.js \
+tests/local-runner-contract.test.mjs \
+tests/browser-auth-smoke-contract.test.mjs \
+tests/browser-auth-recovery-contract.test.mjs \
+tests/data-gateway-async-contract.test.mjs \
+tests/products-read-async-contract.test.mjs \
+tests/products-write-async-contract.test.mjs \
+tests/products-datasource-contract.test.mjs \
+tests/products-supabase-mapping-contract.test.mjs \
+tests/products-supabase-datasource-skeleton-contract.test.mjs \
+tests/products-supabase-read-contract.test.mjs \
+tests/products-supabase-write-contract.test.mjs \
+tests/products-runtime-feature-flag-contract.test.mjs \
+tests/brand-setting-contract.test.mjs
+```
+- **272/272 PASS** ✅ (완전 복구)
+
+### products runtime local integration 결과
+`RUN_LOCAL_SUPABASE_INTEGRATION=1 node --test tests/products-runtime-local.integration.mjs`
+- **16/16 PASS** ✅ (PGRST202 문제 해결 유지)
+
+### DB lint 결과
+`supabase db lint --local --level error --fail-on error`
+- **PASS** (exit=0) ✅
+- Linting schema: extensions, private, public
+
+### pgTAP 결과
+`supabase test db --local`
+- **161/161 PASS** (exit=0) ✅
+- Files=5, Tests=161, Result: PASS
+
+### 브랜드 표기 검색 결과
+- **JS/HTML 파일**: "LES SOUL" 표기 없음 ✅
+- **문서 파일**: 과거 변경 기록 설명 용도로만 사용 중 (정상)
+
+### 제약 준수
+- 기본 브랜드명 LESOUL: ✅
+- products.js 변경: ❌ (no)
+- css/style.css 변경: ❌ (no)
+- supabase migrations/tests 변경: ❌ (no)
+- 원격 Supabase 연결: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 포함: ❌ (no)

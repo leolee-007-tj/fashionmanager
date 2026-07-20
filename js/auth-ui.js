@@ -73,7 +73,10 @@
     }
 
     function _getBrandName() {
-        var stored = localStorage.getItem('lesoul_gh_app_brand_name');
+        var stored = null;
+        if (typeof localStorage !== 'undefined' && localStorage && localStorage.getItem) {
+            try { stored = localStorage.getItem('lesoul_gh_app_brand_name'); } catch (e) { stored = null; }
+        }
         if (stored && stored.trim()) {
             return stored.trim();
         }

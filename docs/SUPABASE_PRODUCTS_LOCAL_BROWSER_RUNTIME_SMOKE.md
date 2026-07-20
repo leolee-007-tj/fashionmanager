@@ -148,3 +148,33 @@
 - css/style.css 변경: ❌ 없음
 - supabase migrations/tests 변경: ❌ 없음
 - 원격 Supabase 연결: ❌ 없음
+
+## 3-5O.3: Test Regression Recovery (2026-07-20)
+
+### PGRST202 해결 상태
+- **해결됨** ✅
+- `supabase db lint --local --level error --fail-on error`: PASS (exit=0)
+- `supabase test db --local`: 161/161 PASS (exit=0)
+
+### Products runtime local integration
+- `RUN_LOCAL_SUPABASE_INTEGRATION=1 node --test tests/products-runtime-local.integration.mjs`
+- **16/16 PASS** ✅
+
+### 전체 JS 테스트 회귀
+- **272/272 PASS** ✅ (완전 복구)
+- auth-ui 5개 테스트 실패 → `_getBrandName()`에 localStorage 안전 가드 추가로 해결
+
+### 브랜드 잔여 표기 정리 상태
+- **JS/HTML 파일**: "LES SOUL" 표기 없음 ✅
+- **문서 파일**: 과거 변경 기록 설명 용도로만 사용 중 (정상)
+
+### auth-ui 수정 내역
+- `js/auth-ui.js`의 `_getBrandName()`에 localStorage 안전 가드 추가
+- `typeof localStorage !== 'undefined'` 체크로 Node.js 테스트 환경에서도 동작
+
+### 제약 준수
+- 기본 브랜드명 LESOUL: ✅
+- products.js 변경: ❌ 없음
+- css/style.css 변경: ❌ 없음
+- supabase migrations/tests 변경: ❌ 없음
+- 원격 Supabase 연결: ❌ 없음
