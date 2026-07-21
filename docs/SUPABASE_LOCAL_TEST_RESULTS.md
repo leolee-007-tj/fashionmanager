@@ -2613,7 +2613,7 @@ tests/products-batch-actions-contract.test.mjs \
 tests/brand-setting-contract.test.mjs \
 tests/remote-deployment-readiness-contract.test.mjs
 ```
-- **338/338 PASS** ✅
+- **384/384 PASS** ✅
 
 ### DB lint 결과
 `supabase db lint --local --level error --fail-on error`
