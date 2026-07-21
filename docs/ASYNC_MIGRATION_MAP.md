@@ -1717,3 +1717,61 @@ Products Supabase runtime이 나중에 원격 Supabase 프로젝트에서도 안
 - css/style.css 변경 ❌
 - supabase migrations/tests 변경 ❌
 - data_export.json 재추가 ❌
+
+## 27. 3-5T: Remote Deployment Command Gate (2026-07-21)
+
+### 목표
+실제 supabase login/link/db push를 실행하기 전에 필요한 command gate/preflight script를 추가한다.
+**실제 원격 Supabase 연결은 하지 않는다.**
+
+### 핵심 원칙
+- remote deployment preflight script 추가
+- script는 실제 remote 명령을 실행하지 않음
+- stop criteria 자동 검사
+- js/config.js / data_export.json / service_role / staged secret 위험 검사
+- feature branch, working tree, default flags, tests 명령 안내
+- GitHub purge ticket 관련 주의사항 유지
+
+### 변경 내용
+
+#### scripts/remote-deployment-preflight.sh (신규)
+- branch 검사 (main/gh-pages 차단)
+- staged 파일 검사 (js/config.js, data_export.json, supabase/config.toml, .env, migrations, tests)
+- tracked 민감 파일 검사
+- JS runtime 파일 service_role/sb_secret_ 검사
+- token/session/key console.log 검사
+- config.example.js default flags false 검사
+- APP_BRAND_NAME LESOUL 검사
+- .gitignore 검사
+- GitHub purge ticket 경고
+- 수동 검증 명령 안내 (JS 테스트, DB lint, pgTAP)
+- **supabase login/link/db push 실행하지 않음**
+
+#### tests/remote-deployment-command-gate-contract.test.mjs (신규)
+- CG1-CG26: 26개 contract 테스트
+- script 존재, executable, supabase 명령 미실행, branch 검사, staged 검사, default flags, secret 검사 등 검증
+
+#### docs/SUPABASE_REMOTE_DEPLOYMENT_RUNBOOK.md
+- preflight script 위치 및 실행 방법 추가
+- 실제 remote 명령 실행 전 반드시 실행해야 한다고 명시
+
+#### docs/SUPABASE_REMOTE_CONFIG_TEMPLATE.md
+- js/config.js 만들기 전/후 preflight script 실행 권장 추가
+
+### 검증 결과
+- command gate contract 26/26 PASS
+- 전체 JS 테스트 PASS
+- pgTAP 161/161 PASS
+
+### 이번 단계에서 하지 않는 일
+- 실제 원격 Supabase 연결 ❌
+- supabase login/link/db push 실행 ❌
+- 실제 remote URL/key 사용 ❌
+- js/config.js 생성/커밋 ❌
+- JS runtime 코드 수정 ❌
+- UI 리뉴얼 ❌
+- products.js 변경 ❌
+- js/db.js 변경 ❌
+- css/style.css 변경 ❌
+- supabase migrations/tests 변경 ❌
+- data_export.json 재추가 ❌

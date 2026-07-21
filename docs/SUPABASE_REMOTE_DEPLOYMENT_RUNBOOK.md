@@ -12,6 +12,20 @@
 
 ## 2. 원격 배포 전 필수 조건
 
+### Preflight Script
+
+**실제 remote 명령을 실행하기 전 반드시 실행해야 한다:**
+
+```bash
+bash scripts/remote-deployment-preflight.sh
+```
+
+- 이 script는 **remote 명령을 실행하지 않는다** (supabase login/link/db push 금지).
+- 사전 검사만 수행: branch, staged files, tracked secrets, default flags, service_role, etc.
+- 실패 조건이 있으면 non-zero exit.
+
+### 필수 조건 체크리스트
+
 다음 조건이 모두 충족되어야 원격 배포를 진행할 수 있다.
 
 - [ ] Git working tree clean

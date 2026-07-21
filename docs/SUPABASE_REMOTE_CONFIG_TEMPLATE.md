@@ -72,6 +72,16 @@ window.LESOUL_CONFIG = Object.freeze({
 
 실제 remote smoke 테스트를 시작하기 **전에** 반드시 확인:
 
+### Preflight Script 실행
+
+```bash
+bash scripts/remote-deployment-preflight.sh
+```
+
+이 script는 remote 명령을 실행하지 않고 사전 검사만 수행한다. `js/config.js`를 만들기 전/후 모두 실행을 권장한다.
+
+### 수동 검사
+
 ```bash
 # 1. working tree clean 확인
 git status --short

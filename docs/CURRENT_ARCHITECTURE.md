@@ -1777,3 +1777,27 @@ Products Supabase runtime이 나중에 원격 Supabase 프로젝트에서도 안
 - JWT secret 금지
 - token/session/key console.log 금지
 - data_export 내용 금지
+
+## 29. 3-5T: Remote Deployment Command Gate (2026-07-21)
+
+### Remote Deployment Preflight Script
+- 문서 위치: `scripts/remote-deployment-preflight.sh`
+- 목적: 실제 remote 명령 실행 전 사전 검사만 수행
+- **runtime 변경이 아님** — JS runtime 코드 수정 없음
+- **supabase login/link/db push 실행하지 않음**
+
+### Command Gate 역할
+- branch 검사 (main/gh-pages 차단)
+- staged 파일 검사 (js/config.js, data_export.json, .env, supabase/config.toml)
+- tracked 민감 파일 검사
+- JS runtime 파일 service_role/sb_secret_ 검사
+- default flags false 검사
+- APP_BRAND_NAME LESOUL 검사
+- GitHub purge ticket 경고
+- 수동 검증 명령 안내
+
+### Default Runtime (유지)
+- 기본 DataSource: **LocalProductsDataSource**
+- PRODUCTS_SUPABASE_ENABLED: false
+- PRODUCTS_SUPABASE_REMOTE_ENABLED: false
+- SUPABASE_ENABLED: false

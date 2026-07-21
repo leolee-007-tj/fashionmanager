@@ -2666,3 +2666,35 @@ tests/remote-deployment-readiness-contract.test.mjs
 - supabase migrations/tests 변경: ❌ 없음
 - data_export.json 포함: ❌ 없음
 - 실제 원격 Supabase 연결: ❌ 없음
+
+## 3-5T: Remote Deployment Command Gate
+
+### Command Gate Contract
+`node --test tests/remote-deployment-command-gate-contract.test.mjs`
+- **26/26 PASS** ✅
+
+### Preflight Script 실행
+`bash scripts/remote-deployment-preflight.sh`
+- **PASS** (exit=0) ✅
+
+### 전체 JS 테스트
+- **PASS** ✅
+
+### pgTAP 결과
+`supabase test db --local`
+- **161/161 PASS** (exit=0) ✅
+
+### 제약 준수
+- preflight script 생성: ✅
+- supabase login/link/db push 실행: ❌ 없음
+- 실제 remote URL/key 사용: ❌ 없음
+- js/config.js 생성/커밋: ❌ 없음
+- service_role/sb_secret_ 검사: ✅
+- default flags false 검사: ✅
+- APP_BRAND_NAME LESOUL 검사: ✅
+- products.js 변경: ❌ 없음
+- js/db.js 변경: ❌ 없음
+- css/style.css 변경: ❌ 없음
+- supabase migrations/tests 변경: ❌ 없음
+- data_export.json 포함: ❌ 없음
+- 실제 원격 Supabase 연결: ❌ 없음
