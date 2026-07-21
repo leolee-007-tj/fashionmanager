@@ -1608,3 +1608,59 @@ Products Supabase runtime이 나중에 원격 Supabase 프로젝트에서도 안
 - supabase migrations/tests 변경 ❌
 - data_export.json 재추가 ❌
 - js/config.js commit ❌
+
+## 25. 3-5R: Remote Supabase Deployment Readiness Audit (2026-07-21)
+
+### 목표
+실제 원격 Supabase 연결 전에 필요한 readiness audit과 deployment runbook을 작성한다.
+**실제 원격 Supabase 연결은 하지 않는다.**
+
+### 핵심 원칙
+- remote deployment readiness checklist 작성
+- remote deployment runbook 작성
+- rollback / stop criteria 작성
+- allowed browser config와 forbidden secrets 구분
+- local-only 현재 상태 재확인
+- remote guardrail 기본값 `false` 유지 확인
+
+### 변경 내용
+
+#### docs/SUPABASE_REMOTE_DEPLOYMENT_RUNBOOK.md (신규)
+- 현재 상태: Products local runtime/batch actions/remote guardrail 준비 완료
+- 원격 배포 전 필수 조건: Git clean, 브랜치 제한, GitHub purge ticket, data_export.json 없음, js/config.js 없음, service_role 없음, lint/PASS/테스트 PASS
+- 브라우저 허용 config: SUPABASE_ENABLED, PRODUCTS_SUPABASE_ENABLED, PRODUCTS_SUPABASE_REMOTE_ENABLED, SUPABASE_URL, SUPABASE_CLIENT_KEY(anon only), APP_BRAND_NAME
+- 브라우저 금지 secrets: service_role, secret key, DB password, JWT secret, tokens, data_export.json
+- remote deployment command plan: supabase login, link, db push — **이 단계에서는 실행하지 않음**
+- stop criteria: service_role 노출, js/config.js staged, data_export.json 생성, remote URL without flag, lint/pgTAP/JS 테스트 실패, batch overwrite, real data usage
+- rollback 기준: flags false, LocalProductsDataSource 유지, Git history rewrite 금지
+- remote smoke 계획: dummy data only, 실제 운영 데이터 금지
+
+#### tests/remote-deployment-readiness-contract.test.mjs (신규)
+- RD1-RD20: readiness contract 테스트 20개
+- runbook 존재 확인, command plan 실행 금지 문구 확인, 기본값 확인, gitignored 파일 확인, service_role 금지 확인, stop/rollback/dummy data 문구 확인
+
+#### docs/SECURITY_DATA_EXPOSURE_REMEDIATION.md
+- GitHub purge ticket 닫히기 전 주의사항 유지
+- main/gh-pages force push 금지
+- git filter-repo 재실행 금지
+- stale clone/backups 사용 금지
+- data_export.json 재추가 금지
+- 이번 remote readiness 단계에서 실제 remote 연결 없음 기록
+
+### 검증 결과
+- 338/338 JS 테스트 PASS
+- remote readiness contract 20/20 PASS
+- DB lint PASS (EPERM telemetry.json side-effect)
+- pgTAP 161/161 PASS
+
+### 이번 단계에서 하지 않는 일
+- 실제 원격 Supabase 연결 ❌
+- supabase login/link/db push 실행 ❌
+- remote URL 실제 사용 ❌
+- Products 화면 기본값 Supabase 전환 ❌
+- UI 리뉴얼 ❌
+- products.js 변경 ❌
+- css/style.css 변경 ❌
+- supabase migrations/tests 변경 ❌
+- data_export.json 재추가 ❌
+- js/config.js commit ❌

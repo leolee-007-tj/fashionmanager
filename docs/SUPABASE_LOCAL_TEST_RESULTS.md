@@ -2583,3 +2583,59 @@ tests/brand-setting-contract.test.mjs
 - supabase migrations/tests 변경: ❌ 없음
 - 원격 Supabase 연결: ❌ 없음
 - js/config.js commit: ❌ 없음
+
+## 3-5R: Remote Supabase Deployment Readiness Audit
+
+### Remote Readiness Contract
+`node --test tests/remote-deployment-readiness-contract.test.mjs`
+- **20/20 PASS** ✅
+
+### 전체 JS 테스트
+```bash
+node --test \
+tests/supabase-client.test.js \
+tests/auth-service.test.js \
+tests/auth-ui.test.js \
+tests/app-bootstrap.test.js \
+tests/local-runner-contract.test.mjs \
+tests/browser-auth-smoke-contract.test.mjs \
+tests/browser-auth-recovery-contract.test.mjs \
+tests/data-gateway-async-contract.test.mjs \
+tests/products-read-async-contract.test.mjs \
+tests/products-write-async-contract.test.mjs \
+tests/products-datasource-contract.test.mjs \
+tests/products-supabase-mapping-contract.test.mjs \
+tests/products-supabase-datasource-skeleton-contract.test.mjs \
+tests/products-supabase-read-contract.test.mjs \
+tests/products-supabase-write-contract.test.mjs \
+tests/products-runtime-feature-flag-contract.test.mjs \
+tests/products-batch-actions-contract.test.mjs \
+tests/brand-setting-contract.test.mjs \
+tests/remote-deployment-readiness-contract.test.mjs
+```
+- **338/338 PASS** ✅
+
+### DB lint 결과
+`supabase db lint --local --level error --fail-on error`
+- **PASS** (EPERM telemetry.json side-effect, 실제 lint는 PASS)
+
+### pgTAP 결과
+`supabase test db --local`
+- **161/161 PASS** (exit=0) ✅
+
+### 제약 준수
+- PRODUCTS_SUPABASE_REMOTE_ENABLED 기본값 false: ✅
+- PRODUCTS_SUPABASE_ENABLED 기본값 false: ✅
+- 기본 runtime DataSource: LocalProductsDataSource ✅
+- service_role browser 금지 명시: ✅
+- anon/publishable key only 명시: ✅
+- stop criteria 작성: ✅
+- rollback 기준 작성: ✅
+- dummy data only 명시: ✅
+- GitHub purge ticket 관련 주의사항 유지: ✅
+- products.js 변경: ❌ 없음
+- css/style.css 변경: ❌ 없음
+- supabase migrations/tests 변경: ❌ 없음
+- js/config.js commit: ❌ 없음
+- data_export.json 포함: ❌ 없음
+- 실제 원격 Supabase 연결: ❌ 없음

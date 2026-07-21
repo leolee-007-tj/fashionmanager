@@ -187,7 +187,30 @@ git reset --hard origin/main  # 또는 해당 브랜치
 ### 7.4 Support 처리 후 재검증 항목
 GitHub Support에서 처리 완료 통보 후 다음을 확인:
 - [ ] 과거 커밋 URL 접근 시 404 반환
-- [ ] 과거 파일 blob URL 접근 시 404 반환  
+- [ ] 과거 파일 blob URL 접근 시 404 반환
 - [ ] GitHub API로 과거 SHA 접근 시 404 반환
 - [ ] GitHub 저장소 내 검색에서 data_export.json 검색 결과 없음
 - [ ] 구글 등 외부 검색 엔진 캐시 확인 (필요시 별도 제거 요청)
+
+### 7.5 3-5R: Remote Supabase Deployment Readiness Audit — 안전 주의사항 (2026-07-21)
+
+이 단계에서는 실제 원격 Supabase 연결을 하지 않는다.
+
+#### GitHub Purge Ticket 닫히기 전 주의사항
+- **main/gh-pages force push 금지**: GitHub Support가 purge를 완료하기 전에 force push를 하면 dangling objects가 새로 생성되어 cached data 제거가 무의미해질 수 있음
+- **git filter-repo 재실행 금지**: 기록 재작성 시 dangling objects가 증가하여 purge 대상이 늘어남
+- **stale clone/backups 사용 금지**: 기존 clone에 포함된 과거 SHA로 작업하지 않음
+- **data_export.json 재추가 금지**: 운영 데이터가 다시 노출될 위험
+
+#### Remote Deployment 준비 상태
+- **remote guardrail flag 준비 완료**: `PRODUCTS_SUPABASE_REMOTE_ENABLED` 기본값 `false`로 설정
+- **deployment runbook 작성 완료**: `docs/SUPABASE_REMOTE_DEPLOYMENT_RUNBOOK.md`에 배포 전 checklist, stop criteria, rollback 기준 작성
+- **readiness contract 테스트 완료**: `tests/remote-deployment-readiness-contract.test.mjs` 20/20 PASS
+- **실제 원격 Supabase 연결**: ❌ 하지 않음
+- **supabase login/link/db push**: ❌ 실행하지 않음
+
+#### Remote Deployment 시 추가 안전 조치
+1. **dummy data only**: 실제 배포 전 smoke 테스트는 dummy user/store/product만 사용
+2. **service_role key 브라우저에 노출 금지**: 브라우저 config에는 anon/publishable key만 사용
+3. **token/session/key console.log 금지**: 개발 중 console에 credentials 노출 방지
+4. **RLS/RPC 권한 검증**: remote DB에 migration 적용 후 RLS 정책과 RPC 권한이 제대로 설정되었는지 확인

@@ -1699,3 +1699,51 @@ Products Supabase runtime이 나중에 원격 Supabase 프로젝트에서도 안
 
 ### 상세 문서
 - ASYNC_MIGRATION_MAP: `docs/ASYNC_MIGRATION_MAP.md` §24
+
+## 27. 3-5R: Remote Supabase Deployment Readiness Audit (2026-07-21)
+
+### Remote Deployment Runbook
+- 문서 위치: `docs/SUPABASE_REMOTE_DEPLOYMENT_RUNBOOK.md`
+- 목적: 실제 원격 Supabase 연결 전 readiness audit 및 deployment 가이드
+- **이 단계에서는 실제 remote 연결을 하지 않는다.**
+
+### 현재 Runtime Default
+- **기본 DataSource**: LocalProductsDataSource
+- PRODUCTS_SUPABASE_ENABLED: false
+- PRODUCTS_SUPABASE_REMOTE_ENABLED: false
+
+### Remote Guardrail Status
+- remote URL + PRODUCTS_SUPABASE_REMOTE_ENABLED=false → 차단
+- remote URL + PRODUCTS_SUPABASE_REMOTE_ENABLED=true + 모든 조건 → 후보 허용
+- service_role key는 remote flag true라도 계속 차단
+
+### Deployment Readiness Checklist
+1. Git working tree clean
+2. feature/supabase-cloud-migration 브랜치에서만 진행
+3. GitHub Support purge ticket 아직 닫지 않음 → main/gh-pages force push 금지
+4. git filter-repo 재실행 금지
+5. data_export.json 없음
+6. js/config.js 없음 (gitignored)
+7. service_role key가 JS/browser/repo에 없음
+8. local DB lint PASS
+9. pgTAP PASS
+10. 전체 JS 테스트 PASS
+
+### Allowed Browser Config
+- SUPABASE_ENABLED=true
+- PRODUCTS_SUPABASE_ENABLED=true
+- PRODUCTS_SUPABASE_REMOTE_ENABLED=true
+- SUPABASE_URL=remote project URL
+- SUPABASE_CLIENT_KEY=publishable/anon key only
+- APP_BRAND_NAME='LESOUL' 또는 사용자 브랜드명
+
+### Forbidden Secrets
+- service_role key
+- secret key
+- database password
+- JWT secret
+- access token
+- refresh token
+- personal access token
+- data_export.json 내용
+- 실제 고객/상품 private export
