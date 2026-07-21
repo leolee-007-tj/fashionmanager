@@ -1040,6 +1040,28 @@ textarea.form-control {
     margin-top: 0.5rem;
 }
 
+.auth-link-row {
+    text-align: center;
+    margin-top: 1rem;
+}
+
+.auth-link {
+    color: #667eea;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.auth-link:hover {
+    text-decoration: underline;
+}
+
+.auth-link:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.4);
+    border-radius: 4px;
+}
+
 .auth-loading {
     text-align: center;
     padding: 1.5rem 0;

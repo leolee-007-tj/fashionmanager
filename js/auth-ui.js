@@ -157,6 +157,17 @@
         var submitBtn = _button('로그인', 'auth-button', null, 'submit');
         form.appendChild(submitBtn);
 
+        // Sign up link
+        var linkRow = _el('div', 'auth-link-row');
+        var link = _el('a', 'auth-link', '회원가입');
+        _on(link, 'click', function () {
+            if (handlers && typeof handlers.onShowSignUp === 'function') {
+                handlers.onShowSignUp();
+            }
+        });
+        linkRow.appendChild(link);
+        form.appendChild(linkRow);
+
         _on(form, 'submit', function (e) {
             e.preventDefault();
             if (_busy) return;
@@ -178,6 +189,87 @@
 
             if (handlers && typeof handlers.onSignIn === 'function') {
                 handlers.onSignIn({ email: email, password: password });
+            }
+        });
+
+        panel.appendChild(form);
+        _root.appendChild(panel);
+        showAuth();
+    }
+
+    function showSignUp(handlers) {
+        _clear();
+        var panel = _panel();
+
+        var title = _el('h2', 'auth-title', '회원가입');
+        panel.appendChild(title);
+
+        var desc = _el('p', 'auth-description', '이메일과 비밀번호를 입력해 주세요.');
+        panel.appendChild(desc);
+
+        var form = document.createElement('form');
+        form.className = 'auth-form';
+
+        // Email field
+        var emailField = _el('div', 'auth-field');
+        emailField.appendChild(_label('auth-email', '이메일'));
+        var emailInput = _input('email', 'auth-email', 'auth-input');
+        emailInput.required = true;
+        emailInput.autocomplete = 'username';
+        emailField.appendChild(emailInput);
+        form.appendChild(emailField);
+
+        // Password field
+        var pwField = _el('div', 'auth-field');
+        pwField.appendChild(_label('auth-password', '비밀번호'));
+        var pwInput = _input('password', 'auth-password', 'auth-input');
+        pwInput.required = true;
+        pwInput.autocomplete = 'new-password';
+        pwInput.minLength = 6;
+        pwField.appendChild(pwInput);
+        form.appendChild(pwField);
+
+        // Error placeholder
+        var errorBox = _el('div', 'auth-error');
+        errorBox.style.display = 'none';
+        form.appendChild(errorBox);
+
+        // Submit button
+        var submitBtn = _button('회원가입', 'auth-button', null, 'submit');
+        form.appendChild(submitBtn);
+
+        // Sign in link
+        var linkRow = _el('div', 'auth-link-row');
+        var link = _el('a', 'auth-link', '로그인');
+        _on(link, 'click', function () {
+            if (handlers && typeof handlers.onShowSignIn === 'function') {
+                handlers.onShowSignIn();
+            }
+        });
+        linkRow.appendChild(link);
+        form.appendChild(linkRow);
+
+        _on(form, 'submit', function (e) {
+            e.preventDefault();
+            if (_busy) return;
+            var email = (emailInput.value || '').trim();
+            var password = pwInput.value || '';
+            // Reset error
+            errorBox.style.display = 'none';
+            errorBox.textContent = '';
+
+            // Validation
+            if (!email || email.indexOf('@') === -1 || !password || password.length < 6) {
+                errorBox.textContent = '회원가입할 수 없습니다.';
+                errorBox.style.display = 'block';
+                return;
+            }
+
+            // Clear password field immediately after capturing value.
+            pwInput.value = '';
+
+            if (handlers && typeof handlers.onSignUp === 'function') {
+                handlers.onSignUp({ email: email, password: password });
             }
         });
 
@@ -422,6 +514,7 @@
         init: init,
         showLoading: showLoading,
         showSignedOut: showSignedOut,
+        showSignUp: showSignUp,
         showStoreOnboarding: showStoreOnboarding,
         showStoreSelection: showStoreSelection,
         showError: showError,

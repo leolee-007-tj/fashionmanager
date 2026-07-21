@@ -129,6 +129,38 @@
         }
     }
 
+    async function signUp(email, password) {
+        var trimmedEmail = (email || '').trim();
+        if (!trimmedEmail) {
+            throw _makeError('AUTH_SIGN_UP_FAILED', 'Sign up failed');
+        }
+        if (trimmedEmail.indexOf('@') === -1) {
+            throw _makeError('AUTH_SIGN_UP_FAILED', 'Sign up failed');
+        }
+        if (!password || password.length < 6) {
+            throw _makeError('AUTH_SIGN_UP_FAILED', 'Sign up failed');
+        }
+
+        var client = _getClient();
+        try {
+            var result = await client.auth.signUp({
+                email: trimmedEmail,
+                password: password
+            });
+            if (result.error) {
+                throw _makeError('AUTH_SIGN_UP_FAILED', 'Sign up failed');
+            }
+            var session = (result.data && result.data.session) || null;
+            var user = (result.data && result.data.user) || null;
+            return { session: session, user: user };
+        } catch (e) {
+            if (e && e.code === 'AUTH_SIGN_UP_FAILED') {
+                throw e;
+            }
+            throw _makeError('AUTH_SIGN_UP_FAILED', 'Sign up failed');
+        }
+    }
+
     function subscribe(callback) {
         if (typeof callback !== 'function') {
             throw _makeError('AUTH_CALLBACK_INVALID', 'Auth callback must be a function');
@@ -328,6 +360,7 @@
         getSession: getSession,
         getCurrentUser: getCurrentUser,
         signInWithPassword: signInWithPassword,
+        signUp: signUp,
         signOut: signOut,
         subscribe: subscribe,
         ensureUserProfile: ensureUserProfile,

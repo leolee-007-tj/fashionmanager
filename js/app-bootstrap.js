@@ -292,6 +292,26 @@
         _state = 'error';
     }
 
+    function _renderSignIn() {
+        _showUI('showSignedOut', [{
+            onSignIn: function (credentials) { signIn(credentials); },
+            onShowSignUp: function () { _renderSignUp(); }
+        }]);
+    }
+
+    function _renderSignUp() {
+        _showUI('showSignUp', [{
+            onSignUp: function (credentials) { signUp(credentials); },
+            onShowSignIn: function () { _renderSignIn(); }
+        }]);
+    }
+
+    function _renderSignUpPending() {
+        _showUI('showError', ['가입 확인 후 로그인해 주세요.', {
+            onRetry: function () { _renderSignIn(); }
+        }]);
+    }
+
     function _handleBootstrapResult(result) {
         if (!result) {
             _safeErrorState('일시적인 오류가 발생했습니다.');
@@ -306,9 +326,7 @@
         if (status === 'signed_out') {
             _hideApp();
             _showAuth();
-            _showUI('showSignedOut', [{
-                onSignIn: function (credentials) { signIn(credentials); }
-            }]);
+            _renderSignIn();
             _state = 'signed_out';
             return;
         }
@@ -400,9 +418,7 @@
                     var logoutEl = _deps.getLogoutElement();
                     if (logoutEl) logoutEl.hidden = true;
                     _showAuth();
-                    _showUI('showSignedOut', [{
-                        onSignIn: function (credentials) { signIn(credentials); }
-                    }]);
+                    _renderSignIn();
                     _state = 'signed_out';
                     return;
                 }
@@ -511,16 +527,10 @@
             })
             .catch(function () {
                 if (ui) ui.setBusy(false);
-                _showUI('showSignedOut', [{
-                    onSignIn: function (c) { signIn(c); }
-                }]);
-                // Show generic error message via UI error box inside signed-out screen.
-                // Re-render with error: use showError-like inline message by re-rendering signed-out.
+                _renderSignIn();
                 _showUI('showError', ['로그인할 수 없습니다. 이메일과 비밀번호를 확인해 주세요.', {
                     onRetry: function () {
-                        _showUI('showSignedOut', [{
-                            onSignIn: function (c) { signIn(c); }
-                        }]);
+                        _renderSignIn();
                     }
                 }]);
                 _state = 'signed_out';
@@ -547,9 +557,7 @@
                 var logoutEl = _deps.getLogoutElement();
                 if (logoutEl) logoutEl.hidden = true;
                 _showAuth();
-                _showUI('showSignedOut', [{
-                    onSignIn: function (c) { signIn(c); }
-                }]);
+                _renderSignIn();
                 _state = 'signed_out';
             })
             .catch(function () {
@@ -572,6 +580,35 @@
             });
         _signOutInFlight = tracked;
         return tracked;
+    }
+
+    function signUp(credentials) {
+        var auth = _deps && _deps.auth();
+        var ui = _deps.ui();
+        if (ui) ui.setBusy(true);
+        return Promise.resolve()
+            .then(function () {
+                return auth.signUp(credentials.email, credentials.password);
+            })
+            .then(function (result) {
+                if (ui) ui.setBusy(false);
+                if (!result || !result.session) {
+                    _renderSignUpPending();
+                    _state = 'signed_out';
+                    return;
+                }
+                return _runBootstrap();
+            })
+            .catch(function () {
+                if (ui) ui.setBusy(false);
+                _renderSignUp();
+                _showUI('showError', ['회원가입할 수 없습니다.', {
+                    onRetry: function () {
+                        _renderSignUp();
+                    }
+                }]);
+                _state = 'signed_out';
+            });
     }
 
     function createInitialStore(opts) {
@@ -657,6 +694,7 @@
         start: start,
         retry: retry,
         signIn: signIn,
+        signUp: signUp,
         signOut: signOut,
         createInitialStore: createInitialStore,
         selectMembership: selectMembership,
