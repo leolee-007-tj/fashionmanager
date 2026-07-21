@@ -1747,3 +1747,33 @@ Products Supabase runtime이 나중에 원격 Supabase 프로젝트에서도 안
 - personal access token
 - data_export.json 내용
 - 실제 고객/상품 private export
+
+## 28. 3-5S: Remote Config Template and Secret Safety Check (2026-07-21)
+
+### Remote Config Template
+- 문서 위치: `docs/SUPABASE_REMOTE_CONFIG_TEMPLATE.md`
+- 목적: 실제 remote deployment 전 ignored `js/config.js` 수동 생성 시 참고
+- **실제 key, token, project URL을 넣지 않음**
+- placeholder만 사용: `YOUR_PROJECT_REF`, `YOUR_PUBLISHABLE_OR_ANON_KEY_ONLY`
+
+### js/config.js Local-Only Ignored File 원칙
+- `js/config.js`는 `.gitignore` 대상
+- **절대 commit하지 않음**
+- 개발자 로컬에서만 수동 생성
+- git status에서 staged 되면 즉시 unstage
+- 배포 환경에서는 안전한 방식으로 주입
+
+### Default Runtime
+- 기본 DataSource: **LocalProductsDataSource**
+- PRODUCTS_SUPABASE_ENABLED: false
+- PRODUCTS_SUPABASE_REMOTE_ENABLED: false
+- SUPABASE_ENABLED: false
+- APP_BRAND_NAME: LESOUL
+
+### Secret Safety
+- service_role key 금지
+- secret key 금지
+- database password 금지
+- JWT secret 금지
+- token/session/key console.log 금지
+- data_export 내용 금지

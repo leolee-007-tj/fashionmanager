@@ -2639,3 +2639,30 @@ tests/remote-deployment-readiness-contract.test.mjs
 - js/config.js commit: ❌ 없음
 - data_export.json 포함: ❌ 없음
 - 실제 원격 Supabase 연결: ❌ 없음
+
+## 3-5S: Remote Config Template and Secret Safety Check
+
+### Remote Config Secret Safety Contract
+`node --test tests/remote-config-secret-safety-contract.test.mjs`
+- **20/20 PASS** ✅
+
+### 전체 JS 테스트
+- **358/358 PASS** ✅
+
+### pgTAP 결과
+`supabase test db --local`
+- **161/161 PASS** (exit=0) ✅
+
+### 제약 준수
+- remote config template 생성: ✅
+- 실제 remote URL/key 사용: ❌ 없음
+- js/config.js 생성/커밋: ❌ 없음
+- service_role browser 금지 명시: ✅
+- publishable/anon key only 명시: ✅
+- default flags false 유지: ✅
+- APP_BRAND_NAME LESOUL 유지: ✅
+- products.js 변경: ❌ 없음
+- css/style.css 변경: ❌ 없음
+- supabase migrations/tests 변경: ❌ 없음
+- data_export.json 포함: ❌ 없음
+- 실제 원격 Supabase 연결: ❌ 없음

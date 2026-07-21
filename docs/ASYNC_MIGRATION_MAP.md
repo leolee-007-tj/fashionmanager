@@ -1664,3 +1664,56 @@ Products Supabase runtime이 나중에 원격 Supabase 프로젝트에서도 안
 - supabase migrations/tests 변경 ❌
 - data_export.json 재추가 ❌
 - js/config.js commit ❌
+
+## 26. 3-5S: Remote Config Template and Secret Safety Check (2026-07-21)
+
+### 목표
+실제 원격 Supabase 연결 전에 사용할 local-only config template과 secret safety check를 추가한다.
+**실제 원격 Supabase 연결은 하지 않는다.**
+
+### 핵심 원칙
+- remote config template 문서 추가
+- 실제 key 없는 safe example만 제공
+- browser config 허용/금지 값을 명확히 구분
+- service_role / secret / token / database password / JWT secret 금지 검증
+- js/config.js는 계속 gitignored 상태 유지
+
+### 변경 내용
+
+#### docs/SUPABASE_REMOTE_CONFIG_TEMPLATE.md (신규)
+- 목적: ignored `js/config.js` 수동 생성 시 참고하는 안전 템플릿
+- safe browser config template: placeholder만 사용
+  - `YOUR_PROJECT_REF`
+  - `YOUR_PUBLISHABLE_OR_ANON_KEY_ONLY`
+- allowed values: SUPABASE_ENABLED, PRODUCTS_SUPABASE_ENABLED, PRODUCTS_SUPABASE_REMOTE_ENABLED, SUPABASE_URL, SUPABASE_CLIENT_KEY(anon only), APP_BRAND_NAME
+- forbidden values: service_role, secret, DB password, JWT secret, tokens, data_export
+- local-only file rule: .gitignore, 절대 commit 금지
+- preflight checks: git status, staged check, service_role grep, test pass
+- rollback: flags 모두 false, LocalProductsDataSource
+
+#### docs/SUPABASE_REMOTE_DEPLOYMENT_RUNBOOK.md
+- remote config template 링크 추가
+- service_role/secret/token 금지 재강조
+- js/config.js gitignored/local-only 원칙 명시
+
+#### tests/remote-config-secret-safety-contract.test.mjs (신규)
+- CS1-CS20: 20개 contract 테스트
+- template 존재, 실제 key 없음, placeholder 사용, 금지 값 문구, gitignored, rollback flags, runbook 참조 등 검증
+
+### 검증 결과
+- 358/358 JS 테스트 PASS
+- remote config secret safety contract 20/20 PASS
+- remote readiness contract 20/20 PASS
+- pgTAP 161/161 PASS (exit=0)
+
+### 이번 단계에서 하지 않는 일
+- 실제 원격 Supabase 연결 ❌
+- 실제 remote URL/key 사용 ❌
+- supabase login/link/db push 실행 ❌
+- js/config.js 생성/커밋 ❌
+- Products 화면 기본값 Supabase 전환 ❌
+- UI 리뉴얼 ❌
+- products.js 변경 ❌
+- css/style.css 변경 ❌
+- supabase migrations/tests 변경 ❌
+- data_export.json 재추가 ❌

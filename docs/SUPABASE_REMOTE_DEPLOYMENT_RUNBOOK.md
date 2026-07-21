@@ -28,6 +28,8 @@
 
 ## 3. 브라우저에 허용되는 config
 
+**참고**: 자세한 template은 [SUPABASE_REMOTE_CONFIG_TEMPLATE.md](./SUPABASE_REMOTE_CONFIG_TEMPLATE.md) 참고.
+
 ### 허용되는 config 값
 
 다음 값만 브라우저 환경(config.js)에서 설정할 수 있다.
