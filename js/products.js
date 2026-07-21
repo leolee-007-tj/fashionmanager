@@ -325,28 +325,30 @@ const Products = {
             return;
         }
         if (!confirm(this.state.selected.size + t('common', 'confirm_reclassify_items'))) return;
-        const products = DB.getProducts();
-        let count = 0;
-        products.forEach(p => {
-            if (this.state.selected.has(p.id)) {
-                if (!p.original_title) return;
-                const result = ClassificationService.classify(p.original_title);
-                p.category = result.category || '';
-                p.color = result.color || '';
-                p.size = result.size || '';
-                p.material = result.material || '';
-                p.updated_at = new Date().toISOString();
-                count++;
+        const selectedIds = Array.from(this.state.selected);
+        let successCount = 0;
+        let failCount = 0;
+        for (const id of selectedIds) {
+            const product = DB.getProducts().find(p => p.id === parseInt(id));
+            if (!product || !product.original_title) continue;
+            try {
+                const result = ClassificationService.classify(product.original_title);
+                await DB.updateProductAsync(id, {
+                    category: result.category || '',
+                    color: result.color || '',
+                    size: result.size || '',
+                    material: result.material || '',
+                    updated_at: new Date().toISOString()
+                });
+                successCount++;
+            } catch (e) {
+                failCount++;
             }
-        });
-        if (typeof DB.setProductsAsync === 'function') {
-            await DB.setProductsAsync(products);
-        } else {
-            DB.setProducts(products);
         }
-        this.state.products = products;
         this.state.selected.clear();
-        App.flash(count + t('common', 'items_reclassified'), 'success');
+        let msg = successCount + t('common', 'items_reclassified');
+        if (failCount > 0) msg += ' (' + failCount + t('common', 'failed') + ')';
+        App.flash(msg, failCount > 0 ? 'warning' : 'success');
         App.render();
     },
 
@@ -365,23 +367,27 @@ const Products = {
             App.flash(t('common', 'invalid_input'), 'error');
             return;
         }
-        const products = DB.getProducts();
-        products.forEach(p => {
-            if (this.state.selected.has(p.id)) {
-                p.stock_year = y;
-                p.stock_month = m;
-                p.updated_at = new Date().toISOString();
+        const selectedIds = Array.from(this.state.selected);
+        let successCount = 0;
+        let failCount = 0;
+        for (const id of selectedIds) {
+            try {
+                await DB.updateProductAsync(id, {
+                    stock_year: y,
+                    stock_month: m,
+                    updated_at: new Date().toISOString()
+                });
+                successCount++;
+            } catch (e) {
+                failCount++;
             }
-        });
-        if (typeof DB.setProductsAsync === 'function') {
-            await DB.setProductsAsync(products);
-        } else {
-            DB.setProducts(products);
         }
         this.state.selected.clear();
         this.state.stockYear = y;
         this.state.stockMonth = m;
-        App.flash(t('common', 'save') + '!', 'success');
+        let msg = successCount + t('common', 'save') + '!';
+        if (failCount > 0) msg += ' (' + failCount + t('common', 'failed') + ')';
+        App.flash(msg, failCount > 0 ? 'warning' : 'success');
         App.render();
     },
 
@@ -391,14 +397,21 @@ const Products = {
             return;
         }
         if (!confirm(this.state.selected.size + t('common', 'confirm_delete_items'))) return;
-        const products = DB.getProducts().filter(p => !this.state.selected.has(p.id));
-        if (typeof DB.setProductsAsync === 'function') {
-            await DB.setProductsAsync(products);
-        } else {
-            DB.setProducts(products);
+        const selectedIds = Array.from(this.state.selected);
+        let successCount = 0;
+        let failCount = 0;
+        for (const id of selectedIds) {
+            try {
+                await DB.deleteProductAsync(id);
+                successCount++;
+            } catch (e) {
+                failCount++;
+            }
         }
         this.state.selected.clear();
-        App.flash(t('common', 'delete') + '!', 'success');
+        let msg = successCount + t('common', 'delete') + '!';
+        if (failCount > 0) msg += ' (' + failCount + t('common', 'failed') + ')';
+        App.flash(msg, failCount > 0 ? 'warning' : 'success');
         App.render();
     },
 

@@ -78,9 +78,11 @@ describe('Products write async boundary contract (W1-W15)', function () {
         // delete uses await for deleteProductAsync
         assert.match(content, /await\s+DB\.deleteProductAsync/,
             'delete should await DB.deleteProductAsync');
-        // batch methods use await for setProductsAsync
-        assert.match(content, /await\s+DB\.setProductsAsync/,
-            'batch methods should await DB.setProductsAsync');
+        // batch methods use await for per-item async helpers (3-5P: no setProductsAsync)
+        assert.match(content, /await\s+DB\.deleteProductAsync/,
+            'batchDelete should await DB.deleteProductAsync');
+        assert.match(content, /await\s+DB\.updateProductAsync/,
+            'batchReclassify/batchMonthChange should await DB.updateProductAsync');
     });
 
     it('W8: Products write path has no Supabase insert/update/delete/upsert call', function () {

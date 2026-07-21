@@ -83,7 +83,7 @@ github-pages-version/
 - `t(section, key)`: 번역 조회 (fallback: currentLang → ko → key)
 - `updateAllTranslations()`: `data-i18n`, `data-i18n-section`, `data-i18n-placeholder`, `data-i18n-title` 속성 일괄 업데이트 + store_name/subtitle 적용 + `document.title` 동적 설정
 
-### `js/db.js` (371줄) ★ 핵심 데이터 계층
+### `js/db.js` (1157줄) ★ 핵심 데이터 계층
 - `DB` 객체, `prefix: 'lesoul_gh_'`
 - `get(key, defaultValue)`: `localStorage.getItem(prefix+key)` → JSON.parse, 실패 시 defaultValue
 - `set(key, value)`: `JSON.stringify` 후 `localStorage.setItem`
@@ -98,6 +98,15 @@ github-pages-version/
 - `generateProductCode(brand, year, month)`: 브랜드 3자리 + 3자리 일련번호 (예: SYS001)
 - `findProductByBrandTitleCost`, `findCustomerByName`, `findDuplicateOrder`: 조회 헬퍼
 - `recalculateAllPrices()`: 모든 상품 가격 재계산
+- **3-5P**: `batchDeleteProductsAsync(ids)`: per-item `deleteProductAsync` 순차 호출, `{ success, failed, errors }` 결과 반환
+- **3-5P**: `batchUpdateProductsAsync(ids, updates)`: per-item `updateProductAsync` 순차 호출, `{ success, failed, errors }` 결과 반환
+- **3-5A**: `asyncReady(methodName, ...args)`: Promise 호환 helper
+- **3-5B**: `getProductsAsync()`: async boundary, `getProductsDataSource().listProducts()`
+- **3-5C**: `addProductAsync()`, `updateProductAsync()`, `deleteProductAsync()`, `setProductsAsync()`: async boundary, DataSource 호출
+- **3-5D**: `getProductsDataSource()`, `setProductsDataSourceForTesting()`, `resetProductsDataSourceForTesting()`: DataSource 관리
+- **3-5D**: `_createLocalProductsDataSource()`: localStorage 기반 DataSource (기본값)
+- **3-5L**: `_createControlledSupabaseProductsDataSource()`: Supabase RPC 기반 DataSource (feature flag enabled 시)
+- **3-5E**: `mapLegacyProductToSupabaseRow()`, `mapSupabaseRowToLegacyProduct()`: 매핑 helper
 - `exportAllData()` / `importAllData(data)`: 전체 백업/복원 (복원 시 `_convertExpenses`로 구형 경비 변환)
 - `_convertExpenses(expenses)`: 구형 형식(year/month/개별 항목) → 신형 형식(expense_date/category/amount) 변환. amount가 0이거나 숫자가 아니면 필터링됨 (데이터 손실 위험)
 - `clearAllData()`: 모든 컬렉션 빈 배열로 초기화 (settings는 제외)
@@ -121,15 +130,15 @@ github-pages-version/
 - `matchKeyword(title, keywords)`: priority 오름차순 정렬 후 ko/zh/en/ja/other_aliases/standard_value 검색 (소문자 비교)
 - `initDefaultKeywords()`: 80개 확장 기본 키워드 (신형 스키마: classification_type/standard_value/ko(array)/zh(array)/en(array)/ja(array)/priority)
 
-### `js/products.js` (634줄)
+### `js/products.js` (688줄)
 - `Products` 객체, `state`에 `loaded` 플래그 (검색 최적화)
-- `load()`: 최초 1회만 실행. `autoClassifyAll()` + `applyFilters()`
+- `load()`: 최초 1회만 실행. `autoClassifyAll()` + `applyFilters()`. **3-5B**: async boundary 적용, `await DB.getProductsAsync()` 사용
 - `autoClassifyAll()`: 저장된 분류값이 없는 상품만 실시간 분류하여 DB 저장
 - `applyFilters()`: stock_year/stock_month 필터 + 11개 필드 검색 + 정렬
-- `batchReclassify()`: 선택된 상품 일괄 재분류 (기존값 덮어쓰기)
-- `batchMonthChange()`: 선택 상품 년/월 일괄 변경
-- `batchDelete()`: 선택 상품 일괄 삭제
-- `submitForm(editId)`: 상품 등록/수정. `PriceCalculator.calculate()` 호출, `detectLanguage()` 저장
+- `batchReclassify()`: **3-5P**: per-item `DB.updateProductAsync()` 순차 호출 (setProductsAsync 대량 overwrite 제거). 성공/실패 수 기록, Promise.all 병렬 호출 금지
+- `batchMonthChange()`: **3-5P**: per-item `DB.updateProductAsync()` 순차 호출 (setProductsAsync 대량 overwrite 제거). 성공/실패 수 기록, Promise.all 병렬 호출 금지
+- `batchDelete()`: **3-5P**: per-item `DB.deleteProductAsync()` 순차 호출 (setProductsAsync 대량 overwrite 제거). 성공/실패 수 기록, Promise.all 병렬 호출 금지
+- `submitForm(editId)`: 상품 등록/수정. `PriceCalculator.calculate()` 호출, `detectLanguage()` 저장. **3-5C**: async boundary 적용, `await DB.addProductAsync()` / `await DB.updateProductAsync()` 사용
 - `generateProductCode`는 DB 계층에서 처리
 
 ### `js/orders.js` (737줄)

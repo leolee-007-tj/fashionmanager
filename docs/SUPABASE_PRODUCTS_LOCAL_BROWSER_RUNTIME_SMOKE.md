@@ -178,3 +178,44 @@
 - css/style.css 변경: ❌ 없음
 - supabase migrations/tests 변경: ❌ 없음
 - 원격 Supabase 연결: ❌ 없음
+
+## 3-5P: Products Batch Actions Supabase Compatibility (2026-07-21)
+
+### batch actions 브라우저 smoke 결과
+
+#### local flag-off (기본 localStorage mode)
+- 기존 localStorage 상품 목록 정상 ✅
+- 상품 추가/수정/삭제 정상 ✅
+- 일괄 삭제 정상 ✅
+- 일괄 분류 변경 정상 ✅
+- 일괄 연도/월 변경 정상 ✅
+- 검색/정렬/필터 정상 ✅
+
+#### local flag-on (SupabaseProductsDataSource mode)
+- `js/config.js` 사용: SUPABASE_ENABLED=true, PRODUCTS_SUPABASE_ENABLED=true
+- local API URL + anon key만 사용 ✅
+- 로그인/store 선택 정상 ✅
+- Products 페이지 진입 정상 ✅
+- 상품 여러 개 생성 정상 ✅
+- 일괄 삭제 정상 (soft delete via soft_delete_product RPC) ✅
+- 일괄 분류 변경 정상 (per-item update via update_product RPC) ✅
+- 일괄 연도/월 변경 정상 (per-item update via update_product RPC) ✅
+- 새로고침 후 결과 유지 ✅
+- 삭제 상품 목록 제외 ✅
+
+### batch actions 처리 방식
+- **batchDelete**: per-item `DB.deleteProductAsync(id)` 순차 호출
+- **batchReclassify**: per-item `DB.updateProductAsync(id, { category, color, size, material })` 순차 호출
+- **batchMonthChange**: per-item `DB.updateProductAsync(id, { stock_year, stock_month })` 순차 호출
+- **Promise.all 병렬 호출**: 금지 (순차 for loop 사용)
+- **setProductsAsync**: Supabase runtime에서 사용 금지
+- **성공/실패 처리**: 각 항목별로 성공/실패 수 기록, flash 메시지로 표시
+
+### 제약 준수
+- setProducts disabled 유지: ✅
+- products.js가 Supabase client를 직접 참조하지 않음: ✅
+- Promise.all 대량 병렬 호출 없음: ✅
+- UI 구조 변경: ❌ 없음
+- CSS 변경: ❌ 없음
+- supabase migrations/tests 변경: ❌ 없음
+- 원격 Supabase 연결: ❌ 없음

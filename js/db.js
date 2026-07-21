@@ -116,6 +116,34 @@ const DB = {
         return this.getProductsDataSource().deleteProduct(id);
     },
 
+    async batchDeleteProductsAsync(ids) {
+        const results = { success: [], failed: [], errors: [] };
+        for (const id of ids) {
+            try {
+                await this.deleteProductAsync(id);
+                results.success.push(id);
+            } catch (e) {
+                results.failed.push(id);
+                results.errors.push({ id, error: e.message || 'delete failed' });
+            }
+        }
+        return results;
+    },
+
+    async batchUpdateProductsAsync(ids, updates) {
+        const results = { success: [], failed: [], errors: [] };
+        for (const id of ids) {
+            try {
+                await this.updateProductAsync(id, updates);
+                results.success.push(id);
+            } catch (e) {
+                results.failed.push(id);
+                results.errors.push({ id, error: e.message || 'update failed' });
+            }
+        }
+        return results;
+    },
+
     // ==================== Products DataSource (3-5D) ====================
 
     /**

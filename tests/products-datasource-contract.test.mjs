@@ -121,8 +121,8 @@ describe('Products datasource boundary contract (D1-D16)', function () {
             'products.js write path should await DB.updateProductAsync');
         assert.match(content, /await\s+DB\.deleteProductAsync/,
             'products.js write path should await DB.deleteProductAsync');
-        assert.match(content, /await\s+DB\.setProductsAsync/,
-            'products.js write path should await DB.setProductsAsync');
+        assert.ok(content.includes('async batchDelete') && content.includes('async batchReclassify') && content.includes('async batchMonthChange'),
+            'products.js batch methods should be async (3-5P)');
     });
 
     it('D11: other business modules have no direct Supabase call', function () {

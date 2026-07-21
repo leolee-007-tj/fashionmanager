@@ -2415,3 +2415,106 @@ tests/brand-setting-contract.test.mjs
 - 원격 Supabase 연결: ❌ (no)
 - js/config.js commit: ❌ (no)
 - data_export.json 포함: ❌ (no)
+
+## 3-5P: Products Batch Actions Supabase Compatibility (2026-07-21)
+
+### 목표
+- Products 화면의 일괄 작업이 SupabaseProductsDataSource runtime에서도 안전하게 동작하도록 준비
+- localStorage runtime에서는 기존 일괄 작업 동작 유지
+- Supabase runtime에서는 setProductsAsync bulk overwrite를 사용하지 않음
+- batchDelete, batchReclassify, batchMonthChange를 per-item update/delete 경로로 변경
+
+### 변경 파일
+- `js/db.js`: `batchDeleteProductsAsync(ids)`, `batchUpdateProductsAsync(ids, updates)` 추가
+- `js/products.js`: batchDelete, batchReclassify, batchMonthChange를 per-item async 호출로 수정
+- `tests/products-batch-actions-contract.test.mjs`: 신규 contract test (31개 검증 항목)
+- `tests/products-runtime-local.integration.mjs`: S15/S16 batch actions 테스트 추가
+
+### batchDelete 처리 방식
+- 선택 ids를 순회
+- 각 id마다 `await DB.deleteProductAsync(id)` 호출
+- 성공/실패 수 기록
+- Supabase runtime에서는 `soft_delete_product` RPC 경로 사용
+- localStorage runtime에서도 기존 삭제 동작 유지
+
+### batchReclassify 처리 방식
+- 선택 ids를 순회
+- 각 id마다 `await DB.updateProductAsync(id, { category, color, size, material })` 호출
+- 기존 분류 로직 유지
+- 대량 setProductsAsync 사용 금지
+- 성공/실패 수 기록
+
+### batchMonthChange 처리 방식
+- 선택 ids를 순회
+- 각 id마다 `await DB.updateProductAsync(id, { stock_year, stock_month })` 호출
+- 기존 입력/검증 로직 유지
+- 대량 setProductsAsync 사용 금지
+- 성공/실패 수 기록
+
+### products batch actions contract 테스트 결과
+`node --test tests/products-batch-actions-contract.test.mjs`
+- **31/31 PASS** ✅
+- B1-B3: batch actions가 setProductsAsync 사용하지 않고 per-item async 경로 사용
+- B4: SupabaseProductsDataSource.setProducts disabled
+- B5: Promise.all 대량 병렬 호출 없음
+- B6: RPC paths 정확히 사용
+- B7: 기본값 유지 (PRODUCTS_SUPABASE_ENABLED=false, LocalProductsDataSource)
+- B8: 보안 제약 준수
+- B9: UI/CSS 변경 없음
+- B10: DB batch helpers 존재 확인
+
+### 전체 JS 테스트 결과
+```
+node --test \
+tests/supabase-client.test.js \
+tests/auth-service.test.js \
+tests/auth-ui.test.js \
+tests/app-bootstrap.test.js \
+tests/local-runner-contract.test.mjs \
+tests/browser-auth-smoke-contract.test.mjs \
+tests/browser-auth-recovery-contract.test.mjs \
+tests/data-gateway-async-contract.test.mjs \
+tests/products-read-async-contract.test.mjs \
+tests/products-write-async-contract.test.mjs \
+tests/products-datasource-contract.test.mjs \
+tests/products-supabase-mapping-contract.test.mjs \
+tests/products-supabase-datasource-skeleton-contract.test.mjs \
+tests/products-supabase-read-contract.test.mjs \
+tests/products-supabase-write-contract.test.mjs \
+tests/products-runtime-feature-flag-contract.test.mjs \
+tests/products-batch-actions-contract.test.mjs \
+tests/brand-setting-contract.test.mjs
+```
+- **303/303 PASS** ✅ (완전 통과)
+
+### products runtime local integration 결과
+`RUN_LOCAL_SUPABASE_INTEGRATION=1 node --test tests/products-runtime-local.integration.mjs`
+- **18/18 PASS** ✅ (기존 16개 + 신규 S15/S16)
+- S15: batchDeleteProductsAsync via SupabaseProductsDataSource
+- S16: batchUpdateProductsAsync via SupabaseProductsDataSource
+- soft delete된 상품은 목록에서 제외
+
+### DB lint 결과
+`supabase db lint --local --level error --fail-on error`
+- **PASS** (exit=0) ✅
+
+### pgTAP 결과
+`supabase test db --local`
+- **161/161 PASS** (exit=0) ✅
+
+### 브랜드 표기 검색 결과
+- **JS/HTML 파일**: "LES SOUL" 표기 없음 ✅
+- **문서 파일**: 과거 변경 기록 설명 용도로만 사용 중 (정상)
+
+### 제약 준수
+- setProducts disabled 유지: ✅
+- products.js가 Supabase client를 직접 참조하지 않음: ✅
+- Promise.all 대량 병렬 호출 없음: ✅
+- products.js 변경: ✅ (batch actions per-item async 호출로 수정)
+- css/style.css 변경: ❌ (no)
+- supabase migrations/tests 변경: ❌ (no)
+- 원격 Supabase 연결: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 포함: ❌ (no)
+- 기본 runtime DataSource: LocalProductsDataSource ✅
+- PRODUCTS_SUPABASE_ENABLED 기본값 false: ✅

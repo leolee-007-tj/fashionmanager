@@ -787,6 +787,175 @@ test('Products Runtime Local Activation Smoke (3-5N)', async (t) => {
         }
     });
 
+    // === Batch delete via DB.batchDeleteProductsAsync (per-item deleteProductAsync) ===
+    await t.test('S15: batchDeleteProductsAsync uses sequential deleteProductAsync via SupabaseProductsDataSource', async () => {
+        const DB = loadDbForTesting();
+        const sandboxGlobal = global;
+
+        const originalConfig = sandboxGlobal.LESOUL_CONFIG;
+        const originalSupabase = sandboxGlobal.LESOULSupabase;
+        const originalBootstrap = sandboxGlobal.LESOULAppBootstrap;
+
+        try {
+            sandboxGlobal.LESOUL_CONFIG = {
+                SUPABASE_ENABLED: true,
+                PRODUCTS_SUPABASE_ENABLED: true,
+                SUPABASE_URL: apiUrl,
+                SUPABASE_CLIENT_KEY: anonKey
+            };
+
+            const anonClient = createAnonRestClient(accessToken);
+
+            sandboxGlobal.LESOULSupabase = {
+                isInitialized: () => true,
+                getClient: () => anonClient
+            };
+
+            sandboxGlobal.LESOULAppBootstrap = {
+                getContext: () => ({
+                    activeMembership: { storeId, role: 'owner' }
+                })
+            };
+
+            DB.resetProductsDataSourceForTesting();
+
+            const ds = DB.getProductsDataSource();
+            assert.equal(ds.name, 'SupabaseProductsDataSource');
+
+            const product1 = await ds.createProduct({
+                id: 8201,
+                product_code: 'BATCH-DEL-001',
+                original_title: 'Batch Delete Test 1',
+                brand: 'BATCH',
+                category: 'test',
+                korea_cost: 10000,
+                current_stock: 10,
+                stock_year: 2026,
+                stock_month: 7
+            });
+            const product2 = await ds.createProduct({
+                id: 8202,
+                product_code: 'BATCH-DEL-002',
+                original_title: 'Batch Delete Test 2',
+                brand: 'BATCH',
+                category: 'test',
+                korea_cost: 20000,
+                current_stock: 20,
+                stock_year: 2026,
+                stock_month: 7
+            });
+
+            const results = await DB.batchDeleteProductsAsync([product1.id, product2.id]);
+            assert.ok(Array.isArray(results.success), 'success must be array');
+            assert.ok(Array.isArray(results.failed), 'failed must be array');
+            assert.ok(Array.isArray(results.errors), 'errors must be array');
+            assert.equal(results.success.length, 2, 'both products should be deleted');
+            assert.equal(results.failed.length, 0, 'no failures expected');
+
+            const products = await ds.listProducts();
+            const deleted1 = products.find(p => p.id === product1.id);
+            const deleted2 = products.find(p => p.id === product2.id);
+            assert.ok(!deleted1, 'deleted product 1 should not appear in list');
+            assert.ok(!deleted2, 'deleted product 2 should not appear in list');
+
+            assertNoSensitiveLeak(JSON.stringify(results));
+        } finally {
+            sandboxGlobal.LESOUL_CONFIG = originalConfig;
+            sandboxGlobal.LESOULSupabase = originalSupabase;
+            sandboxGlobal.LESOULAppBootstrap = originalBootstrap;
+        }
+    });
+
+    // === Batch update via DB.batchUpdateProductsAsync (per-item updateProductAsync) ===
+    await t.test('S16: batchUpdateProductsAsync uses sequential updateProductAsync via SupabaseProductsDataSource', async () => {
+        const DB = loadDbForTesting();
+        const sandboxGlobal = global;
+
+        const originalConfig = sandboxGlobal.LESOUL_CONFIG;
+        const originalSupabase = sandboxGlobal.LESOULSupabase;
+        const originalBootstrap = sandboxGlobal.LESOULAppBootstrap;
+
+        try {
+            sandboxGlobal.LESOUL_CONFIG = {
+                SUPABASE_ENABLED: true,
+                PRODUCTS_SUPABASE_ENABLED: true,
+                SUPABASE_URL: apiUrl,
+                SUPABASE_CLIENT_KEY: anonKey
+            };
+
+            const anonClient = createAnonRestClient(accessToken);
+
+            sandboxGlobal.LESOULSupabase = {
+                isInitialized: () => true,
+                getClient: () => anonClient
+            };
+
+            sandboxGlobal.LESOULAppBootstrap = {
+                getContext: () => ({
+                    activeMembership: { storeId, role: 'owner' }
+                })
+            };
+
+            DB.resetProductsDataSourceForTesting();
+
+            const ds = DB.getProductsDataSource();
+            assert.equal(ds.name, 'SupabaseProductsDataSource');
+
+            const product1 = await ds.createProduct({
+                id: 8301,
+                product_code: 'BATCH-UPD-001',
+                original_title: 'Batch Update Test 1',
+                brand: 'BATCH',
+                category: 'test',
+                korea_cost: 10000,
+                current_stock: 10,
+                stock_year: 2026,
+                stock_month: 7
+            });
+            const product2 = await ds.createProduct({
+                id: 8302,
+                product_code: 'BATCH-UPD-002',
+                original_title: 'Batch Update Test 2',
+                brand: 'BATCH',
+                category: 'test',
+                korea_cost: 20000,
+                current_stock: 20,
+                stock_year: 2026,
+                stock_month: 7
+            });
+
+            const results = await DB.batchUpdateProductsAsync(
+                [product1.id, product2.id],
+                { category: 'Updated', color: 'red', stock_year: 2027, stock_month: 1 }
+            );
+            assert.ok(Array.isArray(results.success), 'success must be array');
+            assert.ok(Array.isArray(results.failed), 'failed must be array');
+            assert.ok(Array.isArray(results.errors), 'errors must be array');
+            assert.equal(results.success.length, 2, 'both products should be updated');
+            assert.equal(results.failed.length, 0, 'no failures expected');
+
+            const products = await ds.listProducts();
+            const updated1 = products.find(p => p.id === product1.id);
+            const updated2 = products.find(p => p.id === product2.id);
+            assert.ok(updated1, 'updated product 1 should appear in list');
+            assert.ok(updated2, 'updated product 2 should appear in list');
+            assert.equal(updated1.category, 'Updated');
+            assert.equal(updated1.color, 'red');
+            assert.equal(updated1.stock_year, 2027);
+            assert.equal(updated1.stock_month, 1);
+            assert.equal(updated2.category, 'Updated');
+            assert.equal(updated2.color, 'red');
+            assert.equal(updated2.stock_year, 2027);
+            assert.equal(updated2.stock_month, 1);
+
+            assertNoSensitiveLeak(JSON.stringify(results));
+        } finally {
+            sandboxGlobal.LESOUL_CONFIG = originalConfig;
+            sandboxGlobal.LESOULSupabase = originalSupabase;
+            sandboxGlobal.LESOULAppBootstrap = originalBootstrap;
+        }
+    });
+
     // === remote URL 차단 ===
     await t.test('S14: remote supabase.co URL blocks runtime activation', async () => {
         const DB = loadDbForTesting();
