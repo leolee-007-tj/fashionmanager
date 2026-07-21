@@ -167,7 +167,7 @@ describe('Products Supabase Write Contract (W1-W21)', function () {
             createMockClient(),
             { storeId: 'test-store' }
         );
-        assert.throws(() => dsNoLocal.createProduct(sampleProduct), /requires localOnly/i);
+        assert.throws(() => dsNoLocal.createProduct(sampleProduct), /requires valid context/i);
 
         const dsNoStore = DB._createControlledSupabaseProductsDataSource(
             createMockClient(),
@@ -195,7 +195,7 @@ describe('Products Supabase Write Contract (W1-W21)', function () {
             createMockClient(),
             { storeId: 'test-store' }
         );
-        assert.throws(() => dsNoLocal.updateProduct(1, { original_title: 'X' }), /requires localOnly/i);
+        assert.throws(() => dsNoLocal.updateProduct(1, { original_title: 'X' }), /requires valid context/i);
 
         const dsNoStore = DB._createControlledSupabaseProductsDataSource(
             createMockClient(),
@@ -223,7 +223,7 @@ describe('Products Supabase Write Contract (W1-W21)', function () {
             createMockClient(),
             { storeId: 'test-store' }
         );
-        assert.throws(() => dsNoLocal.deleteProduct(1), /requires localOnly/i);
+        assert.throws(() => dsNoLocal.deleteProduct(1), /requires valid context/i);
 
         const dsNoStore = DB._createControlledSupabaseProductsDataSource(
             createMockClient(),

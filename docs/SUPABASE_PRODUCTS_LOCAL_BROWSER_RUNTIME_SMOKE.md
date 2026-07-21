@@ -219,3 +219,33 @@
 - CSS 변경: ❌ 없음
 - supabase migrations/tests 변경: ❌ 없음
 - 원격 Supabase 연결: ❌ 없음
+
+## 3-5Q: Products Remote Runtime Guardrail Preparation (2026-07-21)
+
+### local runtime smoke 유지
+- 기존 local flag-on/flag-off 브라우저 동작 동일 ✅
+- 상품 목록/추가/수정/삭제/일괄 작업 정상 동작 ✅
+- `PRODUCTS_SUPABASE_ENABLED=false`에서 LocalProductsDataSource 유지 ✅
+
+### remote guardrail 동작
+- remote guardrail은 실제 원격 연결이 아니라 차단/조건 검증만 수행
+- `PRODUCTS_SUPABASE_REMOTE_ENABLED` 기본값 `false`에서:
+  - remote URL(supabase.co) 감지 시 즉시 차단
+  - error: "Products Supabase remote runtime is not enabled"
+  - dummy URL/key만 사용, **실제 네트워크 호출 없음**
+- `PRODUCTS_SUPABASE_REMOTE_ENABLED=true`에서:
+  - remote URL + 모든 필수 조건 충족 시 SupabaseProductsDataSource 후보 생성 가능
+  - 단, service_role key는 계속 차단
+
+### local flag-on에서 기존 runtime 정상 동작
+- local URL(localhost/127.0.0.1)은 `PRODUCTS_SUPABASE_REMOTE_ENABLED=false`여도 기존 조건 충족 시 허용
+- `_validateWriteContext`가 `context.localOnly`와 `context.remoteEnabled` 모두 지원
+- 브라우저 flag-on smoke 결과: 기존 3-5P 결과와 동일
+
+### 제약 준수
+- PRODUCTS_SUPABASE_REMOTE_ENABLED 기본값 false: ✅
+- 실제 원격 Supabase 연결: ❌ 없음
+- products.js 변경: ❌ 없음
+- css/style.css 변경: ❌ 없음
+- supabase migrations/tests 변경: ❌ 없음
+- js/config.js commit: ❌ 없음

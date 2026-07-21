@@ -1555,3 +1555,56 @@ SupabaseProductsDataSource가 정상 선택되고 read/write가 정상 동작하
 - js/config.js commit: ❌ 없음
 - 원격 Supabase 연결: ❌ 없음
 - js/config.js commit: ❌ 없음
+
+## 24. 3-5Q: Products Remote Runtime Guardrail Preparation (2026-07-21)
+
+### 목표
+Products Supabase runtime이 나중에 원격 Supabase 프로젝트에서도 안전하게 켜질 수 있도록 remote guardrail flag만 준비한다.
+**실제 원격 Supabase 연결은 하지 않는다.**
+
+### 핵심 원칙
+- `PRODUCTS_SUPABASE_REMOTE_ENABLED` 기본값 `false` (js/config.example.js)
+- remote URL + remote flag `false` → 차단 (error: "Products Supabase remote runtime is not enabled")
+- remote URL + remote flag `true` + 모든 필수 조건 → `SupabaseProductsDataSource` 후보 생성 가능
+- `service_role` key는 remote flag `true`라도 계속 차단
+- local URL은 remote flag `false`여도 기존 조건 충족 시 허용
+- `_validateWriteContext`가 `context.localOnly`와 `context.remoteEnabled` 모두 지원
+
+### 변경 내용
+
+#### js/config.example.js
+- `PRODUCTS_SUPABASE_REMOTE_ENABLED: false` 추가
+
+#### js/db.js
+- `_resolveRuntimeProductsDataSource()`에 remote URL guardrail 추가
+  - URL이 `supabase.co` 패턴(원격)인 경우:
+    - `PRODUCTS_SUPABASE_REMOTE_ENABLED !== true` → throw "Products Supabase remote runtime is not enabled"
+    - `PRODUCTS_SUPABASE_REMOTE_ENABLED === true` + 기타 필수 조건 → `SupabaseProductsDataSource` 후보
+  - URL이 `localhost` / `127.0.0.1`인 경우: 기존 local-only 조건 유지
+- `_validateWriteContext(context)`가 `context.localOnly`와 `context.remoteEnabled` 모두 지원
+- `service_role` key는 remote flag `true`라도 계속 차단
+
+#### tests/products-runtime-feature-flag-contract.test.mjs
+- FF24-FF38: remote guardrail contract 테스트 추가
+
+#### tests/products-supabase-read-contract.test.mjs
+- remote URL guardrail 관련 검증 추가
+
+#### tests/products-supabase-write-contract.test.mjs
+- remote URL guardrail 관련 검증 추가
+
+### 검증 결과
+- 318/318 JS 테스트 PASS
+- DB lint PASS
+- pgTAP 161/161 PASS
+
+### 이번 단계에서 하지 않는 일
+- 실제 원격 Supabase 연결 ❌
+- supabase.co URL 실제 허용 ❌ (flag만 준비)
+- Products 화면을 기본값으로 Supabase 전환 ❌
+- UI 리뉴얼 ❌
+- products.js 변경 ❌
+- css/style.css 변경 ❌
+- supabase migrations/tests 변경 ❌
+- data_export.json 재추가 ❌
+- js/config.js commit ❌

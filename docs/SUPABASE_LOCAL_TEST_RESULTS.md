@@ -2518,3 +2518,68 @@ tests/brand-setting-contract.test.mjs
 - data_export.json 포함: ❌ (no)
 - 기본 runtime DataSource: LocalProductsDataSource ✅
 - PRODUCTS_SUPABASE_ENABLED 기본값 false: ✅
+
+## 3-5Q: Products Remote Runtime Guardrail Preparation (2026-07-21)
+
+### 목적
+Products Supabase runtime이 나중에 원격 Supabase 프로젝트에서도 안전하게 켜질 수 있도록 remote guardrail flag만 준비한다.
+**실제 원격 Supabase 연결은 하지 않는다.**
+
+### 변경 파일
+- `js/config.example.js`: `PRODUCTS_SUPABASE_REMOTE_ENABLED: false` 추가
+- `js/db.js`: `_resolveRuntimeProductsDataSource()`에 remote URL guardrail 추가, `_validateWriteContext` 확장
+- `tests/products-runtime-feature-flag-contract.test.mjs`: FF24-FF38 remote guardrail contract 테스트 추가
+- `tests/products-supabase-read-contract.test.mjs`: remote URL guardrail 검증 추가
+- `tests/products-supabase-write-contract.test.mjs`: remote URL guardrail 검증 추가
+
+### remote guardrail contract 테스트 결과
+`node --test tests/products-runtime-feature-flag-contract.test.mjs`
+
+- FF1–FF23: 23/23 PASS (기존 3-5N/3-5M 결과 유지)
+- FF24–FF38: 15/15 PASS (신규 remote guardrail)
+
+**총 38/38 PASS**
+
+### 전체 JS 테스트 결과
+```
+node --test \
+tests/supabase-client.test.js \
+tests/auth-service.test.js \
+tests/auth-ui.test.js \
+tests/app-bootstrap.test.js \
+tests/local-runner-contract.test.mjs \
+tests/browser-auth-smoke-contract.test.mjs \
+tests/browser-auth-recovery-contract.test.mjs \
+tests/data-gateway-async-contract.test.mjs \
+tests/products-read-async-contract.test.mjs \
+tests/products-write-async-contract.test.mjs \
+tests/products-datasource-contract.test.mjs \
+tests/products-supabase-mapping-contract.test.mjs \
+tests/products-supabase-datasource-skeleton-contract.test.mjs \
+tests/products-supabase-read-contract.test.mjs \
+tests/products-supabase-write-contract.test.mjs \
+tests/products-runtime-feature-flag-contract.test.mjs \
+tests/products-batch-actions-contract.test.mjs \
+tests/brand-setting-contract.test.mjs
+```
+- **318/318 PASS** ✅
+
+### DB lint 결과
+`supabase db lint --local --level error --fail-on error`
+- **PASS** (exit=0) ✅
+
+### pgTAP 결과
+`supabase test db --local`
+- **161/161 PASS** (exit=0) ✅
+
+### 브랜드 표기 검색 결과
+- **JS/HTML 파일**: "LES SOUL" 표기 없음 ✅
+- **문서 파일**: 과거 변경 기록 설명 용도로만 사용 중 (정상)
+
+### 제약 준수
+- PRODUCTS_SUPABASE_REMOTE_ENABLED 기본값 false: ✅
+- products.js 변경: ❌ 없음
+- css/style.css 변경: ❌ 없음
+- supabase migrations/tests 변경: ❌ 없음
+- 원격 Supabase 연결: ❌ 없음
+- js/config.js commit: ❌ 없음

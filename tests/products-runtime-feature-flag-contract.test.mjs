@@ -136,7 +136,7 @@ describe('Products Runtime Feature Flag Gate Contract (3-5M)', function () {
         );
     });
 
-    it('FF7: PRODUCTS_SUPABASE_ENABLED true + remote supabase.co URL → throws', function () {
+    it('FF7: PRODUCTS_SUPABASE_ENABLED true + remote supabase.co URL + remote flag false → throws', function () {
         global.LESOUL_CONFIG = {
             SUPABASE_ENABLED: true,
             PRODUCTS_SUPABASE_ENABLED: true,
@@ -154,8 +154,8 @@ describe('Products Runtime Feature Flag Gate Contract (3-5M)', function () {
         DB.resetProductsDataSourceForTesting();
         assert.throws(
             () => DB.getProductsDataSource(),
-            /requires localhost URL/i,
-            'PRODUCTS_SUPABASE_ENABLED=true with remote URL must throw'
+            /remote runtime is not enabled|PRODUCTS_SUPABASE_REMOTE_ENABLED/i,
+            'PRODUCTS_SUPABASE_ENABLED=true with remote URL + remote flag false must throw'
         );
     });
 
@@ -385,5 +385,225 @@ describe('Products Runtime Feature Flag Gate Contract (3-5M)', function () {
         assert.throws(() => ds.setProducts([{ id: 1 }]),
             /not enabled|disabled/i,
             'setProducts must be disabled on SupabaseProductsDataSource');
+    });
+
+    // ==================== 3-5Q: Remote Runtime Guardrail Tests ====================
+
+    it('FF24: config.example.js has PRODUCTS_SUPABASE_REMOTE_ENABLED default false', function () {
+        const content = readFile('js/config.example.js');
+        assert.match(content, /PRODUCTS_SUPABASE_REMOTE_ENABLED:\s*false/,
+            'config.example.js must have PRODUCTS_SUPABASE_REMOTE_ENABLED: false');
+    });
+
+    it('FF25: remote URL + PRODUCTS_SUPABASE_REMOTE_ENABLED true + all conditions → SupabaseProductsDataSource', function () {
+        global.LESOUL_CONFIG = {
+            SUPABASE_ENABLED: true,
+            PRODUCTS_SUPABASE_ENABLED: true,
+            PRODUCTS_SUPABASE_REMOTE_ENABLED: true,
+            SUPABASE_URL: 'https://example.supabase.co',
+            SUPABASE_CLIENT_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiJ9.fake'
+        };
+        global.LESOULSupabase = {
+            isInitialized: () => true,
+            getClient: () => ({
+                supabaseUrl: 'https://example.supabase.co',
+                from: () => ({ select: () => ({ eq: () => ({ is: () => ({ then: () => Promise.resolve({ data: [], error: null }) }) }) }) }),
+                rpc: () => Promise.resolve({ data: null, error: null })
+            })
+        };
+        global.LESOULAppBootstrap = {
+            getContext: () => ({ activeMembership: { storeId: 'store-uuid-remote' } })
+        };
+        const DB = loadDbForTesting();
+        DB.resetProductsDataSourceForTesting();
+        const ds = DB.getProductsDataSource();
+        assert.equal(ds.name, 'SupabaseProductsDataSource',
+            'remote URL + remote flag true + all conditions → SupabaseProductsDataSource');
+    });
+
+    it('FF26: remote flag true + service_role key → throws', function () {
+        const fakeServiceRoleJwt = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.fake';
+        global.LESOUL_CONFIG = {
+            SUPABASE_ENABLED: true,
+            PRODUCTS_SUPABASE_ENABLED: true,
+            PRODUCTS_SUPABASE_REMOTE_ENABLED: true,
+            SUPABASE_URL: 'https://example.supabase.co',
+            SUPABASE_CLIENT_KEY: fakeServiceRoleJwt
+        };
+        global.LESOULSupabase = {
+            isInitialized: () => true,
+            getClient: () => ({ supabaseUrl: 'https://example.supabase.co' })
+        };
+        global.LESOULAppBootstrap = {
+            getContext: () => ({ activeMembership: { storeId: 'store-uuid-remote-sr' } })
+        };
+        const DB = loadDbForTesting();
+        DB.resetProductsDataSourceForTesting();
+        assert.throws(
+            () => DB.getProductsDataSource(),
+            /service_role/i,
+            'remote flag true + service_role key must throw'
+        );
+    });
+
+    it('FF27: remote flag true + no client → throws', function () {
+        global.LESOUL_CONFIG = {
+            SUPABASE_ENABLED: true,
+            PRODUCTS_SUPABASE_ENABLED: true,
+            PRODUCTS_SUPABASE_REMOTE_ENABLED: true,
+            SUPABASE_URL: 'https://example.supabase.co',
+            SUPABASE_CLIENT_KEY: 'anon-key'
+        };
+        global.LESOULSupabase = {
+            isInitialized: () => false,
+            getClient: () => { throw new Error('not initialized'); }
+        };
+        const DB = loadDbForTesting();
+        DB.resetProductsDataSourceForTesting();
+        assert.throws(
+            () => DB.getProductsDataSource(),
+            /requires initialized Supabase client/i,
+            'remote flag true + no client must throw'
+        );
+    });
+
+    it('FF28: remote flag true + no storeId → throws', function () {
+        global.LESOUL_CONFIG = {
+            SUPABASE_ENABLED: true,
+            PRODUCTS_SUPABASE_ENABLED: true,
+            PRODUCTS_SUPABASE_REMOTE_ENABLED: true,
+            SUPABASE_URL: 'https://example.supabase.co',
+            SUPABASE_CLIENT_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiJ9.fake'
+        };
+        global.LESOULSupabase = {
+            isInitialized: () => true,
+            getClient: () => ({ supabaseUrl: 'https://example.supabase.co' })
+        };
+        global.LESOULAppBootstrap = {
+            getContext: () => ({ activeMembership: null })
+        };
+        const DB = loadDbForTesting();
+        DB.resetProductsDataSourceForTesting();
+        assert.throws(
+            () => DB.getProductsDataSource(),
+            /requires active storeId/i,
+            'remote flag true + no storeId must throw'
+        );
+    });
+
+    it('FF29: local URL still works when remote flag is false', function () {
+        global.LESOUL_CONFIG = {
+            SUPABASE_ENABLED: true,
+            PRODUCTS_SUPABASE_ENABLED: true,
+            PRODUCTS_SUPABASE_REMOTE_ENABLED: false,
+            SUPABASE_URL: 'http://127.0.0.1:54321',
+            SUPABASE_CLIENT_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiJ9.fake'
+        };
+        global.LESOULSupabase = {
+            isInitialized: () => true,
+            getClient: () => ({
+                supabaseUrl: 'http://127.0.0.1:54321',
+                from: () => ({ select: () => ({ eq: () => ({ is: () => ({ then: () => Promise.resolve({ data: [], error: null }) }) }) }) }),
+                rpc: () => Promise.resolve({ data: null, error: null })
+            })
+        };
+        global.LESOULAppBootstrap = {
+            getContext: () => ({ activeMembership: { storeId: 'store-uuid-local' } })
+        };
+        const DB = loadDbForTesting();
+        DB.resetProductsDataSourceForTesting();
+        const ds = DB.getProductsDataSource();
+        assert.equal(ds.name, 'SupabaseProductsDataSource',
+            'local URL should still work when remote flag is false');
+    });
+
+    it('FF30: default config → LocalProductsDataSource', function () {
+        // PRODUCTS_SUPABASE_REMOTE_ENABLED 기본값 false 환경
+        global.LESOUL_CONFIG = {
+            SUPABASE_ENABLED: false,
+            PRODUCTS_SUPABASE_ENABLED: false,
+            PRODUCTS_SUPABASE_REMOTE_ENABLED: false
+        };
+        const DB = loadDbForTesting();
+        DB.resetProductsDataSourceForTesting();
+        const ds = DB.getProductsDataSource();
+        assert.equal(ds.name, 'LocalProductsDataSource');
+    });
+
+    it('FF31: remote datasource context has remoteEnabled=true and localOnly=false', function () {
+        global.LESOUL_CONFIG = {
+            SUPABASE_ENABLED: true,
+            PRODUCTS_SUPABASE_ENABLED: true,
+            PRODUCTS_SUPABASE_REMOTE_ENABLED: true,
+            SUPABASE_URL: 'https://example.supabase.co',
+            SUPABASE_CLIENT_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiJ9.fake'
+        };
+        global.LESOULSupabase = {
+            isInitialized: () => true,
+            getClient: () => ({
+                supabaseUrl: 'https://example.supabase.co',
+                from: () => ({ select: () => ({ eq: () => ({ is: () => ({ then: () => Promise.resolve({ data: [], error: null }) }) }) }) }),
+                rpc: () => Promise.resolve({ data: null, error: null })
+            })
+        };
+        global.LESOULAppBootstrap = {
+            getContext: () => ({ activeMembership: { storeId: 'store-uuid-ctx' } })
+        };
+        const DB = loadDbForTesting();
+        DB.resetProductsDataSourceForTesting();
+        // Verify code contains remoteEnabled in context creation
+        const dbContent = readFile('js/db.js');
+        assert.ok(dbContent.includes('remoteEnabled: !isLocalUrl'),
+            'db.js must include remoteEnabled in datasource context');
+    });
+
+    it('FF32: _validateWriteContext accepts remoteEnabled context', function () {
+        const dbContent = readFile('js/db.js');
+        // Verify _validateWriteContext checks both localOnly and remoteEnabled
+        assert.ok(dbContent.includes('context.remoteEnabled !== true'),
+            '_validateWriteContext must check context.remoteEnabled');
+    });
+
+    it('FF33: _validateWriteContext localhost URL check is conditional on localOnly', function () {
+        const dbContent = readFile('js/db.js');
+        // Verify localhost URL check is only for localOnly context
+        assert.match(dbContent, /context\.localOnly === true\)/,
+            'localhost URL check should be conditional on context.localOnly === true');
+    });
+
+    it('FF34: db.js contains PRODUCTS_SUPABASE_REMOTE_ENABLED reference', function () {
+        const dbContent = readFile('js/db.js');
+        assert.ok(dbContent.includes('PRODUCTS_SUPABASE_REMOTE_ENABLED'),
+            'db.js must reference PRODUCTS_SUPABASE_REMOTE_ENABLED');
+    });
+
+    it('FF35: no token/session/key console.log in db.js remote guardrail path', function () {
+        const dbContent = readFile('js/db.js');
+        // Check the remote guardrail section
+        const guardrailMatch = dbContent.match(/3-5Q[\s\S]*?PRODUCTS_SUPABASE_REMOTE_ENABLED/);
+        // Overall console.log check in _resolveRuntimeProductsDataSource still applies
+        const fnMatch = dbContent.match(/_resolveRuntimeProductsDataSource\s*\([^)]*\)\s*\{([\s\S]*?)\n\s*\},/);
+        assert.ok(fnMatch, '_resolveRuntimeProductsDataSource should exist');
+        assert.doesNotMatch(fnMatch[1], /console\.log/,
+            '_resolveRuntimeProductsDataSource must not console.log');
+    });
+
+    it('FF36: products.js is not modified (remote guardrail only touches db.js + config)', function () {
+        const content = readFile('js/products.js');
+        assert.doesNotMatch(content, /PRODUCTS_SUPABASE_REMOTE_ENABLED/,
+            'products.js must not reference PRODUCTS_SUPABASE_REMOTE_ENABLED');
+    });
+
+    it('FF37: css/style.css is unchanged', function () {
+        const content = readFile('css/style.css');
+        assert.ok(content.length > 0, 'css/style.css should exist');
+        assert.doesNotMatch(content, /PRODUCTS_SUPABASE_REMOTE_ENABLED/,
+            'css/style.css must not reference PRODUCTS_SUPABASE_REMOTE_ENABLED');
+    });
+
+    it('FF38: index.html is unchanged', function () {
+        const content = readFile('index.html');
+        assert.doesNotMatch(content, /PRODUCTS_SUPABASE_REMOTE_ENABLED/,
+            'index.html must not reference PRODUCTS_SUPABASE_REMOTE_ENABLED');
     });
 });

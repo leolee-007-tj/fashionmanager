@@ -1643,3 +1643,59 @@ getProductsDataSource()
 
 ### 상세 문서
 - ASYNC_MIGRATION_MAP: `docs/ASYNC_MIGRATION_MAP.md` §18
+
+## 26. 3-5Q: Products Remote Runtime Guardrail Preparation (2026-07-21)
+
+### 목표
+Products Supabase runtime이 나중에 원격 Supabase 프로젝트에서도 안전하게 켜질 수 있도록 remote guardrail flag만 준비한다.
+**실제 원격 Supabase 연결은 하지 않는다.**
+
+### LESOUL_CONFIG.PRODUCTS_SUPABASE_REMOTE_ENABLED
+- 기본값: `false` (js/config.example.js)
+- `true`로 설정하더라도 다른 필수 조건이 모두 충족되어야 SupabaseProductsDataSource 후보가 됨
+- remote URL이 감지되면 이 flag가 명시적으로 `true`여야만 후보 생성 가능
+
+### ProductsDataSource URL 허용 정책
+
+| URL 유형 | 조건 | 결과 |
+|---|---|---|
+| local URL (localhost / 127.0.0.1) | `PRODUCTS_SUPABASE_ENABLED=true` + 기타 조건 충족 | 허용 (SupabaseProductsDataSource 후보) |
+| remote URL (supabase.co) | `PRODUCTS_SUPABASE_REMOTE_ENABLED=false` | 차단 (error: "Products Supabase remote runtime is not enabled") |
+| remote URL (supabase.co) | `PRODUCTS_SUPABASE_REMOTE_ENABLED=true` + `PRODUCTS_SUPABASE_ENABLED=true` + 기타 조건 충족 | 후보 허용 (SupabaseProductsDataSource) |
+
+### _validateWriteContext 지원
+- `db.js`의 `_validateWriteContext(context)`가 `context.localOnly`와 `context.remoteEnabled` 모두 지원
+- `context.localOnly === true`: local-only 조건 검증 (기존 동작)
+- `context.remoteEnabled === true`: remote 허용 조건 검증 (3-5Q 추가)
+- `service_role` key는 `remoteEnabled === true`라도 계속 차단
+
+### SupabaseProductsDataSource 활성화 조건 (remote URL 시)
+1. LESOUL_CONFIG 존재
+2. LESOUL_CONFIG.SUPABASE_ENABLED === true
+3. LESOUL_CONFIG.PRODUCTS_SUPABASE_ENABLED === true
+4. LESOUL_CONFIG.PRODUCTS_SUPABASE_REMOTE_ENABLED === true
+5. LESOULSupabase.isInitialized() === true
+6. LESOULSupabase.getClient() 존재
+7. activeMembership.storeId 존재
+8. URL이 supabase.co 패턴 (remote)
+9. service_role key가 아님
+10. client 명시적 존재
+
+### 현재 활성 DataSource
+- **LocalProductsDataSource**: 계속 기본 활성 상태 유지
+- `PRODUCTS_SUPABASE_ENABLED === false` → LocalProductsDataSource
+- `PRODUCTS_SUPABASE_REMOTE_ENABLED === false`에서 remote URL → 차단 (error throw)
+- remote flag `true` + 모든 조건 충족 시에만 SupabaseProductsDataSource 후보
+
+### 제약 준수
+- PRODUCTS_SUPABASE_REMOTE_ENABLED 기본값 false: ✅
+- products.js 변경: ❌ (no)
+- css/style.css 변경: ❌ (no)
+- supabase migrations/tests 변경: ❌ (no)
+- 실제 원격 Supabase 연결: ❌ (no, flag만 준비)
+- service_role 브라우저 사용: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 재추가: ❌ (no)
+
+### 상세 문서
+- ASYNC_MIGRATION_MAP: `docs/ASYNC_MIGRATION_MAP.md` §24

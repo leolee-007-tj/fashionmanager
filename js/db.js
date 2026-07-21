@@ -163,10 +163,10 @@ const DB = {
      *   3. LESOUL_CONFIG.PRODUCTS_SUPABASE_ENABLED === true
      *   4. LESOULSupabase 초기화 정상
      *   5. activeMembership.storeId 확인 가능
-     *   6. context.localOnly === true
-     *   7. Supabase URL이 localhost / 127.0.0.1
-     *   8. service_role key 아님
-     *   9. client 명시적 존재
+     *   6a. local URL (localhost / 127.0.0.1) → 기존 조건 그대로 허용
+     *   6b. remote URL → PRODUCTS_SUPABASE_REMOTE_ENABLED === true 필요 (3-5Q)
+     *   7. service_role key 아님
+     *   8. client 명시적 존재
      *
      * 조건 중 하나라도 실패하면:
      *   - PRODUCTS_SUPABASE_ENABLED !== true → 조용히 LocalProductsDataSource 유지
@@ -235,8 +235,13 @@ const DB = {
         }
 
         const url = String(client.supabaseUrl || config.SUPABASE_URL || '').toLowerCase();
-        if (!/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(url)) {
-            throw new Error('Products Supabase runtime requires localhost URL');
+        const isLocalUrl = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(url);
+
+        // 3-5Q: Remote URL guardrail
+        if (!isLocalUrl) {
+            if (config.PRODUCTS_SUPABASE_REMOTE_ENABLED !== true) {
+                throw new Error('Products Supabase remote runtime is not enabled (PRODUCTS_SUPABASE_REMOTE_ENABLED)');
+            }
         }
 
         // service_role key 차단
@@ -264,7 +269,8 @@ const DB = {
         }
 
         return this._createControlledSupabaseProductsDataSource(client, {
-            localOnly: true,
+            localOnly: isLocalUrl,
+            remoteEnabled: !isLocalUrl,
             storeId: storeId,
             url: url
         });
@@ -388,18 +394,19 @@ const DB = {
      * - 원격 Supabase 연결 금지
      * - service_role 브라우저 사용 금지
      *
-     * write methods 공통 local-only 조건:
+     * write methods 공통 조건:
      *   1. client가 명시적으로 주입되어야 함
-     *   2. context가 { localOnly: true, storeId: ... } 형태여야 함
-     *   3. localOnly !== true면 throw
+     *   2. context가 { localOnly: true } 또는 { remoteEnabled: true } 형태여야 함 (3-5Q)
+     *   3. localOnly !== true && remoteEnabled !== true면 throw
      *   4. storeId가 없으면 throw
-     *   5. URL이 localhost / 127.0.0.1이 아니면 throw
-     *   6. 결과 row는 mapSupabaseRowToLegacyProduct로 변환
-     *   7. token/session/key를 console.log 하지 않음
-     *   8. 오류 메시지에 key/JWT/token/body 전체를 포함하지 않음
+     *   5. localOnly context에서 URL이 localhost / 127.0.0.1이 아니면 throw
+     *   6. remoteEnabled context에서는 localhost URL 제약 없음 (3-5Q)
+     *   7. 결과 row는 mapSupabaseRowToLegacyProduct로 변환
+     *   8. token/session/key를 console.log 하지 않음
+     *   9. 오류 메시지에 key/JWT/token/body 전체를 포함하지 않음
      *
      * @param {Object} client - Supabase client (명시적 주입)
-     * @param {Object} context - { localOnly: true, storeId: string, url?: string }
+     * @param {Object} context - { localOnly: boolean, remoteEnabled: boolean, storeId: string, url?: string }
      * @returns {Object} SupabaseProductsDataSource (local-only controlled read + write via RPC)
      */
     _createControlledSupabaseProductsDataSource(client, context) {
@@ -409,15 +416,18 @@ const DB = {
             if (!client) {
                 throw new Error(`SupabaseProductsDataSource.${methodName} requires explicit client`);
             }
-            if (!context || context.localOnly !== true) {
-                throw new Error(`SupabaseProductsDataSource.${methodName} requires localOnly context`);
+            if (!context || (context.localOnly !== true && context.remoteEnabled !== true)) {
+                throw new Error(`SupabaseProductsDataSource.${methodName} requires valid context`);
             }
             if (!context.storeId) {
                 throw new Error(`SupabaseProductsDataSource.${methodName} requires storeId`);
             }
-            const url = (client.supabaseUrl || context.url || '').toLowerCase();
-            if (!/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(url)) {
-                throw new Error(`SupabaseProductsDataSource.${methodName} requires localhost URL`);
+            // 3-5Q: localhost URL check only for local-only context
+            if (context.localOnly === true) {
+                const url = (client.supabaseUrl || context.url || '').toLowerCase();
+                if (!/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(url)) {
+                    throw new Error(`SupabaseProductsDataSource.${methodName} requires localhost URL`);
+                }
             }
         }
 

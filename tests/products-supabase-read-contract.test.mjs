@@ -156,27 +156,27 @@ describe('Products Supabase Read Contract (R1-R19)', function () {
         );
     });
 
-    it('R7: listProducts requires context.localOnly === true', function () {
+    it('R7: listProducts requires context.localOnly === true or remoteEnabled === true', function () {
         const DB = loadDbForTesting();
-        // localOnly가 false
+        // localOnly false + remoteEnabled false → invalid context
         const ds1 = DB._createControlledSupabaseProductsDataSource(
             createMockClient(),
             { localOnly: false, storeId: 'test-store' }
         );
         assert.throws(
             () => ds1.listProducts(),
-            /requires localOnly context/i,
-            'listProducts should require localOnly === true'
+            /requires valid context/i,
+            'listProducts should require valid context (localOnly or remoteEnabled)'
         );
-        // localOnly 없음
+        // localOnly 없음 → invalid context
         const ds2 = DB._createControlledSupabaseProductsDataSource(
             createMockClient(),
             { storeId: 'test-store' }
         );
         assert.throws(
             () => ds2.listProducts(),
-            /requires localOnly context/i,
-            'listProducts should require localOnly === true'
+            /requires valid context/i,
+            'listProducts should require valid context (localOnly or remoteEnabled)'
         );
         // context 자체가 없음
         const ds3 = DB._createControlledSupabaseProductsDataSource(
@@ -185,8 +185,8 @@ describe('Products Supabase Read Contract (R1-R19)', function () {
         );
         assert.throws(
             () => ds3.listProducts(),
-            /requires localOnly context/i,
-            'listProducts should require localOnly === true'
+            /requires valid context/i,
+            'listProducts should require valid context (localOnly or remoteEnabled)'
         );
     });
 
