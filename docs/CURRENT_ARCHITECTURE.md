@@ -2072,3 +2072,153 @@ signup → email confirm → authenticated 상태
 - token/key/password 출력: ❌ (no)
 - main/gh-pages 작업: ❌ (no)
 
+## 33. 3-6B: Auth Onboarding & Guest Mode Gap Audit (2026-07-22)
+
+### 목적
+
+3-6A에서 설계한 Auth Role & Guest Mode 아키텍처와 현재 3-5X 구현 사이의 gap을 감사한다.
+**이번 단계는 감사/분석만 하며, 코드 수정·DB migration은 하지 않는다.**
+
+### 현재 흐름 요약
+
+**Signup → Bootstrap 흐름:**
+
+```
+signUp()
+  → auth.signUp (Supabase Auth)
+  → session 있으면 _runBootstrap()
+     → bootstrapAuthenticatedUser()
+        1. getSession() — 세션 확인
+        2. ensure_user_profile() — RPC로 profiles upsert
+        3. getActiveMemberships() — store_members WHERE is_active=true 조회
+     → status 분기:
+        - memberships.length > 0 → 'ready' → 앱 진입
+        - memberships.length = 0 → 'needs_store_onboarding' → 매장 생성 UI
+           → createInitialStore()
+              → create_initial_store RPC
+                 → 새 store + owner 멤버십 + store_settings 생성
+              → 재 bootstrap → 'ready' → 앱 진입
+```
+
+**DataSource 활성화 조건 (db.js):**
+- `activeMembership.storeId`만 존재하면 SupabaseProductsDataSource 활성화
+- role 검사는 없음 (RLS에 위임)
+
+### 3-6A 설계와 충돌하는 지점
+
+| # | Gap 설명 | 위치 | 위험도 |
+|---|---|---|---|
+| **G-01** | **모든 authenticated 사용자가 자기 store를 owner로 생성 가능** — `create_initial_store` RPC는 `authenticated` role이면 누구나 실행 가능. LESOUL 운영 구조(단일 owner store + 초대받은 멤버)와 맞지 않음 | `auth-service.js`, `supabase/migrations/*auth_onboarding*` | **critical** |
+| **G-02** | **멤버십 없는 authenticated user = 강제 store onboarding** — membership 없으면 무조건 `needs_store_onboarding` 상태로 가서 "매장 만들기"만 보여줌. demo/practice mode로 진입할 선택지가 없음 | `js/app-bootstrap.js` | **high** |
+| **G-03** | **guest/demo mode 전용 UI 없음** — 로그인했으나 멤버십 없는 사용자에게 "연습 모드로 시작" 또는 "가입 요청" 옵션을 제공하는 화면이 없음 | `js/auth-ui.js` | **high** |
+| **G-04** | **role 기반 DataSource 활성화 검사 부족** — `activeMembership.storeId`만 확인하고 role은 확인하지 않음. staff도 클라이언트 단에서는 full DataSource를 얻음 (물론 RLS에서 제한되긴 하지만, 클라이언트 단에서 미리 차단하는 게 안전) | `js/db.js` | **medium** |
+| **G-05** | **pending/승인 대기 상태 모델 없음** — `getActiveMemberships`는 `is_active=true`만 조회하므로, 초대받았으나 아직 승인되지 않은 상태(invited/pending)를 표현할 방법이 없음 | `js/auth-service.js` | **medium** |
+
+### 위험도 상세
+
+#### critical: G-01 create_initial_store 모든 사용자에게 개방
+
+- `create_initial_store` RPC는 `SECURITY DEFINER`이고 `authenticated` role에 `GRANT EXECUTE` 됨
+- 회원가입만 하면 누구나 자신의 store를 owner로 만들 수 있음
+- LESOUL 운영 구조는 "사용자 본인 = 유일한 owner", "다른 사용자 = 초대받은 멤버" 구조
+- 현재 상태에서는 아무나 회원가입해서 자기 store를 만들고 운영 데이터와 섞일 위험
+
+#### high: G-02 membership 없으면 무조건 store onboarding
+
+- `_handleBootstrapResult`에서 `status === 'ready'`인데 `memberships.length === 0`이면 그냥 `needs_store_onboarding`으로 떨어뜨림
+- demo mode로 가는 경로가 없음
+- G-01과 결합하여 "아무나 회원가입 → 아무나 owner가 됨" 문제를 악화
+
+#### high: G-03 guest/demo mode UI 없음
+
+- `showStoreOnboarding` 화면에는 "매장 만들기"와 "로그아웃" 버튼만 있음
+- "연습 모드로 시작" 옵션이 없어서 사용자가 localStorage로 연습할 선택지가 없음
+- 미승인 사용자가 접근했을 때 적절한 안내 화면이 없음
+
+#### medium: G-04 role 기반 DataSource 활성화 검사 부족
+
+- `_resolveRuntimeProductsDataSource`는 `activeMembership.storeId`만 확인
+- `activeMembership.role`이 owner/manager/staff 중 어떤 것인지 검사하지 않음
+- RLS에서 최종적으로 막히지만, 클라이언트 단에서 미리 차단하면 방어 계층이 하나 더 생김
+
+#### medium: G-05 pending 상태 모델 없음
+
+- `getActiveMemberships`는 `is_active=true`만 필터링
+- 초대받았으나 승인 전이거나 `is_active=false`인 레코드는 프론트에서 알 수 없음
+- 사용자 입장에서는 "내가 초대받았는지 모르니 그냥 새 store를 만들자"로 이어짐 → G-01 악화
+
+### 수정 필요 파일 후보
+
+| 파일 | 관련 Gap | 코드만으로 해결 |
+|---|---|---|
+| `js/app-bootstrap.js` | G-02 | ✅ 상태 기계 확장으로 가능 |
+| `js/auth-ui.js` | G-03 | ✅ UI만 추가 |
+| `js/auth-service.js` | G-05 | ✅ getAllMemberships로 쿼리 확장 |
+| `js/db.js` | G-04 | ✅ role 검사 조건 추가 |
+| `supabase/migrations/*` (신규) | G-01, G-05 | ❌ migration 필요 — create_initial_store 제한, invitation 관련 테이블/RPC |
+
+### DB migration 필요 여부
+
+**필요함.** 구체적으로 다음 schema 변경이 필요:
+
+| 항목 | 설명 | 마이그레이션 복잡도 |
+|---|---|---|
+| `create_initial_store` 제한 | 특정 조건 아니면 호출 못하도록 — 단, 기존 owner flow는 깨지지 않아야 함 | 중간 (RPC 로직 변경) |
+| `store_members` 상태 확장 | `is_active`만으로는 부족. `status` 컬럼 추가 또는 `invited_at`, `accepted_at` 등 | 낮음 (컬럼 추가) |
+| 초대용 RPC | owner가 사용자를 초대하는 invite_store_member RPC | 중간 (신규 RPC + RLS) |
+| 가입 요청용 RPC (선택) | 사용자가 가입 요청을 보내는 기능 | 중간 (신규 테이블+RPC) |
+
+### 코드만으로 임시 완화 가능한 항목
+
+migration 없이 프론트엔드 코드만으로 완화할 수 있는 항목:
+
+| 항목 | 완화 방법 | 한계 |
+|---|---|---|
+| G-02 (onboarding 강제) | membership 없는 user를 guest 상태로 분류하고 demo mode 진입 허용 | DB 단에서는 여전히 create_initial_store 호출 가능 |
+| G-03 (guest UI 없음) | guest용 화면 추가 ("연습 모드로 시작", "가입 요청 안내") | 기능만 제공할 뿐 DB 단 안전성은 안 바뀜 |
+| G-04 (role 검사 부족) | activeMembership.role 검사 추가하여 staff는 read-only DataSource 사용 또는 DataSource 활성화 제한 | RLS가 최종 방어선 |
+| G-05 (pending 없음) | getActiveMemberships 대신 모든 membership 조회하고 is_active로 구분 | DB 단에 invitation 레코드가 없으면 의미 없음 |
+
+> **주의**: 코드만으로는 G-01(critical)을 완전히 막을 수 없다. DB 단에서 `create_initial_store` 호출 제한을 추가해야 근본적인 해결이 된다.
+
+### 3-6C 구현 추천 순서
+
+**우선순위: 안전성 (프론트 완화) → UX → DB 단 근본 해결 → 기능 확장**
+
+| 순서 | 단계 | 내용 | 대상 Gap | migration 필요 |
+|---|---|---|---|---|
+| **1** | **guest 상태 + demo mode 진입 경로 추가** | membership 없는 authenticated user를 `guest` 상태로 분류하고, "연습 모드로 시작" (localStorage) 옵션 제공 | G-02, G-03 | ❌ 없음 |
+| **2** | **DataSource 활성화 role 검사 추가** | `activeMembership.role`이 owner/manager/staff 중 하나이고 is_active=true일 때만 SupabaseProductsDataSource 활성화 | G-04 | ❌ 없음 |
+| **3** | **create_initial_store 프론트 단 가림** | guest 상태에서는 "매장 만들기" 버튼을 숨기거나 비활성화. owner 초대 코드가 있어야만 onboarding 가능하도록 변경 | G-01 (일부 완화) | ❌ 없음 |
+| **4** | **getAllMemberships로 pending 상태 표시** | is_active=false 멤버십도 조회하고 "승인 대기 중" 상태 표시 | G-05 | 최소 (쿼리 변경) |
+| **5** | **create_initial_store DB 단 제한** | 특정 조건(예: 초대 코드 인증, 기존 owner 승인) 아니면 RPC 호출 실패 | G-01 (근본 해결) | ✅ 필요 |
+| **6** | **owner 초대 기능** | owner가 이메일로 멤버 초대, 초대받은 사용자가 수락하면 멤버십 활성화 | G-05, G-01 | ✅ 필요 |
+| **7** | **demo mode 시각적 강화** | "연습 모드" 배너, 색상 구분 등 | G-03 UX | ❌ 없음 |
+| **8** | **Confirm Email 정책 결정** | 운영 전 ON/OFF 결정 + redirect URL 설정 | 정책 | 설정 변경 |
+
+### 핵심 결론
+
+- **가장 시급한 것 (critical):** 아무나 `create_initial_store`를 호출해서 owner가 되는 문제.
+- **가장 먼저 코드만으로 할 수 있는 것:** `app-bootstrap.js`에서 membership 없는 사용자를 guest 상태로 분류하고 demo mode로 진입하게 함. 프론트 단에서 onboarding 버튼을 숨겨서 완화할 수는 있으나, DB 단 제한 없이는 완전한 해결이 아님.
+- **migration이 필요한 핵심 기능:** `create_initial_store` DB 단 제한, 초대/승인 흐름. 이건 3-6C 이후 단계에서 신중히 진행해야 함.
+
+### Progress
+
+- 3-5X: Remote Production Readiness Freeze Audit ✅
+- 3-6A: Auth Role & Guest Mode Architecture Design ✅
+- **3-6B: Auth Onboarding & Guest Mode Gap Audit ✅ (현재)**
+- 다음: 3-6C 구현 단계 (위 추천 순서 중 1~3번 우선)
+
+### 제약 준수
+
+- 기능 코드 수정: ❌ (no)
+- JS/CSS/HTML 수정: ❌ (no)
+- Supabase migration/schema/RLS/RPC 수정: ❌ (no)
+- supabase db push 실행: ❌ (no)
+- supabase db reset --linked: ❌ (no)
+- supabase db pull: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 생성/추가: ❌ (no)
+- service_role/token/key/password 출력: ❌ (no)
+- main/gh-pages 작업: ❌ (no)
+
