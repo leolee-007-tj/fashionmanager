@@ -2698,3 +2698,62 @@ tests/remote-deployment-readiness-contract.test.mjs
 - supabase migrations/tests 변경: ❌ 없음
 - data_export.json 포함: ❌ 없음
 - 실제 원격 Supabase 연결: ❌ 없음
+
+## 3-5W: Remote Browser Smoke Test 완료
+
+원격 Supabase에 대한 브라우저 smoke test가 모두 통과했다. signup/login → CRUD 전체 흐름이 정상 동작하며, feature branch에 push까지 완료됐다.
+
+### 고정 기준점
+
+| 항목 | 값 |
+|---|---|
+| Branch | `feature/supabase-cloud-migration` |
+| Remote HEAD | `398cc6e` |
+| Working tree | clean |
+| Push | 완료 |
+
+### Pushed commits
+
+| SHA | 메시지 |
+|---|---|
+| `7d6f9de` | auth: add signup/login UI for remote smoke test |
+| `398cc6e` | 3-5V: fix product update legacy_id mapping and edit UI for remote smoke test |
+
+### Remote Browser Smoke 결과
+
+| # | 항목 | 결과 |
+|---|---|---|
+| 1 | signup/login | PASS |
+| 2 | create_product | PASS |
+| 3 | listProducts | PASS |
+| 4 | update_product | PASS |
+| 5 | soft_delete_product | PASS |
+| 6 | feature branch push | PASS |
+
+### 수정 버튼 / update_product RPC 검증
+
+- 상품 목록의 수정 버튼 클릭 시 수정 폼이 열림
+- 수정 폼에 기존 상품 정보가 채워짐
+- 저장 시 `update_product` RPC가 Network에 표시됨
+- RPC status 200 OK
+- 새로고침 후 수정값이 유지됨
+
+### 제약 준수
+
+- schema/RLS/migration 변경: ❌ 없음
+- supabase db push 재실행: ❌ 없음
+- supabase db reset --linked: ❌ 없음
+- supabase db pull: ❌ 없음
+- service_role 사용: ❌ 없음
+- token/key/password 출력: ❌ 없음
+- js/config.js commit: ❌ 없음
+- data_export.json 재추가: ❌ 없음
+- main/gh-pages force push: ❌ 없음
+- GitHub Support 민감데이터 purge ticket: ❌ 닫지 않음
+
+### 3-5W 고정
+
+- 이 문서는 다음 작업 시작 전까지 3-5W 상태를 기준점으로 고정한다
+- remote HEAD: `398cc6e`
+- 실제 운영 데이터 사용/저장은 이후 단계에서 결정한다
+

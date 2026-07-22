@@ -242,3 +242,62 @@ node --test tests/browser-auth-recovery-contract.test.mjs
 - 3-4D: Business CRUD Supabase 전환
 - localStorage 데이터를 Supabase로 마이그레이션
 - 상품/주문/고객 모듈 Supabase API로 전환
+
+## 20. 3-5W: Remote Browser Smoke Test 완료
+
+원격 Supabase에 대한 browser smoke test가 완료됐다. 모든 핵심 RPC와 remote push까지 정상 동작을 확인했다.
+
+### 고정 기준점
+
+| 항목 | 값 |
+|---|---|
+| Branch | `feature/supabase-cloud-migration` |
+| Remote HEAD | `398cc6e` |
+| Working tree | clean |
+| Push | 완료 |
+
+### Pushed commits
+
+| SHA | 메시지 |
+|---|---|
+| `7d6f9de` | auth: add signup/login UI for remote smoke test |
+| `398cc6e` | 3-5V: fix product update legacy_id mapping and edit UI for remote smoke test |
+
+### 통과 항목
+
+| # | 항목 | 결과 |
+|---|---|---|
+| 1 | signup/login | PASS |
+| 2 | create_product | PASS |
+| 3 | listProducts | PASS |
+| 4 | update_product | PASS |
+| 5 | soft_delete_product | PASS |
+| 6 | feature branch push | PASS |
+
+### remote update_product RPC 검증
+
+- 수정 버튼 클릭 시 수정창이 정상적으로 열린다
+- 수정창에 기존 상품 정보가 채워진다
+- 저장 시 `update_product` RPC가 호출된다
+- RPC status 200 OK
+- 새로고침 후 수정값이 유지된다
+
+### 지속 금지 사항
+
+| 항목 | 상태 |
+|---|---|
+| GitHub Support 민감데이터 purge ticket | 닫지 않음 |
+| main/gh-pages force push | 금지 |
+| supabase db push 재실행 | 금지 |
+| supabase db reset --linked | 금지 |
+| supabase db pull | 금지 |
+| js/config.js commit | 금지 |
+| data_export.json 재추가 | 금지 |
+| service_role/token/key/password 출력 | 금지 |
+
+### 다음 단계 (3-5W 이후)
+
+- 3-5W는 remote browser smoke test의 마지막 단계다
+- 다음 작업 전까지 remote HEAD(`398cc6e`)를 기준점으로 고정한다
+- 실제 운영 데이터 사용/저장은 이후 단계에서 결정한다
+

@@ -10,6 +10,48 @@
 - 이 runbook은 실제 배포 전 readiness audit을 위한 문서이다.
 - **이 문서를 작성하는 시점(3-5R)에서는 실제 원격 Supabase 연결을 하지 않는다.**
 
+## 1-A. 3-5W Remote Browser Smoke Test 완료 (2026-07-22)
+
+원격 Supabase에 대한 브라우저 smoke test가 완료됐다.
+
+### 고정 기준점
+
+| 항목 | 값 |
+|---|---|
+| Branch | `feature/supabase-cloud-migration` |
+| Remote HEAD | `398cc6e` |
+| Working tree | clean |
+| Push | 완료 |
+
+### Pushed commits
+
+| SHA | 메시지 |
+|---|---|
+| `7d6f9de` | auth: add signup/login UI for remote smoke test |
+| `398cc6e` | 3-5V: fix product update legacy_id mapping and edit UI for remote smoke test |
+
+### 통과 항목
+
+- signup/login PASS
+- create_product PASS
+- listProducts PASS
+- update_product PASS
+- soft_delete_product PASS
+- feature branch push PASS
+
+### 다음 작업 전 유지 사항
+
+- GitHub Support 민감데이터 purge ticket 닫지 않기
+- main/gh-pages force push 금지
+- supabase db push 재실행 금지
+- supabase db reset --linked 금지
+- supabase db pull 금지
+- js/config.js commit 금지
+- data_export.json 재추가 금지
+- service_role/token/key/password 출력 금지
+
+상세 내역은 [SUPABASE_BROWSER_AUTH_SMOKE_TEST.md](./SUPABASE_BROWSER_AUTH_SMOKE_TEST.md) 20번 항목 참조.
+
 ## 2. 원격 배포 전 필수 조건
 
 ### Preflight Script

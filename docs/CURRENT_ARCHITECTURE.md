@@ -1801,3 +1801,52 @@ Products Supabase runtime이 나중에 원격 Supabase 프로젝트에서도 안
 - PRODUCTS_SUPABASE_ENABLED: false
 - PRODUCTS_SUPABASE_REMOTE_ENABLED: false
 - SUPABASE_ENABLED: false
+
+## 30. 3-5W: Remote Browser Smoke Test 완료 (2026-07-22)
+
+원격 Supabase에 대한 브라우저 smoke test가 완료됐다. signup/login → CRUD 전체 흐름과 feature branch push까지 정상 동작을 확인했다.
+
+### 고정 기준점
+
+| 항목 | 값 |
+|---|---|
+| Branch | `feature/supabase-cloud-migration` |
+| Remote HEAD | `398cc6e` |
+| Working tree | clean |
+| Push | 완료 |
+
+### Pushed commits
+
+| SHA | 메시지 |
+|---|---|
+| `7d6f9de` | auth: add signup/login UI for remote smoke test |
+| `398cc6e` | 3-5V: fix product update legacy_id mapping and edit UI for remote smoke test |
+
+### 통과 항목
+
+- signup/login PASS
+- create_product PASS
+- listProducts PASS
+- update_product PASS
+- soft_delete_product PASS
+- feature branch push PASS
+
+### update_product RPC 검증
+
+- 상품 목록의 수정 버튼 클릭 시 수정창이 열림
+- 수정창에 기존 상품 정보가 채워짐
+- 저장 시 `update_product` RPC가 Network에 표시됨
+- RPC status 200 OK
+- 새로고침 후 수정값이 유지됨
+
+### 다음 작업 전 유지 사항
+
+- GitHub Support 민감데이터 purge ticket 닫지 않기
+- main/gh-pages force push 금지
+- supabase db push 재실행 금지
+- supabase db reset --linked 금지
+- supabase db pull 금지
+- js/config.js commit 금지
+- data_export.json 재추가 금지
+- service_role/token/key/password 출력 금지
+
