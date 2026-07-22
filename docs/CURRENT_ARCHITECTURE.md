@@ -1906,6 +1906,161 @@ Products Supabase runtime이 나중에 원격 Supabase 프로젝트에서도 안
 - 3-5W: Remote Browser Smoke Test ✅
 - **3-5X: Remote Production Readiness Freeze Audit ✅**
 
+## 32. 3-6A: Auth Role & Guest Mode Architecture Design (2026-07-22)
+
+### 목적
+
+3-5X까지 Products Supabase runtime과 Remote Smoke Test를 완료했으므로, 이제 LESOUL 운영 구조에 맞는 인증·권한·게스트 모드 아키텍처를 설계한다.
+**이번 단계는 설계 문서화만 하며, 코드 수정·DB migration·RLS/RPC 변경은 하지 않는다.**
+
+### LESOUL 운영 구조 요구사항
+
+| # | 요구사항 | 현재 상태 | 목표 |
+|---|---|---|---|
+| 1 | 사용자 본인은 owner/admin 역할 | signup 시 모든 사용자가 `create_initial_store`로 owner 됨 | 사용자 본인만 기존 store의 owner, 다른 사용자는 별도 승인 필요 |
+| 2 | 다른 사용자는 회원가입 가능 | ✅ 가능 | 유지 |
+| 3 | 실제 운영 데이터 접근은 권한 있는 store member만 | signup 직후 owner 멤버십 자동 생성 | signup 후 자동 store 생성 금지, 멤버십 승인 후 접근 |
+| 4 | 비회원/미승인 사용자는 practice/demo mode만 | ❌ 미구현 | localStorage 기반 demo mode로 격리 |
+| 5 | demo mode 데이터는 운영 데이터와 섞이면 안 됨 | localStorage만 사용 (자연 격리) | localStorage ↔ Supabase 동기화 금지 원칙 유지 |
+| 6 | Confirm Email 정책 | 테스트 중 OFF | 운영 전 ON/OFF 결정 필요 |
+
+### 역할 정의
+
+#### 5가지 역할 계층
+
+| 역할 | 상태 조건 | Store 멤버십 | 데이터 접근 범위 |
+|---|---|---|---|
+| **unauthenticated** | 로그인하지 않음 | 없음 | localStorage demo mode만 |
+| **guest** | 로그인했으나 store_members에 레코드 없음 | 없음 | localStorage demo mode만 또는 가입 요청 대기 |
+| **staff** | store_members.role = 'staff', is_active = true | 있음 (승인됨) | 제한된 읽기 (RPC 기반, 원가/이익/고객 집계 제외), 쓰기 제한 |
+| **manager** | store_members.role = 'manager', is_active = true | 있음 (승인됨) | 대부분 CRUD 가능. store_settings, audit_logs, migration_runs 제외 |
+| **owner** | store_members.role = 'owner', is_active = true | 있음 (승인됨) | 전체 접근 가능. 멤버 관리, 삭제된 데이터 조회/복구 가능 |
+
+#### 상태 전환 다이어그램
+
+```
+[unauthenticated]
+       │
+       ▼ signUp / signIn
+  [authenticated]
+       │
+       ├── store_members 없음 ──────────────► [guest]
+       │                                        │
+       │                                        ├── demo mode (localStorage)
+       │                                        └── 가입 요청 / owner 초대 대기
+       │
+       └── store_members 있음 + is_active=true ─► [staff] / [manager] / [owner]
+                                                  │
+                                                  └── Supabase 운영 데이터 접근
+```
+
+### 실제 운영 데이터 접근 가능/불가 매트릭스
+
+| 기능 | unauthenticated | guest | staff | manager | owner |
+|---|---|---|---|---|---|
+| 상품 목록 조회 | ✅ (local) | ✅ (local) | ✅ (RPC, 원가 제외) | ✅ | ✅ |
+| 상품 생성/수정/삭제 | ✅ (local) | ✅ (local) | ❌ | ✅ | ✅ |
+| 고객 목록 조회 | ✅ (local) | ✅ (local) | ✅ (RPC, 집계 제외) | ✅ | ✅ |
+| 주문 생성/출고/취소 | ✅ (local) | ✅ (local) | ❌ | ✅ | ✅ |
+| 수익 분석/원가 조회 | ✅ (local) | ✅ (local) | ❌ | ❌ | ✅ |
+| 매장 설정 변경 | ✅ (local) | ✅ (local) | ❌ | ❌ | ✅ |
+| 멤버 초대/승인/역할 변경 | ❌ | ❌ | ❌ | ❌ | ✅ |
+| 삭제된 데이터 조회/복구 | ❌ | ❌ | ❌ | ❌ | ✅ |
+| audit_logs 조회 | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Excel 업로드/날내기 | ✅ (local) | ✅ (local) | ❌ | ✅ | ✅ |
+| demo mode 데이터 저장 | ✅ (localStorage) | ✅ (localStorage) | N/A | N/A | N/A |
+
+> **참고**: "local"은 localStorage 기반 demo/practice mode를 의미하며, Supabase 운영 데이터와 물리적으로 분리됨.
+
+### demo/practice mode 데이터 격리 원칙
+
+| 원칙 | 설명 |
+|---|---|
+| **데이터 저장소 격리** | demo mode는 반드시 `LocalProductsDataSource`만 사용. SupabaseProductsDataSource는 절대 활성화되지 않음. |
+| **데이터 동기화 금지** | localStorage에 저장된 demo 데이터를 Supabase로 업로드/동기화하는 기능은 의도적으로 제공하지 않음. |
+| **데이터 지속성** | demo mode 데이터는 브라우저 localStorage에 남아 세션 간 유지될 수 있으나, 이는 "사용자 개인의 연습 데이터"로 취급되며 운영 데이터와 혼동되지 않음. |
+| **Supabase 활성화 조건** | SupabaseProductsDataSource 활성화에는 `activeMembership`이 필수이며, `guest`는 멤버십이 없으므로 자동으로 localStorage 모드가 됨. |
+| **UI 구분** | demo mode 사용 중에는 화면 상단 또는 사이드바에 "연습 모드" 표시를 고려하여 운영 데이터와 혼동 방지. |
+
+### signup 이후 승인 전 상태 처리 원칙
+
+#### 현재 문제점
+- `create_initial_store` RPC는 모든 authenticated 사용자가 호출하면 자동으로 store를 생성하고 owner가 됨
+- 이는 "다른 사용자가 내 store에 가입"하는 LESOUL 운영 구조와 맞지 않음
+
+#### 목표 흐름
+
+```
+signup → email confirm → authenticated 상태
+              │
+              ▼
+        store_members 조회
+              │
+              ├── 레코드 없음 ──► guest 상태
+              │                      │
+              │                      ├── demo mode 진입 (localStorage)
+              │                      └── "매장 가입 요청" 또는 "초대 코드 입력" UI
+              │
+              └── is_active = false ──► pending 상태
+              │                            │
+              │                            └── "승인 대기 중" UI
+              │
+              └── is_active = true ──► staff / manager / owner 역할 확정
+                                            │
+                                            └── Supabase 운영 데이터 접근
+```
+
+#### 승인 메커니즘 (설계 단계)
+
+| 방식 | 설명 | 장점 | 단점 |
+|---|---|---|---|
+| **Owner 초대** | owner가 store_members에 신규 사용자를 직접 추가 (role 지정) | 보안성 높음, owner가 통제 | owner 수동 개입 필요 |
+| **가입 요청 + 승인** | guest가 가입 요청을 생성하고 owner/manager가 승인 | 자동화 가능 | 추가 테이블/상태 관리 필요 |
+| **초대 코드** | owner가 생성한 초대 코드를 입력하면 자동 멤버십 생성 | 간편함 | 코드 유출 위험 |
+
+> **3-6A 결정**: 3-6B 구현 단계에서 owner 초대 방식을 우선 구현하고, 필요 시 가입 요청 방식을 추가 확장한다.
+
+### Confirm Email 정책 결정 필요 사항
+
+| 항목 | 현재 (테스트) | 운영 전 결정 필요 |
+|---|---|---|
+| **Confirm Email 설정** | OFF (즉시 로그인 가능) | ON 권장 — 스팸 가입 방지, 이메일 소유권 검증 |
+| **Redirect URL** | N/A (OFF 상태) | GitHub Pages 정적 URL 설정 필요 (예: `https://{username}.github.io/{repo}/?auth=confirmed`) |
+| **Email Template** | 기본 Supabase 템플릿 | 브랜드명(LESOUL) 및 한국어 커스터마이징 검토 |
+| **확인 완료 전 상태** | 즉시 authenticated + onboarding 가능 | 확인 완료 전까지 guest 상태 유지 |
+| **재전송 정책** | N/A | rate limit 및 재전송 UI 필요 |
+
+> **3-6A 권고**: 운영 배포 전 Confirm Email을 ON으로 전환하고, redirect URL을 GitHub Pages 호스팅 주소로 설정한다. 테스트 환경에서는 OFF를 유지할 수 있으나, 별도 테스트용 프로젝트를 사용하는 것이 바람직하다.
+
+### 현재 시스템과의 설계 차이
+
+| 영역 | 현재 (3-5X 기준) | 3-6A 목표 | 변경 필요 |
+|---|---|---|---|
+| `create_initial_store` | 모든 사용자가 owner store 자동 생성 | 사용자 본인만 owner, 나머지는 승인 필요 | RPC 수정 또는 별도 가입 흐름 추가 |
+| `store_members` | signup 시 자동 insert | owner 초대/승인 후 insert | insert 정책 변경 또는 별도 invitation 테이블 |
+| bootstrap 흐름 | login → onboarding(store 생성) → app | login → membership 확인 → (없으면 guest/demo) → app | `LESOULAppBootstrap` 상태 기계 확장 |
+| DataSource 선택 | flag + membership 기반 | flag + membership + role 기반 | `getProductsDataSource()`에 role 조건 추가 검토 |
+| UI 상태 | 로그인/로그아웃만 구분 | guest/pending/approved 역할별 UI 분기 | `LESOULAuthUI`에 guest 화면 추가 |
+
+### 다음 구현 단계 3-6B 후보 목록
+
+| # | 후보 | 설명 | 예상 변경 범위 |
+|---|---|---|---|
+| 1 | **store_members invitation/pending 상태 추가** | `store_members`에 `invited_by`, `invited_at`, `status` 컬럼 추가 또는 `is_active=false`를 pending 상태로 활용 | migration, schema |
+| 2 | **guest mode UI 구현** | 로그인했으나 멤버십 없는 사용자용 demo mode + 가입 요청 UI | js/auth-ui.js, js/app-bootstrap.js |
+| 3 | **owner용 멤버 관리 UI** | 가입 요청 승인/거부, 역할 변경, 멤버 초대 화면 | js/ (신규 또는 기존 모듈 확장) |
+| 4 | **create_initial_store 제한 또는 분리** | 기존 owner만 store 생성 가능하도록 변경, 신규 사용자는 가입 흐름으로 유도 | migration/RPC 또는 JS 로직 |
+| 5 | **Confirm Email ON + redirect URL 설정** | Supabase Dashboard에서 Confirm Email 활성화 및 redirect URL 등록 | 설정 (코드 변경 없음) |
+| 6 | **SupabaseProductsDataSource 활성화 조건 강화** | `activeMembership`뿐 아니라 `role IN ('owner', 'manager', 'staff')` 및 `is_active = true` 조건 추가 | js/db.js |
+| 7 | **demo mode 표시 UI** | 연습 모드 사용 중임을 알리는 배너/뱃지 추가 | js/auth-ui.js, css/style.css |
+| 8 | **staff용 제한 view/RPC 연동** | 기존 RLS 설계의 staff_read_rpc를 실제 업무 화면과 연결 | js/db.js, js/products.js 등 |
+
+### Progress
+
+- 3-5X: Remote Production Readiness Freeze Audit ✅
+- **3-6A: Auth Role & Guest Mode Architecture Design ✅ (현재, 설계 문서화만)**
+- 다음: 3-6B 구현 단계 (선택적 후보 위 중 1~3개 우선 구현)
+
 ### 제약 준수
 
 - 기능 코드 수정: ❌ (no)
