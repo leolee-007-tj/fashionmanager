@@ -1850,3 +1850,70 @@ Products Supabase runtime이 나중에 원격 Supabase 프로젝트에서도 안
 - data_export.json 재추가 금지
 - service_role/token/key/password 출력 금지
 
+## 31. 3-5X: Remote Production Readiness Freeze Audit PASS (2026-07-22)
+
+### 감사 결과
+
+| # | 항목 | 결과 |
+|---|---|---|
+| 1 | Branch = feature/supabase-cloud-migration | PASS |
+| 2 | Working tree clean | PASS |
+| 3 | Remote = Local | PASS (`a4ea9c6`) |
+| 4 | js/config.js NOT tracked | PASS (gitignored, local-only) |
+| 5 | supabase/config.toml NOT staged/committed | PASS |
+| 6 | data_export.json NOT EXISTS | PASS |
+| 7 | Secret exposure check | PASS |
+| 8 | service_role 문자열 위치 | PASS (차단 로직과 contract test에서만) |
+| 9 | Node test | PASS |
+| 10 | Preflight | PASS |
+
+### 유지 금지 사항
+
+- GitHub Support 민감데이터 purge ticket 계속 열어둠
+- main/gh-pages force push 금지
+- supabase db push 재실행 금지
+- supabase db reset --linked 금지
+- supabase db pull 금지
+- js/config.js commit 금지
+- data_export.json 생성/추가 금지
+- token/key/password 출력 금지
+
+### Progress
+
+- 3-5A: Data Gateway Async Boundary Preparation ✅
+- 3-5B: Products Read Path Async Boundary ✅
+- 3-5C: Products Write Path Async Boundary Preparation ✅
+- 3-5D: Products DataSource Interface Extraction ✅
+- 3-5E: Products Supabase mapping contract ✅
+- 3-5F: SupabaseProductsDataSource disabled skeleton ✅
+- 3-5G: Products Supabase read path local-only controlled test ✅
+- 3-5H: Products Supabase read local integration smoke ✅
+- 3-5I: Products Supabase write path local-only controlled contract ✅
+- 3-5J: Products Supabase write local integration smoke ✅
+- 3-5K: Products Write RPC Foundation ✅
+- 3-5L: Connect Controlled Products DataSource to Write RPCs ✅
+- 3-5M: Products Runtime DataSource Feature Flag Gate ✅
+- 3-5N: Products Local Runtime Activation Smoke ✅
+- 3-5O: Products Local Browser Runtime Smoke ✅
+- 3-5O.1: Fix LESOUL Brand Setting & Re-run Local Browser Smoke ✅
+- 3-5O.2: Clean Legacy Brand Leftover & Confirm Browser Smoke ✅
+- 3-5O.3: Test Regression Recovery ✅
+- 3-5P: Products Batch Actions Supabase Compatibility ✅
+- 3-5Q: Products Remote Runtime Guardrail Preparation ✅
+- 3-5R: Remote Supabase Deployment Readiness Audit ✅
+- 3-5S: Remote Config Template and Secret Safety Check ✅
+- 3-5T: Remote Deployment Command Gate ✅
+- 3-5W: Remote Browser Smoke Test ✅
+- **3-5X: Remote Production Readiness Freeze Audit ✅**
+
+### 제약 준수
+
+- 기능 코드 수정: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 생성/추가: ❌ (no)
+- supabase db push 실행: ❌ (no)
+- supabase db reset --linked: ❌ (no)
+- supabase db pull: ❌ (no)
+- token/key/password 출력: ❌ (no)
+- main/gh-pages 작업: ❌ (no)
+
