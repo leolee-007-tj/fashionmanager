@@ -137,7 +137,7 @@ const App = {
                     break;
                 case 'products':
                     if (args[0] === 'add') content = Products.renderAdd();
-                    else if (args[1] === 'edit') content = Products.renderEdit(args[0]);
+                    else if (args[1] === 'edit') content = await Products.renderEdit(args[0]);
                     else content = await Products.renderList();
                     break;
                 case 'orders':

@@ -234,9 +234,9 @@ const Products = {
                             <button class="btn btn-sm btn-info" onclick="Products.reclassify(${p.id})" title="${t('common', 'reclassify')}">
                                 <i class="fas fa-magic"></i>
                             </button>
-                            <a href="#/products/${p.id}/edit" class="btn btn-sm btn-secondary">
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="Products.editProduct(${p.id})" title="${t('products', 'edit')}">
                                 <i class="fas fa-edit"></i>
-                            </a>
+                            </button>
                             <button class="btn btn-sm btn-danger" onclick="Products.delete(${p.id})">
                                 <i class="fas fa-trash"></i>
                             </button>
@@ -426,12 +426,33 @@ const Products = {
         App.render();
     },
 
+    editProduct(id) {
+        location.hash = '#/products/' + id + '/edit';
+    },
+
     renderAdd() {
         return this.renderForm(null);
     },
 
-    renderEdit(id) {
-        const product = DB.getProducts().find(p => p.id === parseInt(id));
+    async renderEdit(id) {
+        // 3-5V: remote mode에서는 DB.getProducts() (localStorage)가 비어 있을 수 있으므로
+        // this.state.products (이미 remote에서 로드됨)를 우선 사용하고,
+        // 없으면 DB.getProductsAsync()로 비동기 조회한다.
+        let product = null;
+        const numericId = Number(id);
+        if (this.state.products && this.state.products.length > 0) {
+            product = this.state.products.find(p => p.id === numericId || p.legacy_id === numericId);
+        }
+        if (!product) {
+            try {
+                const products = typeof DB.getProductsAsync === 'function'
+                    ? await DB.getProductsAsync()
+                    : DB.getProducts();
+                product = products.find(p => p.id === numericId || p.legacy_id === numericId);
+            } catch (e) {
+                console.error('renderEdit load failed:', e && e.message ? e.message : e);
+            }
+        }
         if (!product) {
             App.flash(t('common', 'product_not_found'), 'error');
             location.hash = '#/products';
@@ -660,26 +681,58 @@ const Products = {
             reserved_stock: 0,
             stock_year: parseInt(fd.get('stock_year')) || new Date().getFullYear(),
             stock_month: parseInt(fd.get('stock_month')) || new Date().getMonth() + 1,
-            image: this.tempImage || (editId ? (DB.getProducts().find(p => p.id === parseInt(editId)) || {}).image : null) || null,
+            image: this.tempImage || (editId ? ((this.state.products || []).find(p => p.id === Number(editId) || p.legacy_id === Number(editId)) || {}).image : null) || null,
             notes: '',
             title_language: ClassificationService.detectLanguage(title),
             normalized_title: title
         };
         if (editId) {
-            if (typeof DB.updateProductAsync === 'function') {
-                await DB.updateProductAsync(parseInt(editId), productData);
-            } else {
-                DB.updateProduct(parseInt(editId), productData);
+            // 3-5V: editId 또는 현재 상품 객체의 legacy_id에서 안전한 정수 추출.
+            // productData에 legacy_id를 보존해 updateProductAsync가 우선 사용하도록 한다.
+            const currentProduct = (this.state.products || []).find(p => p.id === Number(editId) || p.legacy_id === Number(editId)) || null;
+            const candidateId = (currentProduct && currentProduct.legacy_id !== undefined && currentProduct.legacy_id !== null)
+                ? currentProduct.legacy_id
+                : editId;
+            const numericId = Number(candidateId);
+            if (!Number.isFinite(numericId) || numericId <= 0) {
+                App.flash('상품 식별값이 없어 수정할 수 없습니다. 새로고침 후 다시 시도해 주세요.', 'error');
+                return false;
             }
-            App.flash(t('common', 'save') + '!', 'success');
+            productData.legacy_id = numericId;
+            try {
+                if (typeof DB.updateProductAsync === 'function') {
+                    await DB.updateProductAsync(numericId, productData);
+                } else {
+                    DB.updateProduct(numericId, productData);
+                }
+                App.flash(t('common', 'save') + '!', 'success');
+            } catch (e) {
+                console.error('Products.submitForm update failed:', e && e.message ? e.message : e);
+                if (DB.isProductCodeDuplicateError && DB.isProductCodeDuplicateError(e)) {
+                    App.flash('이미 같은 상품코드가 있습니다. 브랜드명 또는 입고월을 변경해 주세요.', 'error');
+                } else {
+                    App.flash('상품 수정에 실패했습니다. 잠시 후 다시 시도해 주세요.', 'error');
+                }
+                return false;
+            }
         } else {
             productData.product_code = DB.generateProductCode(brand, productData.stock_year, productData.stock_month);
-            if (typeof DB.addProductAsync === 'function') {
-                await DB.addProductAsync(productData);
-            } else {
-                DB.addProduct(productData);
+            try {
+                if (typeof DB.addProductAsync === 'function') {
+                    await DB.addProductAsync(productData);
+                } else {
+                    DB.addProduct(productData);
+                }
+                App.flash(t('common', 'register') + '!', 'success');
+            } catch (e) {
+                console.error('Products.submitForm create failed:', e && e.message ? e.message : e);
+                if (DB.isProductCodeDuplicateError && DB.isProductCodeDuplicateError(e)) {
+                    App.flash('이미 같은 상품코드가 있습니다. 브랜드명 또는 입고월을 변경해 주세요.', 'error');
+                } else {
+                    App.flash('상품 등록에 실패했습니다. 잠시 후 다시 시도해 주세요.', 'error');
+                }
+                return false;
             }
-            App.flash(t('common', 'register') + '!', 'success');
         }
         this.tempImage = null;
         location.hash = '#/products';

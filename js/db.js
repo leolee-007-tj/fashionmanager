@@ -435,7 +435,12 @@ const DB = {
             if (err && err.message && err.message.indexOf('requires ') === 0) {
                 throw err;
             }
-            throw new Error(`SupabaseProductsDataSource.${methodName} query failed`);
+            // 3-5V: 원본 에러의 code/details를 보존해서
+            // isProductCodeDuplicateError()가 product_code 중복을 판별할 수 있도록 한다.
+            const wrapped = new Error(`SupabaseProductsDataSource.${methodName} query failed`);
+            if (err && err.code) wrapped.code = err.code;
+            if (err && err.message) wrapped.details = err.message;
+            throw wrapped;
         }
 
         const _setProductsDisabledMsg = 'setProducts is not enabled for SupabaseProductsDataSource';
@@ -507,7 +512,10 @@ const DB = {
                 return client.rpc('create_product', payload)
                     .then(response => {
                         if (response.error) {
-                            throw new Error('SupabaseProductsDataSource.createProduct RPC failed');
+                            const err = new Error('SupabaseProductsDataSource.createProduct RPC failed');
+                            if (response.error.code) err.code = response.error.code;
+                            if (response.error.message) err.details = response.error.message;
+                            throw err;
                         }
                         // RPC는 SETOF/RETURNS TABLE → 배열로 반환될 수 있음. 단일 row 추출.
                         const raw = response.data;
@@ -524,15 +532,28 @@ const DB = {
              * Local-only controlled update via RPC (3-5L).
              * legacy_id + store_id 조건으로 제한.
              * id/legacy_id/store_id 등 위험 필드는 RPC 내부에서 차단.
+             *
+             * 3-5V: updateProduct는 id 또는 updates.legacy_id에서
+             * 안전한 정수 legacy id를 추출한다. NaN/0/null/undefined면
+             * RPC 호출을 막고 명확한 에러를 던진다.
              */
             updateProduct(id, updates) {
                 _validateWriteContext('updateProduct');
                 const upd = updates || {};
 
+                // id 또는 updates.legacy_id 중 안전한 정수 값 추출
+                const idSource = (upd.legacy_id !== undefined && upd.legacy_id !== null)
+                    ? upd.legacy_id
+                    : id;
+                const numericId = Number(idSource);
+                if (!idSource || !Number.isFinite(numericId) || numericId <= 0) {
+                    throw new Error('SupabaseProductsDataSource.updateProduct requires valid legacy_id (positive integer)');
+                }
+
                 // RPC payload 구성 (p_ 접두사 파라미터)
                 const payload = {
                     p_store_id: context.storeId,
-                    p_legacy_id: Number(id),
+                    p_legacy_id: numericId,
                     p_product_code: upd.product_code || null,
                     p_original_title: upd.original_title || null,
                     p_normalized_title: upd.normalized_title || null,
@@ -560,7 +581,10 @@ const DB = {
                 return client.rpc('update_product', payload)
                     .then(response => {
                         if (response.error) {
-                            throw new Error('SupabaseProductsDataSource.updateProduct RPC failed');
+                            const err = new Error('SupabaseProductsDataSource.updateProduct RPC failed');
+                            if (response.error.code) err.code = response.error.code;
+                            if (response.error.message) err.details = response.error.message;
+                            throw err;
                         }
                         // RPC는 SETOF/RETURNS TABLE → 배열로 반환될 수 있음. 단일 row 추출.
                         const raw = response.data;
@@ -588,7 +612,10 @@ const DB = {
                 return client.rpc('soft_delete_product', payload)
                     .then(response => {
                         if (response.error) {
-                            throw new Error('SupabaseProductsDataSource.deleteProduct RPC failed');
+                            const err = new Error('SupabaseProductsDataSource.deleteProduct RPC failed');
+                            if (response.error.code) err.code = response.error.code;
+                            if (response.error.message) err.details = response.error.message;
+                            throw err;
                         }
                         // RPC는 SETOF/RETURNS TABLE → 배열로 반환될 수 있음. 단일 row 추출.
                         const raw = response.data;
@@ -715,10 +742,13 @@ const DB = {
     mapSupabaseRowToLegacyProduct(row) {
         this._validateProductMappingInputForTesting(row, 'supabase');
         const safeValue = (v, fallback) => (v === undefined ? fallback : v);
+        const legacyId = row.legacy_id != null ? Number(row.legacy_id) : null;
         return {
             // legacy numeric id 우선. 없으면 null (신규 row의 경우).
-            // Supabase uuid id는 legacy object에 노출하지 않는다 (혼동 방지).
-            id: row.legacy_id != null ? Number(row.legacy_id) : null,
+            // Supabase uuid id는 별도 remote_id 필드로 보존 (legacy id와 혼동 방지).
+            id: legacyId,
+            legacy_id: legacyId,
+            remote_id: safeValue(row.id, null),
 
             // direct copy fields
             product_code: safeValue(row.product_code, null),
@@ -1011,6 +1041,27 @@ const DB = {
             }
         });
         return brandPrefix + String(maxNum + 1).padStart(3, '0');
+    },
+
+    /**
+     * 3-5V: product_code 중복 (PostgreSQL 23505 / HTTP 409) 에러 판별 helper.
+     * Supabase RPC 응답 또는 일반 Error 객체에서 중복 키 위반을 감지한다.
+     *
+     * @param {Error|Object} err - 검사할 에러 객체
+     * @returns {boolean} 중복 product_code 에러면 true
+     */
+    isProductCodeDuplicateError(err) {
+        if (!err) return false;
+        const code = err.code || '';
+        const message = String(err.message || '').toLowerCase();
+        const details = String(err.details || '').toLowerCase();
+        if (code === '23505') return true;
+        if (code === '409') return true;
+        if (message.indexOf('unique_products_active_store_code') !== -1) return true;
+        if (details.indexOf('unique_products_active_store_code') !== -1) return true;
+        if (message.indexOf('duplicate key') !== -1 && (message.indexOf('product_code') !== -1 || details.indexOf('product_code') !== -1)) return true;
+        if (details.indexOf('duplicate key') !== -1 && details.indexOf('product_code') !== -1) return true;
+        return false;
     },
 
     findProductByBrandTitleCost(brand, title, koreaCost, stockMonth, stockYear) {
