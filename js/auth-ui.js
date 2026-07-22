@@ -468,11 +468,18 @@
         var logoutBtn = document.getElementById('auth-logout-button');
         if (badge) {
             var parts = [];
-            parts.push('로컬 데이터 모드');
-            if (context && context.activeMembership) {
-                var m = context.activeMembership;
-                if (m.storeName) parts.push(m.storeName);
-                if (m.role) parts.push(m.role);
+            // 3-6C: guest 상태 (membership 없음) → '게스트 모드 · 연습 데이터 (localStorage)'
+            // ready 상태 (membership 있음) → '로컬 데이터 모드 · <storeName> · <role>'
+            if (context && context.user && (!context.memberships || context.memberships.length === 0)) {
+                parts.push('게스트 모드');
+                parts.push('연습 데이터 (localStorage)');
+            } else {
+                parts.push('로컬 데이터 모드');
+                if (context && context.activeMembership) {
+                    var m = context.activeMembership;
+                    if (m.storeName) parts.push(m.storeName);
+                    if (m.role) parts.push(m.role);
+                }
             }
             badge.textContent = parts.join(' · ');
             badge.hidden = false;

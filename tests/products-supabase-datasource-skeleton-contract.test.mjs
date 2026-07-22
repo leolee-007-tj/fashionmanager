@@ -158,9 +158,13 @@ describe('Products Supabase DataSource Skeleton Contract (S1-S16)', function () 
 
     it('S7: js/db.js has controlled write (insert/update for soft delete); no hard delete() (3-5I update)', function () {
         const content = readFile('js/db.js');
+        // 3-5I/3-6C: factory가 길어져 슬라이스 범위 확장 (factory 본문 + setProducts 매치 보장)
         const factoryStart = content.indexOf('_createControlledSupabaseProductsDataSource');
         assert.ok(factoryStart > -1, 'factory should exist');
-        const afterFactory = content.slice(factoryStart, factoryStart + 5000);
+        const factoryBodyStart = content.indexOf('function _createControlledSupabaseProductsDataSource',
+            content.indexOf('SupabaseProductsDataSource {', factoryStart) - 200);
+        const sliceStart = factoryBodyStart > 0 ? factoryBodyStart : factoryStart;
+        const afterFactory = content.slice(sliceStart, sliceStart + 12000);
 
         // 3-5I: controlled write 구현됨 (insert + update)
         // .insert() 와 .update() 는 이제 허용됨 (controlled write)

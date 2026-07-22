@@ -287,6 +287,10 @@
         if (!options) options = {};
         var displayName = options.displayName !== undefined ? options.displayName : null;
         var preferredLanguage = options.preferredLanguage !== undefined ? options.preferredLanguage : 'ko';
+        // 3-6C: allowGuestMode=true면 memberships.length===0일 때
+        // 'needs_store_onboarding' 대신 'guest'로 반환한다.
+        // 기본값은 false로 유지하여 기존 동작을 깨지 않는다.
+        var allowGuestMode = options.allowGuestMode === true;
 
         var sessionResult = await getSession();
         if (!sessionResult.user) {
@@ -309,6 +313,16 @@
                 memberships: memberships
             };
         } else {
+            // 3-6C: membership이 없는 authenticated user를
+            // needs_store_onboarding 대신 guest 상태로 분류한다.
+            if (allowGuestMode) {
+                return {
+                    status: 'guest',
+                    user: sessionResult.user,
+                    profile: profile,
+                    memberships: []
+                };
+            }
             return {
                 status: 'needs_store_onboarding',
                 user: sessionResult.user,

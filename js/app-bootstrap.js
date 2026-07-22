@@ -342,6 +342,14 @@
             return;
         }
 
+        // 3-6C: membership 없는 authenticated user는 guest/demo 상태로 진입한다.
+        // createInitialStore를 호출하지 않고, LocalProductsDataSource만 사용한다.
+        if (status === 'guest') {
+            _context.activeMembership = null;
+            _enterApp();
+            return;
+        }
+
         if (status === 'ready') {
             if (_context.memberships.length === 0) {
                 // Treat as needs_store_onboarding per spec.
@@ -380,8 +388,15 @@
         }
         var myRevision = ++_bootstrapRevision;
         var auth = _deps.auth();
+        // 3-6C: LESOUL_CONFIG.AUTH_GUEST_MODE_ENABLED === true이면
+        // bootstrapAuthenticatedUser에 allowGuestMode를 전달한다.
+        var config = _deps.config() || {};
+        var allowGuestMode = config.AUTH_GUEST_MODE_ENABLED === true;
         var trackedPromise = Promise.resolve()
             .then(function () {
+                if (typeof auth.bootstrapAuthenticatedUser === 'function') {
+                    return auth.bootstrapAuthenticatedUser({ allowGuestMode: allowGuestMode });
+                }
                 return auth.bootstrapAuthenticatedUser();
             })
             .then(function (result) {

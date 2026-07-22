@@ -290,9 +290,12 @@ const DB = {
         }
         try {
             const ctx = bootstrap.getContext();
-            if (ctx && ctx.activeMembership && ctx.activeMembership.storeId) {
-                return ctx.activeMembership.storeId;
+            // 3-6C: activeMembership이 없으면 (guest/demo 상태) storeId는 null.
+            // 이것만으로도 SupabaseProductsDataSource는 활성화되지 않는다.
+            if (!ctx || !ctx.activeMembership || !ctx.activeMembership.storeId) {
+                return null;
             }
+            return ctx.activeMembership.storeId;
         } catch (e) {
             // context 접근 실패 — 안전하게 null 반환
         }
