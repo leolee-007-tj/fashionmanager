@@ -2769,3 +2769,84 @@ ORDER BY owner_store_count DESC;
 - service_role/token/key/password 출력: ❌ (no)
 - main/gh-pages 작업: ❌ (no)
 
+---
+
+## 37. 3-6E.2: create_initial_store Invite-code Hardening (2026-07-23)
+
+### 목적
+
+`create_initial_store` RPC를 invite-code 기반으로 보안 강화한다.
+신규 authenticated user가 active owner membership이 없으면 반드시 유효한 join-type invite code로 기존 store에 가입해야 한다.
+기존 owner는 idempotent lookup으로 보호되어 invite code 없이 기존 store_id를 반환받는다.
+
+### 생성된 산출물
+
+| 산출물 | 경로 |
+|---|---|
+| Migration 파일 | `supabase/migrations/20260711001300_create_initial_store_invite_code_hardening.sql` |
+| Contract test | `tests/create-initial-store-invite-code-contract.test.mjs` |
+
+### 핵심 정책
+
+| 상황 | 동작 |
+|---|---|
+| 기존 owner + invite_code 없음 | ✅ idempotent하게 기존 store_id 반환 |
+| 신규 user + invite_code 없음 | ❌ "Invite code is required" |
+| invalid invite_code | ❌ "Invalid invite code" |
+| used invite_code | ❌ "Invite code already used" |
+| revoked invite_code | ❌ "Invite code has been revoked" |
+| expired invite_code | ❌ "Invite code has expired" |
+| deleted store로 연결된 invite_code | ❌ "Invite code is linked to a deleted store" |
+| invited_email 불일치 | ❌ "Invite code is not associated with your account" |
+| owner role invite_code | ❌ "Owner role invitations are not allowed" |
+| valid manager/staff invite_code | ✅ store_members 생성 + used_at/used_by 업데이트 |
+
+### 보안 처리
+
+| 항목 | 처리 |
+|---|---|
+| Old 3-arg signature | `REVOKE` 후 `DROP FUNCTION IF EXISTS`로 제거 |
+| New 4-arg signature | `p_invite_code text DEFAULT NULL` 추가 |
+| SECURITY DEFINER | 유지, `SET search_path = ''` |
+| Advisory lock | `pg_advisory_xact_lock(hashtextextended(v_uid::text, 0))` |
+| Race-condition 방지 | `SELECT ... FROM public.store_invitations WHERE invite_code = ... FOR UPDATE` |
+| Direct DML | `store_invitations`에 authenticated INSERT/UPDATE/DELETE 미개방 |
+
+### join-type only 제약
+
+- 이번 단계에서 신규 user 흐름에 `INSERT INTO public.stores`는 없다.
+- `store_invitations.store_id`는 `NOT NULL`이다.
+- create-type invitation(새 store 생성용)은 이후 단계에서 검토한다.
+
+### contract test 결과
+
+| 항목 | 결과 |
+|---|---|
+| tests | 19 |
+| pass | 19 |
+| fail | 0 |
+
+### 아직 적용하지 않은 것
+
+- **Remote Supabase**: `supabase db push` 실행 안 함
+- **generate_store_invite_code RPC**: 생성 안 함 (3-6E.3에서 진행)
+- **프론트엔드**: 수정 안 함
+
+### 다음 단계
+
+- 3-6E.3: `generate_store_invite_code` RPC 설계/구현
+- 또는 local migration verification / remote dry-run preflight
+
+### 제약 준수
+
+- create_initial_store RPC 수정: ✅ (이 단계에서 허용됨)
+- JS/CSS/HTML 수정: ❌ (no)
+- 프론트 초대 UI 구현: ❌ (no)
+- Supabase remote db push: ❌ (no)
+- supabase db reset --linked: ❌ (no)
+- supabase db pull: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 생성/추가: ❌ (no)
+- service_role/token/key/password 출력: ❌ (no)
+- main/gh-pages 작업: ❌ (no)
+
