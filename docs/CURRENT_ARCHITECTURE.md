@@ -2206,14 +2206,164 @@ migration 없이 프론트엔드 코드만으로 완화할 수 있는 항목:
 
 - 3-5X: Remote Production Readiness Freeze Audit ✅
 - 3-6A: Auth Role & Guest Mode Architecture Design ✅
-- **3-6B: Auth Onboarding & Guest Mode Gap Audit ✅ (현재)**
-- 다음: 3-6C 구현 단계 (위 추천 순서 중 1~3번 우선)
+- 3-6B: Auth Onboarding & Guest Mode Gap Audit ✅
+- 3-6C: JS-only Guest Mode Gate ✅
+- **3-6D: create_initial_store Security Hardening Design ✅ (현재)**
+- 다음: 3-6E 구현 단계 (선택한 정책에 따라 migration 진행)
+
+## 34. 3-6D: create_initial_store Security Hardening Design (2026-07-22)
+
+### 목적
+
+3-6C에서 membership 없는 authenticated user를 guest/demo mode로 처리했지만, DB 단에서 `create_initial_store` RPC는 여전히 모든 authenticated user에게 열려 있음. 이번 단계에서는 RPC의 보안 강화 방안을 설계한다. **이번 단계는 설계/문서화만 하며, 코드/DB 수정은 하지 않는다.**
+
+### 현재 create_initial_store 보안 상태
+
+#### RPC 정의 및 GRANT
+
+| 항목 | 값 |
+|---|---|
+| 정의 위치 | `supabase/migrations/20260711000800_auth_onboarding.sql`, `20260711000850_auth_onboarding_hardening.sql` |
+| 함수명 | `public.create_initial_store(p_name text, p_subtitle text DEFAULT NULL, p_default_language text DEFAULT 'ko')` |
+| 반환 타입 | `uuid` (store_id) |
+| SECURITY DEFINER | ✅ Yes |
+| SET search_path | ✅ `''` (empty, safe) |
+| GRANT EXECUTE | **`authenticated` role** (모든 로그인 사용자에게 실행 권한) |
+| REVOKE FROM | `PUBLIC`, `anon` |
+
+#### 보안 조치 (이미 구현됨)
+
+1. **auth.uid() 검증** — 호출자의 user id를 가져오며, NULL이면 에러
+2. **입력값 NULL 체크** — `p_name`, `p_default_language`에 대해 명시적 NULL 검사 (SQLSTATE 22023)
+3. **입력값 sanitize/validate** — trim, 길이 제한(1~100자), whitelist(ko/zh/en/ja)
+4. **advisory transaction lock** — 동일 user의 동시 호출 방지 (`hashtextextended(auth.uid()::text, 0)`)
+5. **idempotent onboarding** — 이미 active owner membership이 있으면 기존 store_id 반환
+6. **soft-deleted store 제외** — `stores.deleted_at IS NULL` 조건으로 삭제된 store 무시
+7. **atomic transaction** — profile + store + membership + settings를 단일 트랜잭션으로 생성
+
+### 위험도 평가
+
+| # | 위험 | 설명 | 위험도 |
+|---|---|---|---|
+| **W-01** | **모든 authenticated user가 owner store를 만들 수 있음** | `GRANT EXECUTE ON FUNCTION ... TO authenticated` → 회원가입만 하면 누구나 자신의 store를 owner로 생성 가능. LESOUL 운영 구조(단일 owner store + 초대받은 멤버)와 맞지 않음 | **CRITICAL** |
+| **W-02** | **프론트 게이트 우회 가능** | 3-6C에서 프론트 단에서 guest로 분류하여 create_initial_store 호출을 막았으나, attacker가 직접 Supabase API를 호출하면 RPC 실행 가능 | **HIGH** |
+| **W-03** | **운영 데이터 오염** | 아무나 owner store를 만들면 실제 운영 데이터와 섞일 위험. RLS는 store_id 기준이므로 새 store를 만들면 그 사용자만의 격리된 데이터셋이 생기지만, DB 관점에서는 "익명의 store"가 계속 생기는 문제 | **HIGH** |
+| **W-04** | **Billing/Subscription placeholder와 충돌 가능** | 추후 Billing을 store_id 기준으로 설계한다면, 인증되지 않은 사용자의 store에 대해 Billing 레코드가 필요해짐 | **MEDIUM** |
+
+### 권장 정책 비교 (1안/2안/3안)
+
+#### 1안: Owner-only Bootstrap (제한적 허용)
+
+| 항목 | 내용 |
+|---|---|
+| **정책** | 특정 이메일/사용자만 owner store를 만들 수 있음 (예: 환경 변수 또는 테이블에 지정된 admin 목록) |
+| **구현 방법** | `create_initial_store` 내부에서 `auth.uid()` 또는 `auth.jwt()->>'email'`을 확인하여 whitelist에 있는지 검사 |
+| **장점** | 간단한 whitelist로 제어 가능. 기존 owner 계정에 영향 없음 |
+| **단점** | whitelist 관리 필요. 새 owner 추가 시 migration 또는 config 업데이트 필요. 동적 사용자 관리에 부적합 |
+| **기존 owner 영향** | 없음 (기존 owner는 whitelist에 포함되면 됨) |
+| **migration 복잡도** | 낮음 (RPC 로직만 수정) |
+
+#### 2안: Invite-code Bootstrap (초대 코드 기반)
+
+| 항목 | 내용 |
+|---|---|
+| **정책** | owner가 생성한 초대 코드가 있어야만 새 owner store를 만들 수 있음 |
+| **구현 방법** | `create_initial_store`에 `p_invite_code` 파라미터 추가. RPC 내부에서 `store_invitations` 테이블 조회하여 코드 검증 |
+| **장점** | 동적 사용자 관리 가능. owner가 직접 초대 발송. 운영 단계에서 자연스러운 흐름 |
+| **단점** | 신규 테이블(`store_invitations`) 필요. 초대 코드 생성/만료 로직 구현 필요. migration 복잡도 증가 |
+| **기존 owner 영향** | 없음 (기존 owner는 이미 owner membership이 있으므로 idempotent query가 기존 store 반환) |
+| **migration 복잡도** | 중간~높음 (신규 테이블 + RPC 수정 + 초대 로직) |
+
+#### 3안: Admin-bootstrap Only (관리자 직접 생성)
+
+| 항목 | 내용 |
+|---|---|
+| **정책** | 일반 사용자는 절대 owner store를 만들 수 없음. 관리자(service_role)만 store를 생성하고 owner를 지정 |
+| **구현 방법** | `create_initial_store`의 GRANT를 `authenticated`에서 제거하고, service_role만 실행 가능하도록 변경. 또는 별도 `admin_create_store` RPC 생성 |
+| **장점** | 가장 강력한 통제. 모든 owner store가 관리자에 의해 명시적으로 생성됨 |
+| **단점** | 관리자 개입 필요. self-service 불가. 운영 비용 증가 |
+| **기존 owner 영향** | 있음 (기존 owner가 self-service로 store 생성 불가) |
+| **migration 복잡도** | 낮음 (GRANT만 수정). 단, 운영 흐름 변경 필요 |
+
+### 추천안 선택
+
+**추천안: 2안 (Invite-code Bootstrap)**
+
+| 이유 | 설명 |
+|---|---|
+| **운영 적합성** | LESOUL은 단일 owner + 초대받은 멤버 구조이므로, 초대 코드 기반 온보딩이 자연스러움 |
+| **동적 사용자 관리** | 새 owner를 추가할 때마다 migration/config 업데이트 필요 없음 |
+| **기존 owner 보호** | 기존 owner는 이미 owner membership이 있으므로 idempotent query로 보호됨 |
+| **확장성** | 추후 owner 초대 UI, 만료 로직, 다양한 역할 초대 등으로 확장 가능 |
+
+### 2안 구현 전제 조건
+
+1. **신규 테이블 `store_invitations` 생성**
+   - `id` (uuid, PK)
+   - `store_id` (uuid, FK → stores)
+   - `invite_code` (text, unique, indexed)
+   - `invited_email` (text, nullable)
+   - `role` (member_role, default 'owner')
+   - `created_by` (uuid, FK → auth.users)
+   - `expires_at` (timestamptz, nullable)
+   - `used_at` (timestamptz, nullable)
+   - `used_by` (uuid, FK → auth.users)
+
+2. **RPC 수정: `create_initial_store(p_name, p_subtitle, p_default_language, p_invite_code)`**
+   - `p_invite_code`가 NULL이면 기존 동작 유지 (idempotent)
+   - `p_invite_code`가 제공되면 `store_invitations` 테이블에서 코드 검증
+   - 코드가 유효하면 초대된 store의 owner/member로 등록
+   - 코드 만료/중복 사용 시 에러
+
+3. **기존 owner 계정 보호**
+   - 이미 owner membership이 있는 경우, invite_code 없이도 기존 store 반환 (idempotent)
+   - 또는 별도 migration에서 기존 owner를 자동으로 whitelist에 추가
+
+4. **초대 코드 생성 RPC**
+   - `generate_store_invite_code(p_store_id, p_role, p_invited_email, p_expires_in_days)`
+   - owner만 호출 가능
+
+### migration 필요 여부
+
+**필요함.** 구체적으로 다음 migration이 필요:
+
+| 항목 | 설명 | 마이그레이션 복잡도 |
+|---|---|---|
+| `store_invitations` 테이블 생성 | 초대 코드 저장용 테이블 | 중간 |
+| `create_initial_store` RPC 수정 | `p_invite_code` 파라미터 추가 + 검증 로직 | 중간 |
+| `generate_store_invite_code` RPC 생성 | owner용 초대 코드 생성 RPC | 낮음 |
+| 기존 owner whitelist 등록 (선택) | 기존 owner가 invite_code 없이도 store 생성 가능하게 하려면 별도 로직 필요 | 낮음 |
+
+### 구현 전 선행 조건
+
+1. **3-6E에서 구현 여부 결정** — 사용자가 2안으로 진행할지, 1안/3안으로 할지 결정 필요
+2. **초대 코드 정책 확정** — 만료 기간, 중복 사용 허용 여부, 역할별 초대 가능 여부
+3. **owner 초대 UI 설계** — 3-6F 이상에서 프론트엔드 구현 필요
+4. **기존 owner 계정 정리** — 현재 owner 계정이 정상적으로 owner membership을 갖고 있는지 확인
+
+### rollback 전략
+
+| 상황 | rollback 방법 |
+|---|---|
+| migration 후 문제 발견 | `store_invitations` 테이블 DROP + `create_initial_store` RPC를 이전 버전으로 REPLACE |
+| 기존 owner 접근 불가 | idempotent query가 기존 owner membership을 조회하므로, invite_code 없이도 기존 store 반환 가능 (기존 동작 보존) |
+| 초대 코드 로직 오류 | `p_invite_code` 파라미터를 NULL로 호출하면 기존 동작과 동일 (backward compatible) |
+
+### 3-6E 구현 범위 제안
+
+| 순서 | 항목 | 설명 |
+|---|---|---|
+| **E1** | `store_invitations` 테이블 생성 | migration 파일 작성 |
+| **E2** | `generate_store_invite_code` RPC 생성 | owner용 초대 코드 생성 |
+| **E3** | `create_initial_store` RPC 수정 | `p_invite_code` 파라미터 추가 + 검증 로직 |
+| **E4** | contract test 작성 | 초대 코드 기반 온보딩 검증 |
+| **E5** | 프론트엔드 연동 (선택) | owner 초대 UI |
 
 ### 제약 준수
 
 - 기능 코드 수정: ❌ (no)
 - JS/CSS/HTML 수정: ❌ (no)
-- Supabase migration/schema/RLS/RPC 수정: ❌ (no)
+- Supabase migration/schema/RLS/RPC 수정: ❌ (no) — 설계만 함
 - supabase db push 실행: ❌ (no)
 - supabase db reset --linked: ❌ (no)
 - supabase db pull: ❌ (no)
