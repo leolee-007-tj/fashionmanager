@@ -2680,3 +2680,91 @@ ORDER BY owner_store_count DESC;
 - main/gh-pages 작업: ❌ (no)
 - migration 파일 생성: ❌ (no)
 
+---
+
+## 36. 3-6E.1: Store Invitations Foundation Migration (2026-07-23)
+
+### 목적
+
+3-6E invite-code migration의 첫 단계로 `store_invitations` 테이블 기반을 만든다.
+이번 단계는 **table foundation only**이며, `create_initial_store` RPC 하드닝은 3-6E.2로 남긴다.
+
+### 생성된 산출물
+
+| 산출물 | 경로 | 설명 |
+|---|---|---|
+| Migration 파일 | `supabase/migrations/20260711001200_store_invitations.sql` | store_invitations 테이블, 제약, 인덱스, trigger, RLS |
+| Contract test | `tests/store-invitations-foundation-contract.test.mjs` | 15개 contract test (A~O) |
+
+### store_invitations 설계 요약
+
+| 항목 | 값 | 비고 |
+|---|---|---|
+| **타입** | join-type only | `store_id` NOT NULL |
+| **create-type** | ❌ 미구현 | 3-6E.2 이후 확장 가능 |
+| **기본 role** | `staff` | owner 초대는 RPC 레벨에서 제어 예정 |
+| **invite_code** | unique, not empty | `trim(invite_code) <> ''` CHECK |
+| **expires_at** | nullable | `created_at`보다 이후여야 함 |
+| **used_at / revoked_at** | mutual exclusion | 동시 존재 불가 |
+| **direct DML** | ❌ 차단 | authenticated에 SELECT만 grant, INSERT/UPDATE/DELETE는 revoke |
+| **mutation 경로** | RPC only | 이후 단계에서 `generate_store_invite_code` 등 RPC 구현 예정 |
+
+### 포함된 제약조건
+
+- `chk_store_invitations_invite_code_not_empty` — 빈 문자열 금지
+- `chk_store_invitations_expires_after_created` — 만료일은 생성일 이후
+- `chk_store_invitations_used_by_requires_used_at` — 사용자가 있으면 사용 시각도 있어야 함
+- `chk_store_invitations_revoked_by_requires_revoked_at` — 취소자가 있으면 취소 시각도 있어야 함
+- `chk_store_invitations_not_used_and_revoked` — 사용과 취소 동시 불가
+
+### 포함된 인덱스
+
+- `uq_store_invitations_invite_code` — unique (invite_code)
+- `idx_store_invitations_store_id` — store별 조회
+- `idx_store_invitations_created_by` — 생성자별 조회
+- `idx_store_invitations_used_by` — 사용자별 조회 (partial: used_by IS NOT NULL)
+- `idx_store_invitations_invited_email_lower` — email 검색 (partial: invited_email IS NOT NULL)
+- `idx_store_invitations_active` — 활성 초대 조회 (partial: used_at IS NULL AND revoked_at IS NULL)
+
+### RLS 정책
+
+- `ENABLE ROW LEVEL SECURITY`
+- anon: `REVOKE ALL`
+- authenticated: `GRANT SELECT` only, `REVOKE INSERT/UPDATE/DELETE`
+- policy: `StoreInvitations: owners can view` — `private.has_store_role(store_id, ARRAY['owner'::member_role])`
+
+### Trigger
+
+- `trg_store_invitations_updated_at` — `handle_store_invitation_update()`
+- 보호 필드: `id`, `store_id`, `invite_code`, `created_by`, `created_at`
+
+### contract test 결과
+
+| 항목 | 결과 |
+|---|---|
+| tests | 15 |
+| pass | 15 |
+| fail | 0 |
+
+### 아직 적용하지 않은 것
+
+- **Remote Supabase**: `supabase db push` 실행 안 함
+- **create_initial_store RPC**: 수정 안 함 (3-6E.2에서 진행)
+- **generate_store_invite_code RPC**: 생성 안 함 (3-6E.2~3에서 진행)
+- **프론트엔드**: 수정 안 함
+
+### 제약 준수
+
+- create_initial_store RPC 수정: ❌ (no)
+- js/auth-service.js 수정: ❌ (no)
+- js/app-bootstrap.js 수정: ❌ (no)
+- JS/CSS/HTML 수정: ❌ (no)
+- 프론트 초대 UI 구현: ❌ (no)
+- Supabase remote db push: ❌ (no)
+- supabase db reset --linked: ❌ (no)
+- supabase db pull: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 생성/추가: ❌ (no)
+- service_role/token/key/password 출력: ❌ (no)
+- main/gh-pages 작업: ❌ (no)
+
