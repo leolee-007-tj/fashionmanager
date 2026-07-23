@@ -2442,3 +2442,227 @@ create_initial_store(p_name, p_subtitle, p_default_language, p_invite_code = NUL
 - service_role/token/key/password 출력: ❌ (no)
 - main/gh-pages 작업: ❌ (no)
 
+---
+
+## 35. 3-6E-Prep: Existing Owner/Membership Safety Audit (2026-07-23)
+
+### 목적
+
+3-6E invite-code migration 적용 전, 기존 owner/member 상태를 안전하게 감사한다.
+이 단계는 **감사/진단만** 수행하며, 코드 수정·DB migration·RLS/RPC 수정·`supabase db push`를 금지한다.
+
+### 감사 항목
+
+| # | 항목 | 확인 방법 |
+|---|---|---|
+| 1 | active owner membership이 정상 존재하는지 | `store_members` WHERE role='owner' AND is_active=true COUNT |
+| 2 | active store와의 연결 상태 | `store_members` JOIN `stores` WHERE stores.deleted_at IS NULL |
+| 3 | 기존 owner 계정의 store_id 매핑 | owner membership → store_id 조회 (이메일 마스킹) |
+| 4 | stores.deleted_at IS NULL인 active store와 연결 여부 | orphan membership 탐지 |
+| 5 | create_initial_store idempotent lookup 조건 충족 여부 | RPC 내 쿼리와 동일한 조건으로 시뮬레이션 |
+| 6 | guest test 계정이 불필요한 owner store를 만들지 않았는지 | store name 패턴 분석 (test/guest/demo 등) |
+| 7 | 3-6E migration 후 기존 owner가 invite_code 없이 store_id를 받을 수 있는지 | idempotent lookup 쿼리가 기존 owner를 반환하는지 확인 |
+| 8 | 민감정보 보호 | 이메일 마스킹, token/key/password 출력 금지 |
+
+### Read-only 감사 SQL (Supabase SQL Editor에서 실행)
+
+> **주의**: 아래 쿼리는 모두 SELECT 전용입니다. INSERT/UPDATE/DELETE/RPC 호출을 포함하지 않습니다.
+> Supabase Dashboard → SQL Editor → New query 에서 실행하세요.
+
+#### Q1: Active owner membership count
+
+```sql
+-- 기존 owner membership이 정상 존재하는지 확인
+SELECT
+    COUNT(*) AS active_owner_membership_count
+FROM public.store_members sm
+INNER JOIN public.stores s ON s.id = sm.store_id
+WHERE sm.role = 'owner'
+  AND sm.is_active = true
+  AND s.deleted_at IS NULL;
+```
+
+#### Q2: Active store count
+
+```sql
+-- 현재 active store 개수
+SELECT
+    COUNT(*) AS active_store_count
+FROM public.stores
+WHERE deleted_at IS NULL;
+```
+
+#### Q3: Membership without active store (orphan membership)
+
+```sql
+-- store_members가 존재하지만 store가 soft-delete된 경우
+SELECT
+    sm.user_id,
+    sm.store_id,
+    sm.role,
+    sm.is_active,
+    s.deleted_at AS store_deleted_at
+FROM public.store_members sm
+LEFT JOIN public.stores s ON s.id = sm.store_id
+WHERE sm.is_active = true
+  AND (s.deleted_at IS NOT NULL OR s.id IS NULL);
+```
+
+#### Q4: 기존 owner 계정 store_id 매핑 (이메일 마스킹)
+
+```sql
+-- owner 계정이 어떤 store_id를 가지고 있는지 확인
+-- 이메일은 앞 2자 + *** + 뒤 4자만 표시
+SELECT
+    sm.user_id,
+    sm.store_id,
+    sm.role,
+    sm.is_active,
+    sm.created_at AS membership_created_at,
+    s.name AS store_name,
+    s.deleted_at AS store_deleted_at,
+    LEFT(u.email, 2) || '***' || RIGHT(u.email, 4) AS masked_email
+FROM public.store_members sm
+INNER JOIN public.stores s ON s.id = sm.store_id
+INNER JOIN auth.users u ON u.id = sm.user_id
+WHERE sm.role = 'owner'
+ORDER BY sm.created_at ASC;
+```
+
+#### Q5: create_initial_store idempotent lookup 조건 시뮬레이션
+
+```sql
+-- RPC 내 idempotent lookup 쿼리와 동일한 조건으로 각 owner가 store_id를 받을 수 있는지 확인
+SELECT
+    sm.user_id,
+    sm.store_id,
+    LEFT(u.email, 2) || '***' || RIGHT(u.email, 4) AS masked_email,
+    CASE
+        WHEN sm.store_id IS NOT NULL THEN 'YES - will return existing store_id'
+        ELSE 'NO - would require invite_code'
+    END AS idempotent_lookup_result
+FROM public.store_members sm
+INNER JOIN public.stores s ON s.id = sm.store_id
+INNER JOIN auth.users u ON u.id = sm.user_id
+WHERE sm.role = 'owner'
+  AND sm.is_active = true
+  AND s.deleted_at IS NULL
+ORDER BY sm.created_at ASC;
+```
+
+#### Q6: Guest-created store 의심 탐지
+
+```sql
+-- 테스트/guest/demo 목적으로 보이는 store 탐지
+SELECT
+    s.id AS store_id,
+    s.name AS store_name,
+    s.created_at,
+    LEFT(u.email, 2) || '***' || RIGHT(u.email, 4) AS masked_email
+FROM public.stores s
+INNER JOIN public.store_members sm ON sm.store_id = s.id
+    AND sm.role = 'owner'
+    AND sm.is_active = true
+INNER JOIN auth.users u ON u.id = sm.user_id
+WHERE s.deleted_at IS NULL
+  AND (
+      s.name ILIKE '%test%'
+      OR s.name ILIKE '%guest%'
+      OR s.name ILIKE '%demo%'
+      OR s.name ILIKE '%연습%'
+      OR s.name ILIKE '%게스트%'
+      OR s.name ILIKE '%temp%'
+  )
+ORDER BY s.created_at DESC;
+```
+
+#### Q7: 전체 membership 요약 (role별 분포)
+
+```sql
+-- role별 active membership 분포
+SELECT
+    sm.role,
+    COUNT(*) AS count,
+    COUNT(DISTINCT sm.user_id) AS distinct_users,
+    COUNT(DISTINCT sm.store_id) AS distinct_stores
+FROM public.store_members sm
+INNER JOIN public.stores s ON s.id = sm.store_id
+WHERE sm.is_active = true
+  AND s.deleted_at IS NULL
+GROUP BY sm.role
+ORDER BY sm.role;
+```
+
+#### Q8: 한 사용자가 여러 owner membership을 가진 경우
+
+```sql
+-- 동일 사용자가 2개 이상의 active owner store를 가진 경우
+SELECT
+    sm.user_id,
+    LEFT(u.email, 2) || '***' || RIGHT(u.email, 4) AS masked_email,
+    COUNT(*) AS owner_store_count,
+    array_agg(sm.store_id::text) AS store_ids
+FROM public.store_members sm
+INNER JOIN public.stores s ON s.id = sm.store_id
+INNER JOIN auth.users u ON u.id = sm.user_id
+WHERE sm.role = 'owner'
+  AND sm.is_active = true
+  AND s.deleted_at IS NULL
+GROUP BY sm.user_id, u.email
+HAVING COUNT(*) > 1
+ORDER BY owner_store_count DESC;
+```
+
+### 감사 결과
+
+> 아래 표는 Supabase SQL Editor에서 위 쿼리를 실행한 후 결과를 기록하는 곳입니다.
+> 사용자가 직접 실행한 결과를 채워 넣어야 합니다.
+
+| 쿼리 | 항목 | 결과 | 비고 |
+|---|---|---|---|
+| Q1 | active owner membership count | _(실행 후 기록)_ | |
+| Q2 | active store count | _(실행 후 기록)_ | |
+| Q3 | orphan membership count | _(실행 후 기록)_ | 0이어야 안전 |
+| Q4 | 기존 owner store_id 매핑 | _(실행 후 기록)_ | |
+| Q5 | idempotent lookup 결과 | _(실행 후 기록)_ | 모든 기존 owner가 YES여야 안전 |
+| Q6 | guest-created store 의심 | _(실행 후 기록)_ | 0이어야 안전 |
+| Q7 | role별 membership 분포 | _(실행 후 기록)_ | |
+| Q8 | 중복 owner membership | _(실행 후 기록)_ | 0이어야 안전 |
+
+### 3-6E migration 진행 가능 여부 판정 기준
+
+| 조건 | 기대값 | 위험 시 조치 |
+|---|---|---|
+| Q1 ≥ 1 (active owner membership 존재) | ✅ | 0이면 기존 owner가 없으므로 migration 영향 없음 |
+| Q3 = 0 (orphan membership 없음) | ✅ | >0이면 orphan 정리 필요 (soft-delete된 store의 membership 비활성화) |
+| Q5 모든 기존 owner = YES | ✅ | NO가 있으면 해당 owner는 invite_code가 필요함 |
+| Q6 = 0 (guest-created store 없음) | ✅ | >0이면 정리 필요 (soft-delete 또는 membership 비활성화) |
+| Q8 = 0 (중복 owner membership 없음) | ✅ | >0이면 RPC가 가장 오래된 store만 반환하므로 정리 필요 |
+
+### 기존 owner 보호 조건
+
+3-6E migration 후 `create_initial_store`에 `p_invite_code` 검증이 추가되더라도, **기존 owner는 다음 조건으로 보호**된다:
+
+1. RPC 내 idempotent lookup이 `auth.uid()`로 active owner membership을 먼저 조회
+2. 기존 owner membership이 있으면 `p_invite_code`와 관계없이 기존 `store_id` 반환
+3. invite_code 검증은 **신규 store creation 흐름에서만** 적용
+4. 따라서 기존 owner는 invite_code 없이도 정상적으로 기존 store에 접근 가능
+
+### 제약 준수
+
+- 코드 수정: ❌ (no) — 문서 수정만
+- JS/CSS/HTML 수정: ❌ (no)
+- Supabase migration/schema/RLS/RPC 수정: ❌ (no)
+- supabase db push: ❌ (no)
+- supabase db reset --linked: ❌ (no)
+- supabase db pull: ❌ (no)
+- INSERT/UPDATE/DELETE: ❌ (no) — SELECT 전용
+- RPC 실행: ❌ (no)
+- create_initial_store 실행: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 생성/추가: ❌ (no)
+- service_role/token/key/password 출력: ❌ (no)
+- user email 전체 출력: ❌ (no) — 마스킹 처리
+- main/gh-pages 작업: ❌ (no)
+- migration 파일 생성: ❌ (no)
+
