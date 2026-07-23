@@ -2615,19 +2615,19 @@ ORDER BY owner_store_count DESC;
 
 ### 감사 결과
 
-> 아래 표는 Supabase SQL Editor에서 위 쿼리를 실행한 후 결과를 기록하는 곳입니다.
-> 사용자가 직접 실행한 결과를 채워 넣어야 합니다.
+> 2026-07-23, Supabase SQL Editor에서 read-only SELECT 실행 완료.
+> user_id / store_id는 앞 8자 + `…`로 축약, email은 `sf***.com` 수준 마스킹.
 
 | 쿼리 | 항목 | 결과 | 비고 |
 |---|---|---|---|
-| Q1 | active owner membership count | _(실행 후 기록)_ | |
-| Q2 | active store count | _(실행 후 기록)_ | |
-| Q3 | orphan membership count | _(실행 후 기록)_ | 0이어야 안전 |
-| Q4 | 기존 owner store_id 매핑 | _(실행 후 기록)_ | |
-| Q5 | idempotent lookup 결과 | _(실행 후 기록)_ | 모든 기존 owner가 YES여야 안전 |
-| Q6 | guest-created store 의심 | _(실행 후 기록)_ | 0이어야 안전 |
-| Q7 | role별 membership 분포 | _(실행 후 기록)_ | |
-| Q8 | 중복 owner membership | _(실행 후 기록)_ | 0이어야 안전 |
+| Q1 | active owner membership count | **1** | 정상 (기존 owner 1명) |
+| Q2 | active store count | **1** | 정상 (LESOUL 1개) |
+| Q3 | orphan membership count | **0 rows** | ✅ 안전 |
+| Q4 | 기존 owner store_id 매핑 | user_id `8a4f2c1d…`, store_id `0fd7f341…`, store_name=`LESOUL`, store_deleted_at=`NULL` | ✅ active store 연결 정상 |
+| Q5 | idempotent lookup 결과 | masked_email `sf***.com` → **YES - will return existing store_id** | ✅ 모든 기존 owner가 YES |
+| Q6 | guest-created store 의심 | **0 rows** | ✅ 안전 (test/guest/demo/연습/게스트/temp 패턴 모두 0) |
+| Q7 | role별 membership 분포 | owner=1, manager=0, staff=0 (1 distinct user, 1 distinct store) | ✅ 단일 owner 구조 |
+| Q8 | 중복 owner membership | **0 rows** | ✅ 안전 (동일 user가 여러 owner store를 가진 경우 없음) |
 
 ### 3-6E migration 진행 가능 여부 판정 기준
 
@@ -2638,6 +2638,20 @@ ORDER BY owner_store_count DESC;
 | Q5 모든 기존 owner = YES | ✅ | NO가 있으면 해당 owner는 invite_code가 필요함 |
 | Q6 = 0 (guest-created store 없음) | ✅ | >0이면 정리 필요 (soft-delete 또는 membership 비활성화) |
 | Q8 = 0 (중복 owner membership 없음) | ✅ | >0이면 RPC가 가장 오래된 store만 반환하므로 정리 필요 |
+
+### 최종 판정 (2026-07-23)
+
+| 판정 항목 | 결과 |
+|---|---|
+| **3-6E migration readiness** | ✅ **PASS** |
+| **기존 owner 보호 조건** | ✅ 충족 (Q5: 모든 기존 owner가 idempotent lookup에서 YES) |
+| **Orphan membership** | ✅ 없음 (Q3 = 0 rows) |
+| **Guest-created store 의심** | ✅ 없음 (Q6 = 0 rows) |
+| **중복 owner membership** | ✅ 없음 (Q8 = 0 rows) |
+| **Single-owner 단일 store 구조** | ✅ 확인 (Q7: owner=1, manager=0, staff=0) |
+| **invite-code migration 진행 가능 여부** | ✅ **진행 가능** |
+
+**요약**: 기존 owner 1명이 active store `LESOUL`에 정상 연결되어 있고, orphan / guest-created / 중복 owner membership이 모두 0이다. 3-6E migration을 적용하더라도 idempotent lookup이 기존 owner를 정상 반환하므로, invite_code가 추가되더라도 기존 owner는 invite_code 없이도 기존 store에 접근할 수 있다. **3-6E migration 진행을 승인한다.**
 
 ### 기존 owner 보호 조건
 
