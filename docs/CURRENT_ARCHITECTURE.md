@@ -2623,7 +2623,7 @@ ORDER BY owner_store_count DESC;
 | Q1 | active owner membership count | **1** | 정상 (기존 owner 1명) |
 | Q2 | active store count | **1** | 정상 (LESOUL 1개) |
 | Q3 | orphan membership count | **0 rows** | ✅ 안전 |
-| Q4 | 기존 owner store_id 매핑 | user_id `8a4f2c1d…`, store_id `0fd7f341…`, store_name=`LESOUL`, store_deleted_at=`NULL` | ✅ active store 연결 정상 |
+| Q4 | 기존 owner store_id 매핑 | user_id `149bc902…`, store_id `ec52ecfa…`, store_name=`LESOUL`, store_deleted_at=`NULL` | ✅ active store 연결 정상 |
 | Q5 | idempotent lookup 결과 | masked_email `sf***.com` → **YES - will return existing store_id** | ✅ 모든 기존 owner가 YES |
 | Q6 | guest-created store 의심 | **0 rows** | ✅ 안전 (test/guest/demo/연습/게스트/temp 패턴 모두 0) |
 | Q7 | role별 membership 분포 | owner=1, manager=0, staff=0 (1 distinct user, 1 distinct store) | ✅ 단일 owner 구조 |
