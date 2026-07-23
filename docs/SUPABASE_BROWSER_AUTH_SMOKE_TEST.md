@@ -301,3 +301,119 @@ node --test tests/browser-auth-recovery-contract.test.mjs
 - 다음 작업 전까지 remote HEAD(`398cc6e`)를 기준점으로 고정한다
 - 실제 운영 데이터 사용/저장은 이후 단계에서 결정한다
 
+## 21. 3-6C: JS-only Guest Mode Gate Browser Smoke Test (2026-07-22)
+
+membership이 없는 authenticated user가 강제로 `needs_store_onboarding` 화면으로 가지 않고, **guest/demo mode**로 앱에 진입하는지 실제 브라우저에서 검증했다.
+
+### 테스트 환경
+
+| 항목 | 값 |
+|---|---|
+| 테스트 URL | `http://localhost:8081` |
+| Branch | `feature/supabase-cloud-migration` |
+| Remote HEAD | `b83f3f7` (이전 단계 `021726f` 이후 guest mode gate commit) |
+| Working tree | clean |
+| Confirm Email | **OFF** (테스트 환경) |
+| Feature flag | `AUTH_GUEST_MODE_ENABLED=true` (local-only) |
+
+> **참고: Confirm Email OFF 동작**
+> 현재 테스트 환경에서는 Confirm Email이 OFF이므로 `auth.signUp` 호출 즉시 session이 반환된다.
+> 이 경우 별도 이메일 인증 없이 곧바로 `bootstrapAuthenticatedUser()`가 실행되며,
+> membership이 없으면 `status='guest'`로 분류되어 앱에 진입한다.
+> 운영 환경에서 Confirm Email이 ON으로 바뀌면 signUp 직후 session이 null이 반환되며,
+> "가입 확인 이메일을 보냈습니다. 이메일을 확인한 뒤 로그인해 주세요." 흐름이 별도로 필요하다.
+
+### Feature Flag 안내
+
+| 항목 | 값 |
+|---|---|
+| Flag 이름 | `AUTH_GUEST_MODE_ENABLED` |
+| 위치 | `js/config.js` (local-only, gitignored) |
+| 기본값 | `false` (legacy `needs_store_onboarding` 흐름 유지) |
+| guest mode 활성화 | `js/config.js`에 `AUTH_GUEST_MODE_ENABLED: true` 추가 |
+
+> ⚠️ **js/config.js는 절대 commit 금지** — 이 파일은 gitignored이며 local-only 설정 파일이다.
+> `AUTH_GUEST_MODE_ENABLED` 값은 브라우저에서만 적용되며, GitHub에는 절대 push되지 않는다.
+
+### guest 계정 기대 결과
+
+| # | 항목 | 기대 결과 | 결과 |
+|---|---|---|---|
+| 1 | 신규 membership 없는 계정 signup/login | session이 즉시 반환되며, 별도 재로그인 불필요 (Confirm Email OFF이므로 정상) | **PASS** |
+| 2 | 매장 만들기 화면으로 강제 이동하지 않음 | `needs_store_onboarding` 화면이 표시되지 않음 | **PASS** |
+| 3 | 앱 메인 화면 진입 | 상품/주문/고객 등의 메인 메뉴가 표시됨 | **PASS** |
+| 4 | "게스트 모드 · 연습 데이터 (localStorage)" 표시 | 상단 또는 auth context badge에 표시 | **PASS** (게스트 모드 확인: true, 연습 데이터 확인: true) |
+| 5 | guest 상태 상품 추가/수정/삭제 | `LocalProductsDataSource`를 통해 localStorage에 저장 | **PASS** (localStorage product key에 데이터 저장됨) |
+| 6 | `create_initial_store` RPC 자동 호출 | Network 탭에 호출 흔적 **없음** | **PASS** (금지 RPC 확인 결과: []) |
+| 7 | `create_product`/`update_product`/`soft_delete_product` RPC 호출 | Network 탭에 호출 흔적 **없음** | **PASS** (금지 RPC 확인 결과: []) |
+
+### owner/member 계정 기대 결과
+
+| # | 항목 | 기대 결과 | 결과 |
+|---|---|---|---|
+| 8 | 기존 owner/member 계정 Supabase ready 흐름 유지 | 매장 데이터 로드, `create_product`/`update_product`/`soft_delete_product` 정상 호출 | **PENDING** (별도 검증 안 함) |
+
+### Network RPC 호출 정책
+
+guest 모드에서 다음 RPC들은 **호출되면 안 된다**:
+
+| RPC | 허용 상태 |
+|---|---|
+| `create_initial_store` | **호출 금지** (guest에서 store 자동 생성 차단) |
+| `create_product` | **호출 금지** (localStorage만 사용) |
+| `update_product` | **호출 금지** (localStorage만 사용) |
+| `soft_delete_product` | **호출 금지** (localStorage만 사용) |
+| `ensure_user_profile` | 호출 허용 (session 확보를 위해 무해) |
+| `auth.getSession` | 호출 허용 (인증 상태 확인용) |
+
+> 참고: `PRODUCTS_SUPABASE_ENABLED=true`이지만 `activeMembership`이 null일 때
+> db.js의 `_resolveRuntimeProductsDataSource()`가 `null`을 반환하여
+> `LocalProductsDataSource`로 조용히 fallback한다.
+> 따라서 `getProductsDataSource()`는 에러를 던지지 않고 `LocalProductsDataSource`를 반환한다.
+
+### localStorage 사용 확인
+
+guest 모드에서는 다음 데이터가 **localStorage에만** 저장된다:
+
+- `lesoul_gh_products` — 상품 목록
+- `lesoul_gh_orders` — 주문 목록
+- `lesoul_gh_customers` — 고객 목록
+- `lesoul_gh_inventory_logs` — 재고 로그
+- 기타 도메인 데이터
+
+> 새로고침 후에도 데이터가 유지되는지 확인 권장.
+
+### 통과 항목 요약
+
+| # | 항목 | 결과 |
+|---|---|---|
+| 1 | 신규 membership 없는 계정 signup/login | PASS |
+| 2 | 매장 만들기 화면으로 강제 이동하지 않음 | PASS |
+| 3 | 앱 메인 화면 진입 | PASS |
+| 4 | "게스트 모드 · 연습 데이터 (localStorage)" 표시 | PASS |
+| 5 | guest 상태 상품 localStorage 동작 | PASS |
+| 6 | `create_initial_store` RPC 호출 없음 | PASS |
+| 7 | guest 상태 Supabase 운영 RPC 호출 없음 | PASS |
+| 8 | 기존 owner/member Supabase ready 흐름 | PENDING (별도 검증 안 함) |
+
+### 지속 금지 사항
+
+| 항목 | 상태 |
+|---|---|
+| GitHub Support 민감데이터 purge ticket | 닫지 않음 |
+| main/gh-pages force push | 금지 |
+| supabase db push 재실행 | 금지 |
+| supabase db reset --linked | 금지 |
+| supabase db pull | 금지 |
+| js/config.js commit | 금지 |
+| data_export.json 재추가 | 금지 |
+| service_role/token/key/password 출력 | 금지 |
+| `create_initial_store` RPC 수정 | 금지 (JS에서만 게이트 처리) |
+| Supabase migration/schema/RLS/RPC 수정 | 금지 |
+
+### 다음 단계
+
+- 3-6D: owner/member/pending 상태 분리 (DB migration 필요)
+- 운영 전 Confirm Email 정책 결정 및 redirect flow 설계
+- `create_initial_store` DB 단 제한 (초대 코드 기반)
+
