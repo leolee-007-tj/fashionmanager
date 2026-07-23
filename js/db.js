@@ -263,8 +263,26 @@ const DB = {
         }
 
         // active storeId 확인 (app.js/products.js 수정 없이 기존 구조 사용)
+        // 3-6C: guest/demo mode (activeMembership === null)는 silent fallback
+        // 그 외 경로에서 storeId가 null이면 throw (3-5M 정책 유지)
+        const globalObjForMembership = (typeof window !== 'undefined') ? window : globalThis;
+        const bootstrapForMembership = globalObjForMembership.LESOULAppBootstrap;
+        let activeMembership = null;
+        if (bootstrapForMembership && typeof bootstrapForMembership.getContext === 'function') {
+            try {
+                const ctx = bootstrapForMembership.getContext();
+                if (ctx) activeMembership = ctx.activeMembership || null;
+            } catch (e) {
+                // context 접근 실패 — guest로 간주
+            }
+        }
         const storeId = this._resolveActiveStoreId();
         if (!storeId) {
+            // 3-6C: guest 모드 (activeMembership 없음)는 LocalProductsDataSource로 fallback
+            // activeMembership이 있는데 storeId가 없는 비정상 상황은 기존 정책대로 throw
+            if (activeMembership === null) {
+                return null;
+            }
             throw new Error('Products Supabase runtime requires active storeId');
         }
 

@@ -392,7 +392,7 @@ describe('3-6C: app-bootstrap _handleBootstrapResult guest 분기', () => {
 });
 
 describe('3-6C: db.js guest 상태에서 SupabaseProductsDataSource 비활성화', () => {
-    it('C1: activeMembership null (guest) → getProductsDataSource throws', async () => {
+    it('C1: guest (activeMembership null) → silent fallback to LocalProductsDataSource', async () => {
         resetModules();
         loadAppBootstrap();
         const ctx = makeDeps({ config: { SUPABASE_ENABLED: true, SUPABASE_URL: 'https://test.supabase.co', SUPABASE_CLIENT_KEY: 'valid-key' } });
@@ -420,15 +420,40 @@ describe('3-6C: db.js guest 상태에서 SupabaseProductsDataSource 비활성화
             })
         };
         loadDb();
+        const ds = globalThis.DB.getProductsDataSource();
+        assert.equal(ds.name, 'LocalProductsDataSource',
+            'guest mode (activeMembership=null) with PRODUCTS_SUPABASE_ENABLED=true falls back to LocalProductsDataSource');
+        globalThis.LESOULAppBootstrap.destroy();
+        delete globalThis.LESOULSupabase;
+    });
+
+    it('C1.5: non-guest but no storeId (broken state) → throws (3-5M policy preserved)', async () => {
+        resetModules();
+        // activeMembership이 있지만 storeId가 없는 비정상 상황 (3-5M 정책)
+        globalThis.LESOULAppBootstrap = {
+            getContext: () => ({ activeMembership: { storeId: null, role: 'owner' } })
+        };
+        globalThis.LESOUL_CONFIG = {
+            SUPABASE_ENABLED: true,
+            PRODUCTS_SUPABASE_ENABLED: true,
+            SUPABASE_URL: 'http://127.0.0.1:54321',
+            SUPABASE_CLIENT_KEY: 'anon-key'
+        };
+        globalThis.LESOULSupabase = {
+            isInitialized: () => true,
+            getClient: () => ({ supabaseUrl: 'http://127.0.0.1:54321' })
+        };
+        loadDb();
         let threw = false;
         try {
             globalThis.DB.getProductsDataSource();
         } catch (e) {
             threw = true;
-            assert.ok(/active storeId/i.test(e.message), 'error must mention storeId requirement');
+            assert.ok(/active storeId/i.test(e.message),
+                'non-guest with no storeId must still throw (3-5M policy)');
         }
-        assert.ok(threw, 'getProductsDataSource() must throw when activeMembership is null (guest mode)');
-        globalThis.LESOULAppBootstrap.destroy();
+        assert.ok(threw, 'non-guest broken state must throw');
+        delete globalThis.LESOULAppBootstrap;
         delete globalThis.LESOULSupabase;
     });
 

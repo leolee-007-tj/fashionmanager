@@ -92,7 +92,7 @@ describe('Products Runtime Feature Flag Gate Contract (3-5M)', function () {
         assert.equal(ds.name, 'LocalProductsDataSource');
     });
 
-    it('FF5: PRODUCTS_SUPABASE_ENABLED true + no storeId → throws (no silent fallback)', function () {
+    it('FF5: PRODUCTS_SUPABASE_ENABLED true + no storeId (activeMembership null, guest mode) → silent fallback to LocalProductsDataSource (3-6C)', function () {
         global.LESOUL_CONFIG = {
             SUPABASE_ENABLED: true,
             PRODUCTS_SUPABASE_ENABLED: true,
@@ -103,16 +103,38 @@ describe('Products Runtime Feature Flag Gate Contract (3-5M)', function () {
             isInitialized: () => true,
             getClient: () => ({ supabaseUrl: 'http://127.0.0.1:54321' })
         };
-        // activeMembership이 없는 경우
+        // 3-6C: activeMembership이 null인 guest 모드는 silent fallback
         global.LESOULAppBootstrap = {
             getContext: () => ({ activeMembership: null })
+        };
+        const DB = loadDbForTesting();
+        DB.resetProductsDataSourceForTesting();
+        const ds = DB.getProductsDataSource();
+        assert.equal(ds.name, 'LocalProductsDataSource',
+            'guest mode (activeMembership=null) with PRODUCTS_SUPABASE_ENABLED=true must silently fallback to LocalProductsDataSource (3-6C)');
+    });
+
+    it('FF5b: PRODUCTS_SUPABASE_ENABLED true + activeMembership 있음 + no storeId → throws (3-5M policy preserved)', function () {
+        global.LESOUL_CONFIG = {
+            SUPABASE_ENABLED: true,
+            PRODUCTS_SUPABASE_ENABLED: true,
+            SUPABASE_URL: 'http://127.0.0.1:54321',
+            SUPABASE_CLIENT_KEY: 'anon-key'
+        };
+        global.LESOULSupabase = {
+            isInitialized: () => true,
+            getClient: () => ({ supabaseUrl: 'http://127.0.0.1:54321' })
+        };
+        // 3-5M: activeMembership이 있는데 storeId가 없는 비정상 상황은 throw
+        global.LESOULAppBootstrap = {
+            getContext: () => ({ activeMembership: { storeId: null, role: 'owner' } })
         };
         const DB = loadDbForTesting();
         DB.resetProductsDataSourceForTesting();
         assert.throws(
             () => DB.getProductsDataSource(),
             /requires active storeId/i,
-            'PRODUCTS_SUPABASE_ENABLED=true without storeId must throw, not silently fallback'
+            'activeMembership 존재하지만 storeId가 없으면 throw (3-5M)'
         );
     });
 
@@ -467,7 +489,7 @@ describe('Products Runtime Feature Flag Gate Contract (3-5M)', function () {
         );
     });
 
-    it('FF28: remote flag true + no storeId → throws', function () {
+    it('FF28: remote flag true + no storeId (activeMembership null, guest mode) → silent fallback (3-6C)', function () {
         global.LESOUL_CONFIG = {
             SUPABASE_ENABLED: true,
             PRODUCTS_SUPABASE_ENABLED: true,
@@ -479,16 +501,15 @@ describe('Products Runtime Feature Flag Gate Contract (3-5M)', function () {
             isInitialized: () => true,
             getClient: () => ({ supabaseUrl: 'https://example.supabase.co' })
         };
+        // 3-6C: guest mode는 silent fallback
         global.LESOULAppBootstrap = {
             getContext: () => ({ activeMembership: null })
         };
         const DB = loadDbForTesting();
         DB.resetProductsDataSourceForTesting();
-        assert.throws(
-            () => DB.getProductsDataSource(),
-            /requires active storeId/i,
-            'remote flag true + no storeId must throw'
-        );
+        const ds = DB.getProductsDataSource();
+        assert.equal(ds.name, 'LocalProductsDataSource',
+            'remote flag + guest mode (activeMembership=null) must silently fallback (3-6C)');
     });
 
     it('FF29: local URL still works when remote flag is false', function () {
