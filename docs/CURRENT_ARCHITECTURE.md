@@ -2298,30 +2298,100 @@ migration 없이 프론트엔드 코드만으로 완화할 수 있는 항목:
 
 ### 2안 구현 전제 조건
 
+#### NULL invite_code 처리 규칙 (보정됨)
+
+| 상황 | 결과 |
+|---|---|
+| 기존 **owner membership**이 이미 있는 사용자 + `p_invite_code = NULL` | ✅ **허용** — idempotent하게 기존 `store_id` 반환 |
+| **신규 사용자** (owner membership 없음) + `p_invite_code = NULL` | ❌ **거부** — "Invite code is required to create a store" 에러 |
+| 기존 owner + `p_invite_code = 유효한 코드` | ✅ idempotent하게 기존 store 반환 (초대 코드는 무시) |
+| 신규 사용자 + `p_invite_code = 유효한 코드` | ✅ 초대된 store의 owner/member로 등록 또는 store 생성 |
+| `p_invite_code = invalid/expired/used` | ❌ 명확한 에러 반환 |
+
+> **핵심 정책**: `p_invite_code`가 NULL이라고 해서 기존 동작 전체를 유지하지 않는다. idempotent owner lookup은 허용하지만, **신규 store creation은 반드시 유효한 invite_code가 있어야만 허용**한다.
+
+#### Idempotent owner lookup vs new store creation
+
+| 흐름 | 조건 | 결과 |
+|---|---|---|
+| **Idempotent owner lookup** | `p_invite_code`와 관계없이 `auth.uid()`로 active owner membership 조회 | 기존 store_id 반환 또는 NULL |
+| **New store creation** | active owner membership이 없고 `p_invite_code`가 유효 | 새 store + owner membership 생성 |
+| **Rejection** | active owner membership이 없고 `p_invite_code`가 NULL/invalid/expired/used | 에러 발생 |
+
+#### 3-6E 구현 시 pseudo-flow
+
+```
+create_initial_store(p_name, p_subtitle, p_default_language, p_invite_code = NULL):
+  1. auth.uid() 검증 — NULL이면 에러
+  2. 입력값 sanitize/validate
+  3. advisory lock 획득
+  4. ensure_user_profile 호출
+  5. [Idempotent lookup] active + non-deleted owner membership 조회
+     - 있으면 → 기존 store_id 반환 (p_invite_code 무시)
+  6. [Invite code required check] active owner membership이 없으면
+     - p_invite_code가 NULL이면 → 에러: "Invite code is required"
+     - p_invite_code가 제공되면 → store_invitations에서 코드 검증
+  7. [Invite code validation]
+     - 코드가 존재하지 않으면 → 에러: "Invalid invite code"
+     - 코드가 이미 사용되었으면 → 에러: "Invite code already used"
+     - 코드가 만료되었으면 → 에러: "Invite code has expired"
+     - (선택) invited_email이 있고 현재 사용자 이메일과 다르면 → 에러
+  8. [Store creation with invite]
+     - invite_code에 지정된 store_id가 있으면 → 해당 store에 membership 생성 (join)
+     - invite_code가 "새 store 생성용"이면 → 새 store + owner membership 생성
+     - store_invitations.used_at / used_by 업데이트
+  9. store_id 반환
+```
+
+#### 초대 코드 타입 (2종류)
+
+| 타입 | 용도 | `store_id` | `role` |
+|---|---|---|---|
+| **join-type** | 기존 store에 멤버로 초대 | 지정됨 | owner/manager/staff |
+| **create-type** | 새 store를 생성하도록 초대 | NULL (생성 시 채움) | owner (기본) |
+
+> 초기 구현에서는 join-type만 구현해도 충분하다. create-type은 추후 필요 시 추가.
+
 1. **신규 테이블 `store_invitations` 생성**
    - `id` (uuid, PK)
-   - `store_id` (uuid, FK → stores)
+   - `store_id` (uuid, FK → stores, nullable — NULL이면 create-type)
    - `invite_code` (text, unique, indexed)
    - `invited_email` (text, nullable)
    - `role` (member_role, default 'owner')
    - `created_by` (uuid, FK → auth.users)
    - `expires_at` (timestamptz, nullable)
    - `used_at` (timestamptz, nullable)
-   - `used_by` (uuid, FK → auth.users)
+   - `used_by` (uuid, FK → auth.users, nullable)
 
 2. **RPC 수정: `create_initial_store(p_name, p_subtitle, p_default_language, p_invite_code)`**
-   - `p_invite_code`가 NULL이면 기존 동작 유지 (idempotent)
+   - ~~`p_invite_code`가 NULL이면 기존 동작 유지~~ → **보정**: NULL이면 신규 생성 거부
+   - 기존 owner membership이 있으면 `p_invite_code`와 관계없이 기존 store 반환
+   - 기존 owner가 없고 `p_invite_code`가 NULL이면 에러
    - `p_invite_code`가 제공되면 `store_invitations` 테이블에서 코드 검증
-   - 코드가 유효하면 초대된 store의 owner/member로 등록
-   - 코드 만료/중복 사용 시 에러
+   - 코드 유효성: exists + not used + not expired + (선택) email match
+   - 코드가 유효하면 초대된 store의 owner/member로 등록 또는 새 store 생성
+   - 코드 invalid/expired/used 시 명확한 에러 반환
 
 3. **기존 owner 계정 보호**
-   - 이미 owner membership이 있는 경우, invite_code 없이도 기존 store 반환 (idempotent)
-   - 또는 별도 migration에서 기존 owner를 자동으로 whitelist에 추가
+   - 이미 owner membership이 있는 경우, invite_code 없이도 기존 store 반환 (idempotent lookup은 허용)
+   - 기존 데이터 마이그레이션 필요 없음
 
 4. **초대 코드 생성 RPC**
    - `generate_store_invite_code(p_store_id, p_role, p_invited_email, p_expires_in_days)`
    - owner만 호출 가능
+   - 고유한 `invite_code` 문자열 생성 (예: `INV-XXXXXX`)
+
+#### 테스트 케이스 목록 (3-6E contract test)
+
+| 케이스 | 시나리오 | 기대 결과 |
+|---|---|---|
+| **A** | existing owner + no invite_code | ✅ returns existing store_id |
+| **B** | new user + no invite_code | ❌ rejects: "Invite code is required" |
+| **C** | new user + invalid invite_code | ❌ rejects: "Invalid invite code" |
+| **D** | new user + expired invite_code | ❌ rejects: "Invite code has expired" |
+| **E** | new user + used invite_code | ❌ rejects: "Invite code already used" |
+| **F** | new user + valid invite_code (join-type) | ✅ creates membership in invited store |
+| **G** | guest mode frontend does not call create_initial_store automatically | ✅ RPC not called |
 
 ### migration 필요 여부
 
@@ -2330,14 +2400,14 @@ migration 없이 프론트엔드 코드만으로 완화할 수 있는 항목:
 | 항목 | 설명 | 마이그레이션 복잡도 |
 |---|---|---|
 | `store_invitations` 테이블 생성 | 초대 코드 저장용 테이블 | 중간 |
-| `create_initial_store` RPC 수정 | `p_invite_code` 파라미터 추가 + 검증 로직 | 중간 |
+| `create_initial_store` RPC 수정 | `p_invite_code` 파라미터 추가 + 검증 로직 + NULL 거부 | 중간 |
 | `generate_store_invite_code` RPC 생성 | owner용 초대 코드 생성 RPC | 낮음 |
-| 기존 owner whitelist 등록 (선택) | 기존 owner가 invite_code 없이도 store 생성 가능하게 하려면 별도 로직 필요 | 낮음 |
+| RLS policy for `store_invitations` | owner만 자신의 store 초대 코드 조회/생성 | 낮음 |
 
 ### 구현 전 선행 조건
 
 1. **3-6E에서 구현 여부 결정** — 사용자가 2안으로 진행할지, 1안/3안으로 할지 결정 필요
-2. **초대 코드 정책 확정** — 만료 기간, 중복 사용 허용 여부, 역할별 초대 가능 여부
+2. **초대 코드 정책 확정** — 만료 기간, 중복 사용 허용 여부, 역할별 초대 가능 여부, create-type vs join-type 범위
 3. **owner 초대 UI 설계** — 3-6F 이상에서 프론트엔드 구현 필요
 4. **기존 owner 계정 정리** — 현재 owner 계정이 정상적으로 owner membership을 갖고 있는지 확인
 
@@ -2346,8 +2416,8 @@ migration 없이 프론트엔드 코드만으로 완화할 수 있는 항목:
 | 상황 | rollback 방법 |
 |---|---|
 | migration 후 문제 발견 | `store_invitations` 테이블 DROP + `create_initial_store` RPC를 이전 버전으로 REPLACE |
-| 기존 owner 접근 불가 | idempotent query가 기존 owner membership을 조회하므로, invite_code 없이도 기존 store 반환 가능 (기존 동작 보존) |
-| 초대 코드 로직 오류 | `p_invite_code` 파라미터를 NULL로 호출하면 기존 동작과 동일 (backward compatible) |
+| 기존 owner 접근 불가 | idempotent query가 기존 owner membership을 조회하므로, invite_code 없이도 기존 store 반환 가능 (lookup은 항상 허용) |
+| 초대 코드 로직 오류 | `p_invite_code = NULL` 호출이 불가능해짐 (기존 동작과 다름). rollback 후 NULL로 다시 호출 가능 |
 
 ### 3-6E 구현 범위 제안
 
