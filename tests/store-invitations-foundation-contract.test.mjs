@@ -52,8 +52,10 @@ describe('Store Invitations Foundation Contract (3-6E.1)', function () {
             'must enable RLS on store_invitations');
     });
 
-    it('G: anon/public is revoked from store_invitations', function () {
+    it('G: PUBLIC and anon are revoked from store_invitations', function () {
         const content = readFile(MIGRATION_FILE);
+        assert.match(content, /REVOKE\s+ALL\s+ON\s+public\.store_invitations\s+FROM\s+PUBLIC/i,
+            'must revoke all from PUBLIC');
         assert.match(content, /REVOKE\s+ALL\s+ON\s+public\.store_invitations\s+FROM\s+anon/i,
             'must revoke all from anon');
     });

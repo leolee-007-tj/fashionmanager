@@ -2729,6 +2729,7 @@ ORDER BY owner_store_count DESC;
 ### RLS 정책
 
 - `ENABLE ROW LEVEL SECURITY`
+- PUBLIC: `REVOKE ALL`
 - anon: `REVOKE ALL`
 - authenticated: `GRANT SELECT` only, `REVOKE INSERT/UPDATE/DELETE`
 - policy: `StoreInvitations: owners can view` — `private.has_store_role(store_id, ARRAY['owner'::member_role])`

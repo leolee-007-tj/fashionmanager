@@ -142,7 +142,10 @@ REVOKE EXECUTE ON FUNCTION public.handle_store_invitation_update() FROM authenti
 
 ALTER TABLE public.store_invitations ENABLE ROW LEVEL SECURITY;
 
--- Revoke all from anon
+-- Revoke all from PUBLIC (includes anon and all default roles)
+REVOKE ALL ON public.store_invitations FROM PUBLIC;
+
+-- Revoke all from anon explicitly
 REVOKE ALL ON public.store_invitations FROM anon;
 
 -- Authenticated gets SELECT only; direct INSERT/UPDATE/DELETE blocked
