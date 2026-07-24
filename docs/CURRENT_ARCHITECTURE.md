@@ -3998,6 +3998,90 @@ owner 또는 active store member만 LESOUL 실제 매장 화면을 볼 수 있�
 - main/gh-pages 작업: ❌ (no)
 - force push: ❌ (no)
 
+## 52. 3-6E.5.1: Store Member Management RPCs Remote Push + Owner Smoke (2026-07-24)
+
+### 목적
+
+017 migration을 실제 Supabase remote DB에 적용하고, owner 계정으로 브라우저에서 `list_store_members()`와 `deactivate_store_member(p_member_id)` RPC를 smoke test한다.
+
+### Remote DB Push
+
+| 항목 | 결과 |
+|---|---|
+| push 실행 | ✅ `SUPABASE_TELEMETRY_DISABLED=1 /Users/lesoul888/bin/supabase db push` |
+| 적용된 migration | `20260711001700_store_member_management_rpcs.sql` 1개 |
+| seed | ❌ (no) |
+| error | ❌ (no) |
+| Local / Remote count | 19 / 19 (동기화 완료) |
+| db push 반복 실행 | ❌ (no) |
+
+### Owner Browser Smoke Results
+
+#### list_store_members() smoke
+
+| 항목 | 결과 |
+|---|---|
+| RPC 호출 성공 | ✅ PASS |
+| count | 2 (owner + staff) |
+| hasOwner | true |
+| hasActiveStaff | true |
+| 전체 email 노출 | ❌ (masked_email: `ep***@hotmail.com`) |
+| 전체 member_id 노출 | ❌ (masked: `50f9****`) |
+| 전체 user_id/store_id 노출 | ❌ (no) |
+
+#### deactivate_store_member(p_member_id) smoke
+
+| 항목 | 결과 |
+|---|---|
+| 대상 확인 | 3-6E.4.2에서 생성된 테스트 staff 계정 (masked: `50f9****`) |
+| RPC 호출 성공 | ✅ PASS |
+| returnedTrue | true |
+| error | ❌ (null) |
+| 전체 member_id 출력 | ❌ (masked only) |
+
+#### list after deactivate
+
+| 항목 | 결과 |
+|---|---|
+| targetFound | true |
+| targetRole | staff |
+| targetIsActive | false |
+| 결과 | ✅ PASS |
+
+### Side Effect
+
+- 테스트 staff 계정의 membership이 `is_active = false`로 변경됨
+- 추후 Supabase SQL Editor에서 수동 재활성화 가능
+
+### Post-push 검증
+
+| 항목 | 결과 |
+|---|---|
+| Tests | ✅ **514 tests, 0 fail** |
+| Preflight | ✅ **PASS** |
+
+### 제약 준수
+
+| 항목 | 결과 |
+|---|---|
+| 새 migration 생성 | ❌ (no — 기존 017 사용) |
+| 기존 migration 수정 | ❌ (no) |
+| supabase db reset --linked | ❌ (no) |
+| supabase db pull | ❌ (no) |
+| supabase db push --include-seed | ❌ (no) |
+| SQL Editor 수동 INSERT/UPDATE/DELETE | ❌ (no) |
+| service_role 사용 | ❌ (no) |
+| token/key/password 출력 | ❌ (no) |
+| 이메일 전체값 출력 | ❌ (no — masked only) |
+| user_id/store_id 전체값 출력 | ❌ (no) |
+| member_id 전체값 문서 기록 | ❌ (no — masked only) |
+| js/config.js commit | ❌ (no) |
+| data_export.json 생성/추가 | ❌ (no) |
+| main/gh-pages 작업 | ❌ (no) |
+| force push | ❌ (no) |
+
+### 최종 판정: ✅ PASS
+
 ## 51. 3-6E.5: Store Member Management RPCs 설계/구현 (2026-07-24)
 
 ### 목적
