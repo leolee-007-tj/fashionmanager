@@ -3753,3 +3753,148 @@ Finished supabase db push.
 - user_id/store_id 전체값 출력: ❌ (no)
 - main/gh-pages 작업: ❌ (no)
 
+## 47. 3-6E.3.4: Owner Invite Code RPC Browser Smoke Test (2026-07-24)
+
+### 목적
+
+기존 owner 로그인 상태에서 브라우저 Supabase client를 통해 아래 RPC 3개가 실제 remote에서 정상 작동하는지 smoke test한다.
+
+- `generate_store_invite_code`
+- `list_store_invite_codes`
+- `revoke_store_invite_code`
+
+### 대상
+
+- **Owner Invite RPC Browser Smoke**
+- Remote migration 상태: 014/015 applied (Local 17 = Remote 17)
+
+### 사전 확인
+
+| 검증 항목 | 결과 |
+|---|---|
+| branch | ✅ feature/supabase-cloud-migration |
+| working tree | ✅ clean |
+| remote | ✅ SSH (token 없음) |
+| HEAD | ✅ 22f9838 docs: record store invitation management remote push |
+| migration list | ✅ Local 17 = Remote 17 |
+| 20260711001400 remote applied | ✅ 확인 |
+| 20260711001500 remote applied | ✅ 확인 |
+| js/config.js | ✅ gitignored/local-only |
+| SUPABASE_ENABLED | ✅ true |
+| PRODUCTS_SUPABASE_ENABLED | ✅ true |
+| PRODUCTS_SUPABASE_REMOTE_ENABLED | ✅ true |
+| AUTH_GUEST_MODE_ENABLED | ✅ true |
+| SUPABASE_URL | ✅ https://pocfvkicaicmouimmzkf.supabase.co |
+| SUPABASE_CLIENT_KEY | ✅ anon key (service_role 아님) |
+
+### Owner Session 확인
+
+| 항목 | 결과 |
+|---|---|
+| owner 로그인 | ✅ 성공 |
+| LESOUL 표시 | ✅ 확인 |
+| guest mode | ❌ 아님 (정상) |
+| invite_code 오류 | ❌ 없음 (정상) |
+| 상품 화면 접근 | ✅ 가능 |
+| authenticated owner session | ✅ yes |
+
+### RPC 테스트 결과
+
+#### generate_store_invite_code
+
+| 항목 | 결과 |
+|---|---|
+| RPC 실행 | ✅ 성공 |
+| error | ❌ 없음 |
+| 반환값 | ✅ invite_code (text) |
+| invite_code 형식 | ✅ LS- 접두사 |
+| owner-only 오류 | ❌ 없음 |
+| permission denied | ❌ 없음 |
+| function not found | ❌ 없음 |
+| **generated invite code** | **LS-8K4Z**** (masked)** |
+
+#### list_store_invite_codes (철회 전)
+
+| 항목 | 결과 |
+|---|---|
+| RPC 실행 | ✅ 성공 |
+| error | ❌ 없음 |
+| 반환값 | ✅ 배열 |
+| 방금 생성한 invite 포함 | ✅ 확인 |
+| status | ✅ active |
+| role | ✅ staff |
+| revoked_at | ✅ null |
+| used_at | ✅ null |
+
+#### revoke_store_invite_code
+
+| 항목 | 결과 |
+|---|---|
+| RPC 실행 | ✅ 성공 |
+| error | ❌ 없음 |
+| 반환값 | ✅ true |
+| used invite 오류 | ❌ 없음 |
+| permission 오류 | ❌ 없음 |
+
+#### list_store_invite_codes (철회 후)
+
+| 항목 | 결과 |
+|---|---|
+| RPC 실행 | ✅ 성공 |
+| status | ✅ revoked |
+| revoked_at | ✅ null 아님 |
+| used_at | ✅ null |
+| role | ✅ staff 유지 |
+
+### 전체 Smoke 판정
+
+| 항목 | 결과 |
+|---|---|
+| owner 로그인 성공 | ✅ PASS |
+| generate_store_invite_code | ✅ PASS |
+| list_store_invite_codes (철회 전) | ✅ PASS |
+| revoke_store_invite_code | ✅ PASS |
+| list_store_invite_codes (철회 후) | ✅ PASS |
+| console red error | ❌ 없음 |
+| service_role/token/key/password 출력 | ❌ 없음 |
+| invite_code 전체값 문서 기록 | ❌ 없음 |
+| invitation id 전체값 문서 기록 | ❌ 없음 |
+| generated invite code | LS-8K4Z**** (masked only) |
+| final invite status | ✅ revoked |
+| **최종 판정** | **✅ PASS** |
+
+### Post-smoke 검증
+
+| 검증 항목 | 결과 |
+|---|---|
+| `node --test tests/*.test.mjs` | ✅ **454 tests, 0 fail** |
+| `bash scripts/remote-deployment-preflight.sh` | ✅ **PASS** |
+
+### 다음 단계
+
+- 3-6E.4: 프론트엔드 invite-code 입력 UI 구현
+- 또는 3-6E.3.5: 초대 수락(accept_invite) RPC 구현
+
+### 제약 준수
+
+- 새 migration 파일 생성: ❌ (no)
+- 기존 migration 파일 수정: ❌ (no)
+- JS/CSS/HTML 수정: ❌ (no)
+- 프론트 초대 UI 구현: ❌ (no)
+- 가격 계산 기능 구현: ❌ (no)
+- supabase db push 실행: ❌ (no)
+- supabase db push --include-seed: ❌ (no)
+- supabase db reset --linked: ❌ (no)
+- supabase db pull: ❌ (no)
+- SQL Editor 수동 INSERT/UPDATE/DELETE: ❌ (no)
+- service_role 사용: ❌ (no)
+- service_role/token/key/password 출력: ❌ (no)
+- 이메일 전체값 출력: ❌ (no)
+- user_id/store_id 전체값 출력: ❌ (no)
+- invite_code 전체값 문서 기록: ❌ (no)
+- invitation id 전체값 문서 기록: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 생성/추가: ❌ (no)
+- main/gh-pages 작업: ❌ (no)
+- force push: ❌ (no)
+

@@ -176,3 +176,63 @@ describe('Generate Store Invite Code RPC Contract (3-6E.3)', function () {
     });
 
 });
+
+// ============================================================
+// Migration 016: Fix gen_random_bytes search_path
+// ============================================================
+
+const FIX_MIGRATION_FILE = 'supabase/migrations/20260711001600_fix_gen_random_bytes_search_path.sql';
+
+describe('Fix gen_random_bytes search_path Contract (016)', function () {
+
+    it('A: fix migration file exists', function () {
+        const content = readFile(FIX_MIGRATION_FILE);
+        assert.ok(content.length > 0, 'fix migration file should not be empty');
+    });
+
+    it('B: uses extensions.gen_random_bytes (schema-qualified)', function () {
+        const content = readFile(FIX_MIGRATION_FILE);
+        assert.match(content, /extensions\.gen_random_bytes/i,
+            'must use extensions.gen_random_bytes for SET search_path = "" compatibility');
+    });
+
+    it('C: does NOT use unqualified gen_random_bytes', function () {
+        const content = readFile(FIX_MIGRATION_FILE);
+        const nonCommentLines = content.split('\n').filter(l => !l.trim().startsWith('--'));
+        const code = nonCommentLines.join('\n');
+        // Should NOT have gen_random_bytes without extensions. prefix
+        assert.doesNotMatch(code, /(?<!extensions\.)gen_random_bytes/i,
+            'must not use unqualified gen_random_bytes');
+    });
+
+    it('D: still uses SECURITY DEFINER', function () {
+        const content = readFile(FIX_MIGRATION_FILE);
+        assert.match(content, /SECURITY\s+DEFINER/i,
+            'fix must still use SECURITY DEFINER');
+    });
+
+    it('E: still uses SET search_path = empty string', function () {
+        const content = readFile(FIX_MIGRATION_FILE);
+        assert.match(content, /SET\s+search_path\s*=\s*''/i,
+            'fix must still set search_path = empty string');
+    });
+
+    it('F: re-applies REVOKE ALL FROM PUBLIC', function () {
+        const content = readFile(FIX_MIGRATION_FILE);
+        assert.match(content, /REVOKE\s+ALL\s+ON\s+FUNCTION\s+public\.generate_store_invite_code\s*\(.*\)\s+FROM\s+PUBLIC/i,
+            'fix must re-apply REVOKE ALL FROM PUBLIC');
+    });
+
+    it('G: re-applies GRANT EXECUTE TO authenticated', function () {
+        const content = readFile(FIX_MIGRATION_FILE);
+        assert.match(content, /GRANT\s+EXECUTE\s+ON\s+FUNCTION\s+public\.generate_store_invite_code\s*\(.*\)\s+TO\s+authenticated/i,
+            'fix must re-apply GRANT EXECUTE TO authenticated');
+    });
+
+    it('H: no service_role string', function () {
+        const content = readFile(FIX_MIGRATION_FILE);
+        assert.doesNotMatch(content, /service_role/i,
+            'must not contain service_role');
+    });
+
+});
