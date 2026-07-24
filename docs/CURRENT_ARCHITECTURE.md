@@ -3386,3 +3386,98 @@ Would push these migrations:
 - user_id/store_id 전체값 출력: ❌ (no)
 - main/gh-pages 작업: ❌ (no)
 
+## 44. 3-6E.3.1: generate_store_invite_code RPC Remote 적용 (2026-07-24)
+
+### 목적
+
+3-6E.3에서 구현한 `20260711001400_generate_store_invite_code_rpc.sql` migration을 Supabase remote DB에 실제 적용한다.
+
+### 실행 명령
+
+```
+SUPABASE_TELEMETRY_DISABLED=1 /Users/lesoul888/bin/supabase db push
+```
+
+### 적용 전 검증
+
+| 검증 항목 | 결과 |
+|---|---|
+| branch | ✅ feature/supabase-cloud-migration |
+| working tree | ✅ clean |
+| remote | ✅ SSH (token 없음) |
+| HEAD | ✅ e06983b feat: add generate_store_invite_code rpc |
+| CLI version | ✅ 2.109.1 |
+| migration list 사전 | ✅ Local 16, Remote 15 (014 미적용) |
+| dry-run | ✅ 014 migration 1개만 표시 |
+
+### 적용 결과
+
+| 항목 | 결과 |
+|---|---|
+| **실제 remote db push** | ✅ **yes** |
+| **20260711001400_generate_store_invite_code_rpc.sql** | ✅ 적용 성공 |
+| **--include-seed 사용** | ❌ no |
+| **db reset --linked 사용** | ❌ no |
+| **db pull 사용** | ❌ no |
+| **원격 RPC 직접 실행** | ❌ no |
+| **invite code 실제 생성** | ❌ no |
+| **error** | 없음 (pgdelta cache warning만 있음, 무해) |
+
+### db push 출력
+
+```
+Applying migration 20260711001400_generate_store_invite_code_rpc.sql...
+Finished supabase db push.
+```
+
+### Migration List 사후 확인
+
+`supabase migration list` 결과: Local 16개 = Remote 16개 완전 동기화.
+`20260711001400`이 remote에 적용됨.
+
+### Post-push 검증
+
+| 검증 항목 | 결과 |
+|---|---|
+| `node --test tests/*.test.mjs` | ✅ **420 tests, 0 fail** |
+| `bash scripts/remote-deployment-preflight.sh` | ✅ **PASS** |
+
+### 최종 판정
+
+| 항목 | 결과 |
+|---|---|
+| **Remote DB Push** | ✅ **PASS** |
+| **Migration 동기화** | ✅ Local 16 = Remote 16 |
+| **014 remote applied** | ✅ 확인 |
+| **--include-seed** | ❌ no |
+| **db reset --linked** | ❌ no |
+| **db pull** | ❌ no |
+| **원격 RPC 실행** | ❌ no |
+| **invite code 생성** | ❌ no |
+
+### 다음 단계
+
+- 3-6E.4: 프론트엔드 invite-code 입력 UI 구현
+- 또는 3-6E.3.2: invite 코드 목록 조회/철회 RPC 구현
+
+### 제약 준수
+
+- supabase db push --include-seed: ❌ (no)
+- supabase db reset --linked: ❌ (no)
+- supabase db pull: ❌ (no)
+- 원격 INSERT/UPDATE/DELETE 수동: ❌ (no)
+- 원격 RPC 수동: ❌ (no)
+- generate_store_invite_code 원격 실행: ❌ (no)
+- create_initial_store 원격 수동: ❌ (no)
+- 새 migration 파일 생성: ❌ (no)
+- 기존 migration 파일 수정: ❌ (no)
+- JS/CSS/HTML 수정: ❌ (no)
+- 프론트 초대 UI 구현: ❌ (no)
+- 가격 계산 기능 구현: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 생성/추가: ❌ (no)
+- service_role/token/key/password 출력: ❌ (no)
+- 이메일 전체값 출력: ❌ (no)
+- user_id/store_id 전체값 출력: ❌ (no)
+- main/gh-pages 작업: ❌ (no)
+
