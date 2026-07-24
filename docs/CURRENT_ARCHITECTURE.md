@@ -3998,6 +3998,71 @@ owner 또는 active store member만 LESOUL 실제 매장 화면을 볼 수 있�
 - main/gh-pages 작업: ❌ (no)
 - force push: ❌ (no)
 
+## 51. 3-6E.5: Store Member Management RPCs 설계/구현 (2026-07-24)
+
+### 목적
+
+owner가 같은 store의 멤버 목록을 조회하고, owner가 아닌 member를 비활성화할 수 있는 안전한 RPC 2개를 추가한다. 이번 단계는 local migration + tests + docs + dry-run까지만 수행한다.
+
+### 생성 파일
+
+- [supabase/migrations/20260711001700_store_member_management_rpcs.sql](file:///Users/lesoul888/Documents/LESOUL_STORE_APP/fashionmanager/supabase/migrations/20260711001700_store_member_management_rpcs.sql) - 2개 RPC 함수
+- [tests/store-member-management-rpcs-contract.test.mjs](file:///Users/lesoul888/Documents/LESOUL_STORE_APP/fashionmanager/tests/store-member-management-rpcs-contract.test.mjs) - 35개 contract 테스트
+
+### RPC Signatures
+
+1. `public.list_store_members()` → `TABLE(member_id uuid, role member_role, is_active boolean, joined_at timestamptz, display_name text, masked_email text)`
+2. `public.deactivate_store_member(p_member_id uuid)` → `boolean`
+
+### 보안 정책
+
+| 항목 | 구현 |
+|---|---|
+| owner-only | `sm.role = 'owner' AND sm.is_active = true` |
+| deleted store 제외 | `s.deleted_at IS NULL` |
+| cross-store 차단 | `store_id = v_store_id` |
+| owner role 비활성화 차단 | `v_member.role = 'owner'` reject |
+| self-deactivate 차단 | `v_member.user_id = v_uid` reject |
+| DELETE 금지 | `is_active = false` update만 사용 |
+| SECURITY DEFINER | 두 함수 모두 |
+| SET search_path = '' | 두 함수 모두 |
+| REVOKE ALL FROM PUBLIC | 두 함수 모두 |
+| REVOKE ALL FROM anon | 두 함수 모두 |
+| GRANT EXECUTE TO authenticated | 두 함수 모두 |
+| dynamic SQL 없음 | 확인됨 |
+| service_role 없음 | 확인됨 |
+
+### masked_email 정책
+
+```sql
+CASE
+  WHEN au.email IS NULL THEN NULL
+  WHEN position('@' IN au.email) <= 2 THEN '***' || substring(au.email FROM position('@' IN au.email))
+  ELSE left(au.email, 2) || '***' || substring(au.email FROM position('@' IN au.email))
+END
+```
+
+- user_id 전체값 반환 금지
+- store_id 전체값 반환 금지
+- email 전체값 반환 금지
+
+### idempotent deactivate
+
+- 이미 `is_active = false`인 member는 `RETURN true` (에러 없음)
+
+### 검증 결과
+
+| 항목 | 결과 |
+|---|---|
+| tests | ✅ **514 tests, 0 fail** (기존 479 + 신규 35) |
+| preflight | ✅ **PASS** |
+| dry-run | ✅ `20260711001700_store_member_management_rpcs.sql` 1개만 적용 예정 (seed 없음, error 없음) |
+| actual remote db push | ❌ (no — dry-run만 실행) |
+| 새 migration | ✅ 1개 생성 (기존 migration 수정 없음) |
+| 프론트 UI | ❌ (no — 이번 단계는 RPC만) |
+
+### 최종 판정: ✅ PASS (local migration + tests + dry-run 완료)
+
 ## 50. 3-6E.4.2: 실제 no-membership invite join browser smoke (2026-07-24)
 
 ### 목적
