@@ -2850,3 +2850,66 @@ ORDER BY owner_store_count DESC;
 - service_role/token/key/password 출력: ❌ (no)
 - main/gh-pages 작업: ❌ (no)
 
+---
+
+## 38. 3-6E.2.1: create_initial_store Invite-code Pre-push Review (2026-07-23)
+
+### 목적
+
+3-6E.2 migration을 remote Supabase에 적용하기 전에 최종 감사/검증을 수행한다.
+이번 단계는 문서 기록만 하며, remote db push는 아직 실행하지 않는다.
+
+### Migration 순서 확인
+
+| 순서 | 파일 | 목적 |
+|---|---|---|
+| 1 | `20260711001200_store_invitations.sql` | `store_invitations` 테이블 생성 (join-type only) |
+| 2 | `20260711001300_create_initial_store_invite_code_hardening.sql` | `create_initial_store` invite-code 강화 |
+
+### 핵심 검증 항목 12종 결과
+
+| # | 검증 항목 | 결과 | 비고 |
+|---|---|---|---|
+| 1 | 012 migration에서 store_invitations 먼저 생성 | ✅ PASS | `store_id` NOT NULL, join-type only |
+| 2 | 013 migration에서 old 3-arg revoke/drop | ✅ PASS | `REVOKE` + `DROP FUNCTION IF EXISTS` |
+| 3 | new 4-arg에 `p_invite_code text DEFAULT NULL` | ✅ PASS | signature 확인 완료 |
+| 4 | idempotent owner lookup이 invite-code required보다 먼저 | ✅ PASS | owner lookup → invite required 순서 확인 |
+| 5 | 신규 user 경로에 `INSERT INTO public.stores` 없음 | ✅ PASS | contract test P 확인 |
+| 6 | valid invite가 store_members insert + used_at/used_by update만 | ✅ PASS | `INSERT INTO public.store_members` + `UPDATE public.store_invitations` |
+| 7 | owner role invite 거부 | ✅ PASS | `v_invite.role = 'owner'` → 에러 |
+| 8 | invited_email 비교 시 전체 email 미노출 | ✅ PASS | `v_user_email` 변수에 담아 비교, 로그/문서/test output에 이메일 전체값 없음 |
+| 9 | store_invitations direct DML 미개방 | ✅ PASS | authenticated에 INSERT/UPDATE/DELETE revoke |
+| 10 | old 3-arg 남아 있어도 4-arg default 경로로 우회되지 않음 | ✅ PASS | old 3-arg는 drop됨, PostgreSQL overloading으로 우회 불가 |
+| 11 | 3-6E-Prep audit 결과와 충돌 없음 | ✅ PASS | owner 1/store 1/orphan 0/duplicate 0 |
+| 12 | `SELECT ... FOR UPDATE` race-condition 방지 | ✅ PASS | invite code redemption에 row lock 사용 |
+
+### Remote Push Readiness
+
+| 판정 | 결과 |
+|---|---|
+| **Migration 순서** | ✅ 올바름 (012 → 013) |
+| **Contract tests** | ✅ 34 pass, 0 fail |
+| **Existing owner 보호** | ✅ idempotent lookup 충족 |
+| **New user 차단** | ✅ invite_code required |
+| **Direct DML** | ✅ store_invitations에 미개방 |
+| **Overall readiness** | **✅ PASS** |
+
+### 아직 적용하지 않은 것
+
+- **Remote Supabase**: `supabase db push` 실행 안 함
+- 다음 단계에서 사용자의 승인 후 push 예정
+
+### 제약 준수
+
+- 새 migration 파일 생성: ❌ (no)
+- 기존 migration 파일 수정: ❌ (no)
+- JS/CSS/HTML 수정: ❌ (no)
+- 프론트 초대 UI 구현: ❌ (no)
+- Supabase remote db push: ❌ (no)
+- supabase db reset --linked: ❌ (no)
+- supabase db pull: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 생성/추가: ❌ (no)
+- service_role/token/key/password 출력: ❌ (no)
+- main/gh-pages 작업: ❌ (no)
+
