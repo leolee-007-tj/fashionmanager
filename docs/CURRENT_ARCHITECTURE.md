@@ -3057,3 +3057,80 @@ Finished supabase db push.
 - service_role/token/key/password 출력: ❌ (no)
 - main/gh-pages 작업: ❌ (no)
 
+---
+
+## 41. 3-6E.2.3: Supabase Remote DB Push (2026-07-24)
+
+### 목적
+
+dry-run PASS 확인 후 remote Supabase project에 012, 013 migration을 실제 적용한다.
+
+### 실행 명령
+
+```
+SUPABASE_TELEMETRY_DISABLED=1 /Users/lesoul888/bin/supabase db push
+```
+
+### 적용 결과
+
+| 항목 | 결과 |
+|---|---|
+| **실제 remote 적용** | ✅ **yes** |
+| **20260711001200_store_invitations.sql** | ✅ 적용 성공 |
+| **20260711001300_create_initial_store_invite_code_hardening.sql** | ✅ 적용 성공 |
+| **--include-seed 사용** | ❌ no |
+| **db reset --linked 사용** | ❌ no |
+| **db pull 사용** | ❌ no |
+| **error** | 없음 (Docker cache warning만 있음, 무해) |
+
+### db push 출력
+
+```
+Applying migration 20260711001200_store_invitations.sql...
+Applying migration 20260711001300_create_initial_store_invite_code_hardening.sql...
+Finished supabase db push.
+```
+
+### Migration List 확인
+
+`supabase migration list` 결과: Local 15개와 Remote 15개가 완전히 동기화됨.
+`20260711001200`과 `20260711001300`이 모두 remote에 적용된 상태.
+
+### Post-push 검증
+
+| 검증 항목 | 결과 |
+|---|---|
+| `node --test tests/*.test.mjs` | ✅ **396 tests, 0 fail** |
+| `bash scripts/remote-deployment-preflight.sh` | ✅ 정상 종료 |
+
+### 최종 판정
+
+| 항목 | 결과 |
+|---|---|
+| **Remote DB Push** | ✅ **PASS** |
+| **Migration 동기화** | ✅ Local = Remote |
+| **기존 owner 보호** | ✅ idempotent lookup으로 보호 |
+| **신규 user 차단** | ✅ invite_code required |
+
+### 다음 단계
+
+- 3-6E.3: `generate_store_invite_code` RPC 설계/구현
+- 3-6E.4: 프론트엔드 invite-code 입력 UI
+- 또는 기존 owner 동작 smoke test
+
+### 제약 준수
+
+- supabase db push --include-seed: ❌ (no)
+- supabase db reset --linked: ❌ (no)
+- supabase db pull: ❌ (no)
+- 원격 INSERT/UPDATE/DELETE 수동: ❌ (no)
+- 원격 RPC 수동: ❌ (no)
+- create_initial_store 원격 수동: ❌ (no)
+- 새 migration 파일 생성: ❌ (no)
+- 기존 migration 파일 수정: ❌ (no)
+- JS/CSS/HTML 수정: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 생성/추가: ❌ (no)
+- service_role/token/key/password 출력: ❌ (no)
+- main/gh-pages 작업: ❌ (no)
+
