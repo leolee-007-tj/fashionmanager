@@ -2913,3 +2913,74 @@ ORDER BY owner_store_count DESC;
 - service_role/token/key/password 출력: ❌ (no)
 - main/gh-pages 작업: ❌ (no)
 
+---
+
+## 39. 3-6E.2.2: Supabase Remote Dry-run (2026-07-23)
+
+### 목적
+
+remote Supabase에 실제 적용하기 전에 dry-run으로 적용 예정 migration을 확인한다.
+
+### 실행 결과
+
+| 항목 | 결과 |
+|---|---|
+| **명령** | `supabase db push --dry-run` |
+| **결과** | **PENDING** — CLI telemetry 쓰기 오류로 실행 불가 |
+| **실제 remote 적용** | ❌ no |
+
+### CLI 오류 상세
+
+```
+EPERM: operation not permitted, open '/Users/lesoul888/.supabase/telemetry.json.tmp.*'
+```
+
+Supabase CLI v1.3.13 (Bun)에서 `~/.supabase/telemetry.json.tmp` 파일 쓰기 권한 문제로 dry-run 명령이 실행되지 않음.
+
+### 대안 검증 수행
+
+dry-run 실행이 불가하므로 다음 대안으로 검증을 수행함:
+
+| 검증 항목 | 결과 |
+|---|---|
+| Migration 파일 존재 확인 | ✅ 012, 013 파일 존재 |
+| Contract test 실행 | ✅ 396 tests, 0 fail |
+| Preflight 실행 | ✅ 정상 종료 |
+| Migration 파일 내용 검사 | ✅ 3-6E.2.1 contract test 19개 PASS |
+
+### 적용 예정 Migration (확인됨)
+
+| 파일 | 크기 | 목적 |
+|---|---|
+| `20260711001200_store_invitations.sql` | 6,238 bytes | `store_invitations` 테이블 생성 |
+| `20260711001300_create_initial_store_invite_code_hardening.sql` | 9,354 bytes | `create_initial_store` invite-code 강화 |
+
+### 판정
+
+| 항목 | 결과 |
+|---|---|
+| **dry-run 실행** | PENDING (CLI 오류) |
+| **Migration 준비** | ✅ PASS |
+| **실제 remote 적용** | ❌ no (사용자 승인 후 진행) |
+
+### 다음 단계
+
+- Supabase CLI 권한 문제 해결 후 dry-run 재시도
+- 또는 사용자 승인 후 직접 `supabase db push` 실행
+
+### 제약 준수
+
+- supabase db push: ❌ (no)
+- supabase db reset --linked: ❌ (no)
+- supabase db pull: ❌ (no)
+- 원격 INSERT/UPDATE/DELETE: ❌ (no)
+- 원격 RPC 실행: ❌ (no)
+- create_initial_store 원격 실행: ❌ (no)
+- 새 migration 파일 생성: ❌ (no)
+- 기존 migration 파일 수정: ❌ (no)
+- JS/CSS/HTML 수정: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 생성/추가: ❌ (no)
+- service_role/token/key/password 출력: ❌ (no)
+- main/gh-pages 작업: ❌ (no)
+
