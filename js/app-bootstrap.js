@@ -349,11 +349,24 @@
             return;
         }
 
-        // 3-6C: membership 없는 authenticated user는 guest/demo 상태로 진입한다.
-        // createInitialStore를 호출하지 않고, LocalProductsDataSource만 사용한다.
+        // 3-6E.4.1-FIX: membership 없는 authenticated user는
+        // LESOUL 실제 매장 화면으로 자동 진입하지 않는다.
+        // 초기화/invite-code 화면을 표시하고, guest mode는 명시적 선택만 허용한다.
         if (status === 'guest') {
-            _context.activeMembership = null;
-            _enterApp();
+            _hideApp();
+            _showAuth();
+            var config = _deps.config() || {};
+            var allowGuestMode = config.AUTH_GUEST_MODE_ENABLED === true;
+            var guestHandlers = {
+                onCreateStore: function (opts) { createInitialStore(opts); },
+                onJoinWithInviteCode: function (code) { joinStoreWithInviteCode(code); },
+                onSignOut: function () { signOut(); }
+            };
+            if (allowGuestMode) {
+                guestHandlers.onContinueGuest = function () { continueAsGuest(); };
+            }
+            _showUI('showStoreOnboarding', [guestHandlers]);
+            _state = 'needs_store_onboarding';
             return;
         }
 

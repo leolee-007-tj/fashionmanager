@@ -294,7 +294,7 @@ describe('3-6C: auth-service bootstrapAuthenticatedUser with allowGuestMode', ()
 });
 
 describe('3-6C: app-bootstrap _handleBootstrapResult guest 분기', () => {
-    it('B1: status=guest → App.init 1회, ready state, no createInitialStore', async () => {
+    it('B1: status=guest → showStoreOnboarding, needs_store_onboarding, no auto _enterApp', async () => {
         resetModules();
         loadAppBootstrap();
         const ctx = makeDeps({ config: { SUPABASE_ENABLED: true, SUPABASE_URL: 'https://test.supabase.co', SUPABASE_CLIENT_KEY: 'valid-key' } });
@@ -306,9 +306,9 @@ describe('3-6C: app-bootstrap _handleBootstrapResult guest 분기', () => {
         });
         await globalThis.LESOULAppBootstrap.start({ deps: ctx.deps });
         await flush();
-        assert.equal(ctx.calls.appInit, 1, 'App.init must be called for guest user');
-        assert.equal(globalThis.LESOULAppBootstrap.getState(), 'ready',
-            'guest state shares the ready machine state but no activeMembership');
+        assert.equal(ctx.calls.appInit, 0, 'App.init must NOT be called for guest user without explicit action');
+        assert.equal(globalThis.LESOULAppBootstrap.getState(), 'needs_store_onboarding',
+            'guest state must route to needs_store_onboarding (not auto-enter app)');
         assert.equal(ctx.calls.createInitialStore, 0,
             'createInitialStore must NOT be called in guest mode');
         const c = globalThis.LESOULAppBootstrap.getContext();
@@ -318,7 +318,7 @@ describe('3-6C: app-bootstrap _handleBootstrapResult guest 분기', () => {
         globalThis.LESOULAppBootstrap.destroy();
     });
 
-    it('B2: status=guest → showStoreOnboarding 호출 안 됨', async () => {
+    it('B2: status=guest → showStoreOnboarding 호출됨 (3-6E.4.1-FIX)', async () => {
         resetModules();
         loadAppBootstrap();
         const ctx = makeDeps({ config: { SUPABASE_ENABLED: true, SUPABASE_URL: 'https://test.supabase.co', SUPABASE_CLIENT_KEY: 'valid-key' } });
@@ -330,8 +330,8 @@ describe('3-6C: app-bootstrap _handleBootstrapResult guest 분기', () => {
         });
         await globalThis.LESOULAppBootstrap.start({ deps: ctx.deps });
         await flush();
-        assert.equal(ctx.ui._lastMethod, 'showAppContext',
-            'last UI method must be showAppContext (not showStoreOnboarding)');
+        assert.equal(ctx.ui._lastMethod, 'showStoreOnboarding',
+            'last UI method must be showStoreOnboarding (guest auto-routed to onboarding per 3-6E.4.1-FIX)');
         globalThis.LESOULAppBootstrap.destroy();
     });
 
@@ -582,7 +582,7 @@ describe('3-6C: login/logout contract 유지 (legacy)', () => {
         });
         await globalThis.LESOULAppBootstrap.start({ deps: ctx.deps });
         await flush();
-        assert.equal(globalThis.LESOULAppBootstrap.getState(), 'ready');
+        assert.equal(globalThis.LESOULAppBootstrap.getState(), 'needs_store_onboarding');
         await globalThis.LESOULAppBootstrap.signOut();
         await flush();
         assert.equal(globalThis.LESOULAppBootstrap.getState(), 'signed_out');
@@ -604,7 +604,7 @@ describe('3-6C: login/logout contract 유지 (legacy)', () => {
         });
         await globalThis.LESOULAppBootstrap.start({ deps: ctx.deps });
         await flush();
-        assert.equal(globalThis.LESOULAppBootstrap.getState(), 'ready');
+        assert.equal(globalThis.LESOULAppBootstrap.getState(), 'needs_store_onboarding');
         ctx.fireAuthEvent('SIGNED_OUT', null);
         await flush();
         assert.equal(globalThis.LESOULAppBootstrap.getState(), 'signed_out');

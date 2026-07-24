@@ -3898,6 +3898,84 @@ Finished supabase db push.
 - main/gh-pages 작업: ❌ (no)
 - force push: ❌ (no)
 
+## 49. 3-6E.4.1-FIX: LESOUL 화면 노출 조건 owner/member 전용 고정 (2026-07-24)
+
+### 목적
+
+owner 또는 active store member만 LESOUL 실제 매장 화면을 볼 수 있도록 분기 정책을 명확히 수정한다.
+
+### 수정 파일
+
+- [js/app-bootstrap.js](file:///Users/lesoul888/Documents/LESOUL_STORE_APP/fashionmanager/js/app-bootstrap.js) - `status === 'guest'` 분기에서 `_enterApp()` 제거, `showStoreOnboarding`로 변경
+- [js/auth-service.js](file:///Users/lesoul888/Documents/LESOUL_STORE_APP/fashionmanager/js/auth-service.js) - `joinStoreWithInviteCode` brandName 기본값을 `'My Store'`로 변경
+- [tests/3-6C-guest-mode-gate-contract.test.mjs](file:///Users/lesoul888/Documents/LESOUL_STORE_APP/fashionmanager/tests/3-6C-guest-mode-gate-contract.test.mjs) - guest 상태 기대값 업데이트
+- [tests/invite-code-ui-contract.test.mjs](file:///Users/lesoul888/Documents/LESOUL_STORE_APP/fashionmanager/tests/invite-code-ui-contract.test.mjs) - 6개 추가 테스트
+
+### 정책 변경
+
+| 상태 | 이전 동작 | 변경 후 동작 |
+|---|---|---|
+| `status === 'guest'` (membership 없음) | `_enterApp()` 직접 호출 → LESOUL 화면 진입 | `showStoreOnboarding` 표시 → 초기화/invite-code 선택 |
+| `status === 'ready' + memberships > 0` | `_enterApp()` 호출 | 유지 (변경 없음) |
+| `continueAsGuest()` | `_enterApp()` 호출 | 유지 (명시적 선택 시에만) |
+
+### 구현 내용
+
+#### 1. app-bootstrap.js guest 분기 수정
+
+- `_enterApp()` 호출 제거
+- `_hideApp()`, `_showAuth()`, `showStoreOnboarding` 호출 추가
+- `onContinueGuest` 핸들러 조걶 전달 (AUTH_GUEST_MODE_ENABLED=true 시)
+- `_state = 'needs_store_onboarding'` 설정
+
+#### 2. auth-service.js neutral brandName
+
+- `joinStoreWithInviteCode`에서 기본 brandName을 `'LESOUL'` → `'My Store'`로 변경
+- p_name은 RPC signature 때문이며, invite join에서는 p_invite_code가 핵심
+- UI에 LESOUL 소유권을 암시하지 않음
+
+#### 3. UI 문구 (이미 neutral)
+
+- 제목: 매장 설정
+- 설명: 새 매장을 만들거나 초대 코드로 기존 매장에 참여할 수 있습니다.
+- 버튼: 새 매장 만들기 / 초대 코드로 매장 참여 / 게스트/연습 모드로 계속하기
+
+### 기존 흐름 보호
+
+| 항목 | 결과 |
+|---|---|
+| owner/member 로그인 | ✅ 보호됨 (LESOUL 화면 정상 진입) |
+| guest mode 유지 | ✅ 유지됨 (명시적 선택으로만 진입) |
+| invite code UI | ✅ 유지됨 |
+
+### 테스트 결과
+
+| 항목 | 결과 |
+|---|---|
+| tests | ✅ **479 tests, 0 fail** |
+| preflight | ✅ **PASS** |
+| browser smoke | ⏳ pending |
+
+### 제약 준수
+
+- 새 migration 파일 생성: ❌ (no)
+- 기존 migration 수정: ❌ (no)
+- supabase db push 실행: ❌ (no)
+- supabase db push --include-seed: ❌ (no)
+- supabase db reset --linked: ❌ (no)
+- supabase db pull: ❌ (no)
+- SQL Editor 수동 INSERT/UPDATE/DELETE: ❌ (no)
+- service_role 사용: ❌ (no)
+- service_role/token/key/password 출력: ❌ (no)
+- 이메일 전체값 출력: ❌ (no)
+- user_id/store_id 전체값 출력: ❌ (no)
+- invite_code 전체값 문서 기록: ❌ (no)
+- invitation id 전체값 문서 기록: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 생성/추가: ❌ (no)
+- main/gh-pages 작업: ❌ (no)
+- force push: ❌ (no)
+
 ## 48. 3-6E.4: 프론트엔드 Invite Code 입력 UI 구현 (2026-07-24)
 
 ### 목적

@@ -386,7 +386,11 @@
         }
         
         var client = _getClient();
-        var brandName = 'LESOUL';
+        // 3-6E.4.1-FIX: neutral fallback for store name in invite-join context.
+        // p_name is required by RPC signature but invite-join uses p_invite_code
+        // to join an existing store. The name here is only used if a new store
+        // must be created as a fallback.
+        var brandName = 'My Store';
         
         if (typeof localStorage !== 'undefined' && localStorage) {
             try {

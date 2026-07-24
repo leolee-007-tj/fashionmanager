@@ -135,4 +135,51 @@ describe('Invite code UI contract tests', function () {
         const content = readFile('js/app-bootstrap.js');
         assert.match(content, /return _runBootstrap\(\)/, 'should call _runBootstrap after successful join');
     });
+
+    it('20: guest status does not auto-enter app (no direct _enterApp)', function () {
+        const content = readFile('js/app-bootstrap.js');
+        const guestBlock = content.substring(
+            content.indexOf("if (status === 'guest')"),
+            content.indexOf("if (status === 'ready')")
+        );
+        assert.doesNotMatch(guestBlock, /_enterApp\(\)/, 'guest branch should not call _enterApp directly');
+        assert.match(guestBlock, /showStoreOnboarding/, 'guest branch should show store onboarding');
+    });
+
+    it('21: no-membership user cannot reach LESOUL dashboard without explicit action', function () {
+        const content = readFile('js/app-bootstrap.js');
+        assert.match(content, /membership 없는 authenticated user는/, 'should document the no-auto-enter policy');
+        assert.match(content, /초기화\/invite-code 화면을 표시/, 'should document onboarding screen requirement');
+    });
+
+    it('22: guest mode requires explicit onContinueGuest handler', function () {
+        const content = readFile('js/app-bootstrap.js');
+        assert.match(content, /onContinueGuest.*function.*continueAsGuest/, 'should map onContinueGuest to continueAsGuest');
+        assert.match(content, /if \(allowGuestMode\)/, 'should conditionally show guest mode option');
+    });
+
+    it('23: auth-service joinStoreWithInviteCode uses neutral brandName fallback', function () {
+        const content = readFile('js/auth-service.js');
+        assert.match(content, /var brandName = 'My Store'/, 'should use neutral My Store fallback');
+        assert.doesNotMatch(content, /var brandName = 'LESOUL'/, 'should not hardcode LESOUL as brandName');
+    });
+
+    it('24: ready with memberships does not show invite UI', function () {
+        const content = readFile('js/app-bootstrap.js');
+        const readyBlock = content.substring(
+            content.indexOf("if (status === 'ready')"),
+            content.indexOf("// Unknown status")
+        );
+        const membershipOneBlock = readyBlock.substring(
+            readyBlock.indexOf("if (_context.memberships.length === 1)")
+        );
+        assert.doesNotMatch(membershipOneBlock, /showStoreOnboarding/, 'ready with 1 membership should not show onboarding');
+        assert.match(membershipOneBlock, /_enterApp\(\)/, 'ready with 1 membership should enter app');
+    });
+
+    it('25: showStoreOnboarding description is neutral (no LESOUL store implication)', function () {
+        const content = readFile('js/auth-ui.js');
+        assert.match(content, /새 매장을 만들거나 초대 코드로 기존 매장에 참여/, 'should have neutral onboarding description');
+        assert.doesNotMatch(content, /LESOUL.*매장/, 'should not imply LESOUL store ownership');
+    });
 });
