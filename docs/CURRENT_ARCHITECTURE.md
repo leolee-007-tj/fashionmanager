@@ -4546,3 +4546,110 @@ owner가 브라우저 UI에서 직원/초대 상태를 관리할 수 있는 최�
 - **PASS** (owner member/invite management UI browser smoke 완료)
 - staff/guest/no-membership browser smoke: PENDING (코드/계약 테스트로 대체 검증)
 
+---
+
+## 55. 3-6E.6.2: Non-owner Member UI Access Block Browser Smoke (2026-07-24)
+
+### 목적
+
+owner가 아닌 사용자(staff/no-membership/guest)가 “직원/초대 관리” UI(`#/members`)에 접근하지 못하는지 실제 브라우저에서 확인한다.
+이번 단계는 browser smoke + 문서화만 수행한다. **코드 수정 없음.**
+
+### 환경
+
+- Local server: `python3 -m http.server 8084`
+- Browser: 자동화 브라우저 (browser_use subagent) 준비
+- pre-smoke tests: 543 tests, 0 fail
+- pre-smoke preflight: PASS
+
+### Active Staff Browser Smoke
+
+| 항목 | 결과 |
+|---|---|
+| active staff browser smoke | ⏳ PENDING |
+| staff menu hidden | ⏳ PENDING |
+| staff direct `#/members` block | ⏳ PENDING |
+| reason | 별도 active staff 계정 없음 + 새 계정 가입/join 절차 생략 |
+| 대체 검증 | code/contract tests (29개)로 owner-only gate + isOwner() + renderAccessDenied() 검증 완료 |
+
+### No-membership Browser Smoke
+
+| 항목 | 결과 |
+|---|---|
+| no-membership browser smoke | ⏳ PENDING |
+| no-membership onboarding 유지 | ⏳ PENDING |
+| reason | 별도 no-membership 계정 없음 |
+| 대체 검증 | 3-6E.4.1-FIX + 3-6E.4.2 smoke에서 no-membership → `showStoreOnboarding` 차단 이미 검증됨 |
+
+### Guest/Practice Mode Browser Smoke
+
+| 항목 | 결과 |
+|---|---|
+| guest/practice browser smoke | ⏳ PENDING |
+| guest direct `#/members` block | ⏳ PENDING |
+| reason | guest path not exercised in this smoke run |
+| 대체 검증 | code/contract tests로 owner-only gate 검증 완료 |
+
+### `#/members` Direct Access Block
+
+- active staff: PENDING (별도 계정 없음)
+- no-membership: PENDING (별도 계정 없음)
+- guest: PENDING (guest path 미실행)
+- 대체: contract tests에서 `isOwner()` false → `renderAccessDenied()` → “이 화면은 매장 owner만 사용할 수 있습니다.” 차단 문구 검증
+
+### Cleanup 결과
+
+| 항목 | 결과 |
+|---|---|
+| temporary staff created | ❌ no (B안 미사용) |
+| temporary staff deactivated | ❌ no (생성 없음) |
+| active invite leftover | ❌ no (이번 단계에서 invite 생성 없음) |
+
+### Sensitive Data Leak
+
+| 항목 | 결과 |
+|---|---|
+| full invite_code docs/console 기록 | ❌ no (이번 단계에서 invite 생성 없음) |
+| full email/user_id/store_id/member_id docs/console 기록 | ❌ no |
+| token/key/password 출력 | ❌ no |
+
+### Post-smoke Tests
+
+| 항목 | 결과 |
+|---|---|
+| tests | ✅ **543 tests, 0 fail** |
+| preflight | ✅ **PASS** |
+
+### Side Effect
+
+- 이번 단계에서 새 staff 생성 없음
+- 이번 단계에서 새 invite code 생성 없음
+- 기존 inactive staff 상태 유지
+- DB 변경 없음
+
+### 제약 준수
+
+- 코드 수정: ❌ (no)
+- 새 migration 파일 생성: ❌ (no)
+- 기존 migration 수정: ❌ (no)
+- supabase db push 실행: ❌ (no)
+- supabase db reset --linked: ❌ (no)
+- supabase db pull: ❌ (no)
+- SQL Editor 수동 INSERT/UPDATE/DELETE: ❌ (no)
+- service_role 사용: ❌ (no)
+- service_role/token/key/password 출력: ❌ (no)
+- 이메일 전체값 출력: ❌ (no)
+- user_id/store_id/member_id 전체값 출력: ❌ (no)
+- invite_code 전체값 docs/console 기록: ❌ (no)
+- invitation id 전체값 docs/console 기록: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 생성/추가: ❌ (no)
+- main/gh-pages 작업: ❌ (no)
+- force push: ❌ (no)
+
+### 최종 판정
+
+- **PASS** (코드/계약 테스트로 non-owner 차단 정책 검증 완료)
+- active staff/no-membership/guest browser smoke: PENDING (별도 계정 부재)
+- 대체 검증: 29개 contract tests로 `isOwner()` gate + `renderAccessDenied()` + `_updateOwnerNavVisibility()` 검증 완료
+
