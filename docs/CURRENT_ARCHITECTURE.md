@@ -2984,3 +2984,76 @@ dry-run 실행이 불가하므로 다음 대안으로 검증을 수행함:
 - service_role/token/key/password 출력: ❌ (no)
 - main/gh-pages 작업: ❌ (no)
 
+---
+
+## 40. 3-6E.2.2.1: Supabase CLI Dry-run Retry (2026-07-24)
+
+### 목적
+
+Supabase CLI v1.3.13 Bun telemetry 쓰기 오류를 회피하기 위해 `SUPABASE_TELEMETRY_DISABLED=1` 환경변수로 dry-run을 재시도한다.
+
+### CLI 환경
+
+| 항목 | 값 |
+|---|---|
+| **사용한 CLI 경로** | `/Users/lesoul888/bin/supabase` |
+| **CLI version** | `2.109.1` (Bun v1.3.13) |
+| **telemetry disabled** | `SUPABASE_TELEMETRY_DISABLED=1` 사용 |
+| **linked project ref** | `pocfvkicaicmouimmzkf` (이전 세션 확인) |
+
+### 실행 명령
+
+```
+SUPABASE_TELEMETRY_DISABLED=1 /Users/lesoul888/bin/supabase db push --dry-run
+```
+
+### dry-run 결과
+
+```
+DRY RUN: migrations will *not* be pushed to the database.
+Connecting to remote database...
+Would push these migrations:
+ • 20260711001200_store_invitations.sql
+ • 20260711001300_create_initial_store_invite_code_hardening.sql
+Finished supabase db push.
+```
+
+### 판정
+
+| 항목 | 결과 |
+|---|---|
+| **dry-run 실행** | ✅ **PASS** |
+| **적용 예정 migration** | 정확히 2개 (012, 013) |
+| **다른 migration 포함** | ❌ 없음 |
+| **seed 포함** | ❌ 없음 |
+| **실제 db push 실행** | ❌ no (dry-run이므로 미적용) |
+| **Project ref 확인** | `pocfvkicaicmouimmzkf` ✅ (이전 세션 확인) |
+
+### 적용 예정 Migration 목록
+
+| 순서 | 파일 | 목적 |
+|---|---|---|
+| 1 | `20260711001200_store_invitations.sql` | `store_invitations` 테이블 생성 |
+| 2 | `20260711001300_create_initial_store_invite_code_hardening.sql` | `create_initial_store` invite-code 강화 |
+
+### 다음 단계
+
+- 사용자 승인 후 `supabase db push`로 remote 적용
+- 또는 3-6E.3 `generate_store_invite_code` RPC 구현
+
+### 제약 준수
+
+- supabase db push: ❌ (no)
+- supabase db reset --linked: ❌ (no)
+- supabase db pull: ❌ (no)
+- 원격 INSERT/UPDATE/DELETE: ❌ (no)
+- 원격 RPC 실행: ❌ (no)
+- create_initial_store 원격 실행: ❌ (no)
+- 새 migration 파일 생성: ❌ (no)
+- 기존 migration 파일 수정: ❌ (no)
+- JS/CSS/HTML 수정: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 생성/추가: ❌ (no)
+- service_role/token/key/password 출력: ❌ (no)
+- main/gh-pages 작업: ❌ (no)
+
