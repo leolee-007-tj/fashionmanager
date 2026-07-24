@@ -3784,7 +3784,7 @@ Finished supabase db push.
 | PRODUCTS_SUPABASE_ENABLED | ✅ true |
 | PRODUCTS_SUPABASE_REMOTE_ENABLED | ✅ true |
 | AUTH_GUEST_MODE_ENABLED | ✅ true |
-| SUPABASE_URL | ✅ https://pocfvkicaicmouimmzkf.supabase.co |
+| SUPABASE_URL | ✅ https://<project-ref>.supabase.co |
 | SUPABASE_CLIENT_KEY | ✅ anon key (service_role 아님) |
 
 ### Owner Session 확인
@@ -3882,6 +3882,81 @@ Finished supabase db push.
 - JS/CSS/HTML 수정: ❌ (no)
 - 프론트 초대 UI 구현: ❌ (no)
 - 가격 계산 기능 구현: ❌ (no)
+- supabase db push 실행: ❌ (no)
+- supabase db push --include-seed: ❌ (no)
+- supabase db reset --linked: ❌ (no)
+- supabase db pull: ❌ (no)
+- SQL Editor 수동 INSERT/UPDATE/DELETE: ❌ (no)
+- service_role 사용: ❌ (no)
+- service_role/token/key/password 출력: ❌ (no)
+- 이메일 전체값 출력: ❌ (no)
+- user_id/store_id 전체값 출력: ❌ (no)
+- invite_code 전체값 문서 기록: ❌ (no)
+- invitation id 전체값 문서 기록: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 생성/추가: ❌ (no)
+- main/gh-pages 작업: ❌ (no)
+- force push: ❌ (no)
+
+## 48. 3-6E.4: 프론트엔드 Invite Code 입력 UI 구현 (2026-07-24)
+
+### 목적
+
+회원가입/로그인 후 active store membership이 없는 사용자가 invite_code를 입력하여 기존 store에 join할 수 있는 프론트엔드 UI를 구현한다.
+
+### 수정 파일
+
+- [js/auth-service.js](file:///Users/lesoul888/Documents/LESOUL_STORE_APP/fashionmanager/js/auth-service.js) - `joinStoreWithInviteCode` 함수 추가
+- [js/auth-ui.js](file:///Users/lesoul888/Documents/LESOUL_STORE_APP/fashionmanager/js/auth-ui.js) - `_showInviteCodeForm` UI 추가, `showStoreOnboarding` 수정
+- [js/app-bootstrap.js](file:///Users/lesoul888/Documents/LESOUL_STORE_APP/fashionmanager/js/app-bootstrap.js) - `joinStoreWithInviteCode`, `continueAsGuest` 함수 추가
+- [css/style.css](file:///Users/lesoul888/Documents/LESOUL_STORE_APP/fashionmanager/css/style.css) - `auth-button-full` 클래스 추가
+- [tests/invite-code-ui-contract.test.mjs](file:////Users/lesoul888/Documents/LESOUL_STORE_APP/fashionmanager/tests/invite-code-ui-contract.test.mjs) - 19개 contract 테스트 추가
+
+### 구현 내용
+
+#### 1. auth-service: joinStoreWithInviteCode 함수
+
+- invite_code trim + uppercase 변환
+- 빈 값 차단
+- LS- prefix 검증
+- `create_initial_store` RPC 호출 (4개 인자: p_name, p_subtitle, p_default_language, p_invite_code)
+- 사용자 친화적 한국어 오류 메시지
+
+#### 2. auth-ui: invite code 입력 UI
+
+- `_showInviteCodeForm` 함수 추가
+- placeholder: `LS-XXXXXXXX`
+- `showStoreOnboarding` 화면에서 세 가지 선택지 제공:
+  - 새 매장 만들기
+  - 초대 코드로 매장 참여
+  - 게스트/연습 모드로 계속하기 (handler 제공 시에만)
+
+#### 3. app-bootstrap: 핸들러 연결
+
+- `onJoinWithInviteCode` 핸들러 추가
+- `onContinueGuest` 핸들러 추가 (AUTH_GUEST_MODE_ENABLED=true 시)
+- `_handleBootstrapResult`에서 `showStoreOnboarding` 호출 시 핸들러 전달
+
+### 기존 흐름 보호
+
+| 항목 | 결과 |
+|---|---|
+| existing owner 로그인 | ✅ 보호됨 (invite UI 강제 표시 없음) |
+| guest mode 유지 | ✅ 유지됨 |
+| createInitialStore 기존 동작 | ✅ 유지됨 |
+
+### 테스트 결과
+
+| 항목 | 결과 |
+|---|---|
+| tests | ✅ **473 tests, 0 fail** |
+| preflight | ✅ **PASS** |
+| browser smoke | ⏳ pending |
+
+### 제약 준수
+
+- 새 migration 파일 생성: ❌ (no)
+- 기존 migration 수정: ❌ (no)
 - supabase db push 실행: ❌ (no)
 - supabase db push --include-seed: ❌ (no)
 - supabase db reset --linked: ❌ (no)

@@ -334,10 +334,17 @@
         if (status === 'needs_store_onboarding') {
             _hideApp();
             _showAuth();
-            _showUI('showStoreOnboarding', [{
+            var config = _deps.config() || {};
+            var allowGuestMode = config.AUTH_GUEST_MODE_ENABLED === true;
+            var onboardingHandlers = {
                 onCreateStore: function (opts) { createInitialStore(opts); },
+                onJoinWithInviteCode: function (code) { joinStoreWithInviteCode(code); },
                 onSignOut: function () { signOut(); }
-            }]);
+            };
+            if (allowGuestMode) {
+                onboardingHandlers.onContinueGuest = function () { continueAsGuest(); };
+            }
+            _showUI('showStoreOnboarding', [onboardingHandlers]);
             _state = 'needs_store_onboarding';
             return;
         }
@@ -355,10 +362,17 @@
                 // Treat as needs_store_onboarding per spec.
                 _hideApp();
                 _showAuth();
-                _showUI('showStoreOnboarding', [{
+                var config = _deps.config() || {};
+                var allowGuestMode = config.AUTH_GUEST_MODE_ENABLED === true;
+                var readyOnboardingHandlers = {
                     onCreateStore: function (opts) { createInitialStore(opts); },
+                    onJoinWithInviteCode: function (code) { joinStoreWithInviteCode(code); },
                     onSignOut: function () { signOut(); }
-                }]);
+                };
+                if (allowGuestMode) {
+                    readyOnboardingHandlers.onContinueGuest = function () { continueAsGuest(); };
+                }
+                _showUI('showStoreOnboarding', [readyOnboardingHandlers]);
                 _state = 'needs_store_onboarding';
                 return;
             }
@@ -643,13 +657,62 @@
                 if (ui) ui.setBusy(false);
                 _showUI('showError', ['매장을 만들 수 없습니다.', {
                     onRetry: function () {
-                        _showUI('showStoreOnboarding', [{
+                        var config = _deps.config() || {};
+                        var allowGuestMode = config.AUTH_GUEST_MODE_ENABLED === true;
+                        var retryHandlers = {
                             onCreateStore: function (o) { createInitialStore(o); },
+                            onJoinWithInviteCode: function (c) { joinStoreWithInviteCode(c); },
                             onSignOut: function () { signOut(); }
-                        }]);
+                        };
+                        if (allowGuestMode) {
+                            retryHandlers.onContinueGuest = function () { continueAsGuest(); };
+                        }
+                        _showUI('showStoreOnboarding', [retryHandlers]);
                     }
                 }]);
             });
+    }
+
+    function joinStoreWithInviteCode(inviteCode) {
+        var auth = _deps && _deps.auth();
+        var ui = _deps.ui();
+        if (ui) ui.setBusy(true);
+        return Promise.resolve()
+            .then(function () {
+                if (!auth) return;
+                return auth.joinStoreWithInviteCode(inviteCode);
+            })
+            .then(function () {
+                if (ui) ui.setBusy(false);
+                return _runBootstrap();
+            })
+            .catch(function (err) {
+                if (ui) ui.setBusy(false);
+                var errMsg = '매장에 참여할 수 없습니다.';
+                if (err && err.message) {
+                    errMsg = err.message;
+                }
+                _showUI('showError', [errMsg, {
+                    onRetry: function () {
+                        var config = _deps.config() || {};
+                        var allowGuestMode = config.AUTH_GUEST_MODE_ENABLED === true;
+                        var retryHandlers = {
+                            onCreateStore: function (o) { createInitialStore(o); },
+                            onJoinWithInviteCode: function (c) { joinStoreWithInviteCode(c); },
+                            onSignOut: function () { signOut(); }
+                        };
+                        if (allowGuestMode) {
+                            retryHandlers.onContinueGuest = function () { continueAsGuest(); };
+                        }
+                        _showUI('showStoreOnboarding', [retryHandlers]);
+                    }
+                }]);
+            });
+    }
+
+    function continueAsGuest() {
+        _context.activeMembership = null;
+        _enterApp();
     }
 
     function selectMembership(membership) {
@@ -712,6 +775,7 @@
         signUp: signUp,
         signOut: signOut,
         createInitialStore: createInitialStore,
+        joinStoreWithInviteCode: joinStoreWithInviteCode,
         selectMembership: selectMembership,
         getState: getState,
         getContext: getContext,

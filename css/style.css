@@ -1029,6 +1029,11 @@ textarea.form-control {
     cursor: not-allowed;
 }
 
+.auth-button-full {
+    width: 100%;
+    display: block;
+}
+
 .auth-error {
     background: #fef2f2;
     color: #b91c1c;

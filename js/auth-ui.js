@@ -282,7 +282,60 @@
         _clear();
         var panel = _panel();
 
-        var title = _el('h2', 'auth-title', '초기 매장 생성');
+        var title = _el('h2', 'auth-title', '매장 설정');
+        panel.appendChild(title);
+
+        var desc = _el('p', 'auth-description', '새 매장을 만들거나 초대 코드로 기존 매장에 참여할 수 있습니다.');
+        panel.appendChild(desc);
+
+        var form = document.createElement('div');
+        form.className = 'auth-form';
+
+        // New store button
+        var newStoreBtn = _button('새 매장 만들기', 'auth-button auth-button-full', function () {
+            if (_busy) return;
+            _showNewStoreForm(handlers);
+        });
+        newStoreBtn.style.marginBottom = '12px';
+        form.appendChild(newStoreBtn);
+
+        // Invite code button
+        var inviteBtn = _button('초대 코드로 매장 참여', 'auth-button-secondary auth-button-full', function () {
+            if (_busy) return;
+            _showInviteCodeForm(handlers);
+        });
+        inviteBtn.style.marginBottom = '12px';
+        form.appendChild(inviteBtn);
+
+        // Guest mode button (if allowed)
+        if (handlers && typeof handlers.onContinueGuest === 'function') {
+            var guestBtn = _button('게스트/연습 모드로 계속하기', 'auth-button-secondary auth-button-full', function () {
+                if (_busy) return;
+                handlers.onContinueGuest();
+            });
+            guestBtn.style.marginBottom = '12px';
+            form.appendChild(guestBtn);
+        }
+
+        // Logout button
+        var logoutBtn = _button('로그아웃', 'auth-button-secondary auth-button-full', function () {
+            if (_busy) return;
+            if (handlers && typeof handlers.onSignOut === 'function') {
+                handlers.onSignOut();
+            }
+        });
+        form.appendChild(logoutBtn);
+
+        panel.appendChild(form);
+        _root.appendChild(panel);
+        showAuth();
+    }
+
+    function _showNewStoreForm(handlers) {
+        _clear();
+        var panel = _panel();
+
+        var title = _el('h2', 'auth-title', '새 매장 만들기');
         panel.appendChild(title);
 
         var desc = _el('p', 'auth-description', '첫 매장 정보를 입력해 주세요.');
@@ -337,13 +390,11 @@
         var buttonRow = _el('div', 'auth-button-row');
         var createBtn = _button('매장 만들기', 'auth-button', null, 'submit');
         buttonRow.appendChild(createBtn);
-        var logoutBtn = _button('로그아웃', 'auth-button-secondary', function () {
+        var backBtn = _button('뒤로', 'auth-button-secondary', function () {
             if (_busy) return;
-            if (handlers && typeof handlers.onSignOut === 'function') {
-                handlers.onSignOut();
-            }
+            showStoreOnboarding(handlers);
         });
-        buttonRow.appendChild(logoutBtn);
+        buttonRow.appendChild(backBtn);
         form.appendChild(buttonRow);
 
         _on(form, 'submit', function (e) {
@@ -365,6 +416,74 @@
                     subtitle: subtitle ? subtitle : null,
                     defaultLanguage: defaultLanguage
                 });
+            }
+        });
+
+        panel.appendChild(form);
+        _root.appendChild(panel);
+        showAuth();
+    }
+
+    function _showInviteCodeForm(handlers) {
+        _clear();
+        var panel = _panel();
+
+        var title = _el('h2', 'auth-title', '초대 코드로 매장 참여');
+        panel.appendChild(title);
+
+        var desc = _el('p', 'auth-description', '매장 owner에게 받은 초대 코드를 입력하세요.');
+        panel.appendChild(desc);
+
+        var form = document.createElement('form');
+        form.className = 'auth-form';
+
+        // Invite code field
+        var codeField = _el('div', 'auth-field');
+        codeField.appendChild(_label('auth-invite-code', '초대 코드'));
+        var codeInput = _input('text', 'auth-invite-code', 'auth-input');
+        codeInput.required = true;
+        codeInput.placeholder = 'LS-XXXXXXXX';
+        codeInput.maxLength = 20;
+        codeInput.style.textTransform = 'uppercase';
+        codeField.appendChild(codeInput);
+        form.appendChild(codeField);
+
+        // Error placeholder
+        var errorBox = _el('div', 'auth-error');
+        errorBox.style.display = 'none';
+        form.appendChild(errorBox);
+
+        // Buttons
+        var buttonRow = _el('div', 'auth-button-row');
+        var joinBtn = _button('매장 참여', 'auth-button', null, 'submit');
+        buttonRow.appendChild(joinBtn);
+        var backBtn = _button('뒤로', 'auth-button-secondary', function () {
+            if (_busy) return;
+            showStoreOnboarding(handlers);
+        });
+        buttonRow.appendChild(backBtn);
+        form.appendChild(buttonRow);
+
+        _on(form, 'submit', function (e) {
+            e.preventDefault();
+            if (_busy) return;
+            var code = (codeInput.value || '').trim();
+
+            if (!code) {
+                errorBox.textContent = '초대 코드를 입력해 주세요.';
+                errorBox.style.display = 'block';
+                return;
+            }
+
+            var upperCode = code.toUpperCase();
+            if (upperCode.indexOf('LS-') !== 0) {
+                errorBox.textContent = '유효하지 않은 초대 코드 형식입니다.';
+                errorBox.style.display = 'block';
+                return;
+            }
+
+            if (handlers && typeof handlers.onJoinWithInviteCode === 'function') {
+                handlers.onJoinWithInviteCode(upperCode);
             }
         });
 

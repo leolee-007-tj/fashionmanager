@@ -369,6 +369,63 @@
         return result.data;
     }
 
+    async function joinStoreWithInviteCode(inviteCode) {
+        var code = (inviteCode || '').trim().toUpperCase();
+        
+        if (!code) {
+            throw _makeError('AUTH_SIGN_IN_FAILED', 'Invite code is required');
+        }
+        
+        if (code.indexOf('LS-') !== 0) {
+            throw _makeError('AUTH_SIGN_IN_FAILED', 'Invalid invite code format');
+        }
+        
+        var user = await getCurrentUser();
+        if (!user) {
+            throw _makeError('AUTH_SESSION_REQUIRED', 'Authentication required');
+        }
+        
+        var client = _getClient();
+        var brandName = 'LESOUL';
+        
+        if (typeof localStorage !== 'undefined' && localStorage) {
+            try {
+                var stored = localStorage.getItem('lesoul_gh_app_brand_name');
+                if (stored && stored.trim()) {
+                    brandName = stored.trim();
+                }
+            } catch (e) { /* ignore */ }
+        }
+        
+        if (typeof LESOUL_CONFIG !== 'undefined' && LESOUL_CONFIG.APP_BRAND_NAME && LESOUL_CONFIG.APP_BRAND_NAME.trim()) {
+            brandName = LESOUL_CONFIG.APP_BRAND_NAME.trim();
+        }
+        
+        var result = await client.rpc('create_initial_store', {
+            p_name: brandName,
+            p_subtitle: null,
+            p_default_language: 'ko',
+            p_invite_code: code
+        });
+        
+        if (result.error) {
+            var errMsg = 'Store join failed';
+            if (result.error && result.error.message) {
+                var lowerMsg = result.error.message.toLowerCase();
+                if (lowerMsg.indexOf('invalid') !== -1 || lowerMsg.indexOf('not found') !== -1) {
+                    errMsg = '유효하지 않은 초대 코드입니다.';
+                } else if (lowerMsg.indexOf('expired') !== -1) {
+                    errMsg = '만료된 초대 코드입니다.';
+                } else if (lowerMsg.indexOf('revoked') !== -1 || lowerMsg.indexOf('already') !== -1) {
+                    errMsg = '이미 사용되었거나 철회된 초대 코드입니다.';
+                }
+            }
+            throw _makeError('AUTH_SIGN_IN_FAILED', errMsg);
+        }
+        
+        return result.data;
+    }
+
     global.LESOULAuth = Object.freeze({
         init: init,
         getSession: getSession,
@@ -380,6 +437,7 @@
         ensureUserProfile: ensureUserProfile,
         getActiveMemberships: getActiveMemberships,
         bootstrapAuthenticatedUser: bootstrapAuthenticatedUser,
-        createInitialStore: createInitialStore
+        createInitialStore: createInitialStore,
+        joinStoreWithInviteCode: joinStoreWithInviteCode
     });
 })(typeof window !== 'undefined' ? window : globalThis);
