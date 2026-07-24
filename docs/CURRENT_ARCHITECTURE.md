@@ -3998,6 +3998,58 @@ owner 또는 active store member만 LESOUL 실제 매장 화면을 볼 수 있�
 - main/gh-pages 작업: ❌ (no)
 - force push: ❌ (no)
 
+## 50. 3-6E.4.2: 실제 no-membership invite join browser smoke (2026-07-24)
+
+### 목적
+
+no-membership authenticated user가 초기화/invite-code UI를 거쳐 owner가 생성한 invite code로 기존 LESOUL store에 실제 join되는지 브라우저에서 end-to-end 검증한다.
+
+### 테스트 흐름
+
+1. Owner 로그인 → `generate_store_invite_code` RPC로 staff 초대 코드 생성
+2. Owner 로그아웃 → no-membership 계정 로그인
+3. no-membership 초기 화면: "매장 설정" 표시, LESOUL 대시보드 자동 진입 안 함
+4. "초대 코드로 매장 참여" → invite code 입력 UI (placeholder: `LS-XXXXXXXX`)
+5. 빈 값 검증 (HTML5 `:invalid` 차단) → 통과
+6. 잘못된 형식 (`ABC123`) → "유효하지 않은 초대 코드 형식입니다." 오류
+7. 실제 invite code 입력 → `create_initial_store` RPC → staff membership 생성
+8. Join 후 bootstrap/reload → active membership 확인
+
+### 결과
+
+| 항목 | 결과 |
+|---|---|
+| owner invite generation | ✅ **PASS** (masked: `LS-8AE6****`) |
+| no-membership initial routing | ✅ **PASS** ("매장 설정" 화면, 대시보드 자동 진입 안 함) |
+| invite UI display | ✅ **PASS** (`LS-XXXXXXXX` placeholder, 제출/뒤로 버튼) |
+| empty input validation | ✅ **PASS** (HTML5 invalid 차단, RPC 호출 안 함) |
+| invalid prefix validation | ✅ **PASS** ("유효하지 않은 초대 코드 형식입니다." 오류) |
+| actual invite join | ✅ **PASS** (RPC 성공 → bootstrap reload → 대시보드 진입) |
+| final active membership | ✅ **PASS** (role: `staff`, guestModeVisible: false, onboardingVisible: false) |
+
+### 최종 판정: ✅ PASS
+
+### 제약 준수
+
+- 새 migration 파일 생성: ❌ (no)
+- 기존 migration 수정: ❌ (no)
+- supabase db push 실행: ❌ (no)
+- SQL Editor 수동 INSERT/UPDATE/DELETE: ❌ (no)
+- service_role 사용: ❌ (no)
+- service_role/token/key/password 출력: ❌ (no)
+- 이메일 전체값 출력: ❌ (no)
+- user_id/store_id 전체값 출력: ❌ (no)
+- invite_code 전체값 console/docs 기록: ❌ (no, masked only)
+- js/config.js commit: ❌ (no)
+- data_export.json 생성/추가: ❌ (no)
+- main/gh-pages 작업: ❌ (no)
+- force push: ❌ (no)
+
+### Side effect
+
+- 실제 store_membership 레코드 1개 생성 (role: staff, no-membership 테스트 계정)
+- 추후 해당 멤버십은 Supabase SQL Editor에서 수동 revocation 가능
+
 ## 48. 3-6E.4: 프론트엔드 Invite Code 입력 UI 구현 (2026-07-24)
 
 ### 목적
