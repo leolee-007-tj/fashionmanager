@@ -4412,3 +4412,137 @@ owner가 브라우저 UI에서 직원/초대 상태를 관리할 수 있는 최�
 - **PASS** (프론트 UI + 서비스 + 테스트 + 문서화 완료)
 - browser smoke test는 코드/계약 테스트 검증으로 대체 (PENDING)
 
+---
+
+## 54. 3-6E.6.1: Owner Member/Invite Management UI Browser Smoke (2026-07-24)
+
+### 목적
+
+3-6E.6에서 구현한 owner용 “직원/초대 관리” UI가 실제 브라우저에서 정상 작동하는지 확인한다.
+이번 단계는 브라우저 smoke + 문서화만 수행한다. **코드 수정 없음.**
+
+### 환경
+
+- Local server: `python3 -m http.server 8084`
+- Browser: 자동화 브라우저 (browser_use subagent)
+- 계정: owner 계정 로그인 후 대시보드 진입
+
+### Owner Menu Smoke
+
+| 항목 | 결과 |
+|---|---|
+| owner 로그인 후 “직원/초대 관리” 메뉴 표시 | ✅ PASS |
+| 메뉴 href `#/members` | ✅ PASS |
+| 클릭 시 `#/members` 이동 | ✅ PASS |
+| 접근 차단 문구 “이 화면은 매장 owner만 사용할 수 있습니다.” | ✅ NO (owner이므로 미표시, 정상) |
+
+### Member List UI Smoke
+
+| 항목 | 결과 |
+|---|---|
+| 직원 목록 카드 표시 | ✅ PASS |
+| owner row 표시 | ✅ PASS |
+| inactive staff row 표시 | ✅ PASS (“비활성” 배지 확인) |
+| masked_email 표시 | ✅ PASS (예: `sf***@gmail.com`, `ep***@hotmail.com`) |
+| role 표시 | ✅ PASS |
+| 상태 active/inactive 표시 | ✅ PASS |
+| user_id/store_id/member_id 전체값 표시 | ✅ NO (전체값 노출 없음) |
+
+### Deactivate Button Safety Smoke
+
+| 항목 | 결과 |
+|---|---|
+| owner row 비활성화 버튼 부재 | ✅ PASS |
+| inactive staff row 비활성화 버튼 부재 | ✅ PASS |
+| 추가 staff deactivate 실행 | ❌ (no, 이번 단계에서 미실행) |
+
+### Invite Generate UI Smoke
+
+| 항목 | 결과 |
+|---|---|
+| role staff 선택 | ✅ PASS |
+| expires_in_days 7 | ✅ PASS |
+| invited_email 비워둠 | ✅ PASS |
+| 초대 코드 생성 성공 | ✅ PASS |
+| 화면에 invite code 표시 | ✅ PASS (복사 버튼 포함) |
+| console/docs에 invite_code 전체값 기록 | ✅ NO (마스킹만 기록: `LS-XXXX****`) |
+| 마스킹된 invite_code 형식 | `LS-XXXX****` |
+
+### Invite List UI Smoke
+
+| 항목 | 결과 |
+|---|---|
+| 방금 생성한 invite 목록 표시 | ✅ PASS |
+| status: active | ✅ PASS |
+| role: staff | ✅ PASS |
+| expires_at 표시 | ✅ PASS |
+| revoke 버튼 표시 | ✅ PASS |
+| invitation id 전체값 docs/console 기록 | ✅ NO |
+
+### Revoke UI Smoke
+
+| 항목 | 결과 |
+|---|---|
+| revoke 버튼 클릭 | ✅ PASS |
+| confirm 대화상자 확인 | ✅ PASS |
+| revoke 성공 | ✅ PASS |
+| status revoked 확인 | ✅ PASS |
+| revoke 버튼 사라짐 | ✅ PASS |
+| active invite 남아있지 않음 | ✅ PASS |
+
+### Staff/Guest/No-membership 차단 Smoke
+
+| 항목 | 결과 |
+|---|---|
+| staff/guest/no-membership browser smoke | ⏳ PENDING |
+| reason | 별도 계정으로 이번 smoke run에서 테스트 불가 |
+| 대체 검증 | code/contract tests (29개)로 owner-only gate 검증 완료 |
+
+### Console Errors / Sensitive Data Leak
+
+| 항목 | 결과 |
+|---|---|
+| console errors | ✅ none |
+| full invite_code console 출력 | ✅ NO |
+| full email console 출력 | ✅ NO |
+| full member_id/user_id/store_id console 출력 | ✅ NO |
+| token/key/password console 출력 | ✅ NO |
+
+### Post-smoke Tests
+
+| 항목 | 결과 |
+|---|---|
+| tests | ✅ **543 tests, 0 fail** |
+| preflight | ✅ **PASS** |
+
+### Side Effect
+
+- smoke에서 생성한 invite code는 **revoked 처리 완료** (active 남아있지 않음)
+- 추가 staff deactivate 미실행
+- 기존 inactive staff 상태 유지
+
+### 제약 준수
+
+- 코드 수정: ❌ (no)
+- 새 migration 파일 생성: ❌ (no)
+- 기존 migration 수정: ❌ (no)
+- supabase db push 실행: ❌ (no)
+- supabase db reset --linked: ❌ (no)
+- supabase db pull: ❌ (no)
+- SQL Editor 수동 INSERT/UPDATE/DELETE: ❌ (no)
+- service_role 사용: ❌ (no)
+- service_role/token/key/password 출력: ❌ (no)
+- 이메일 전체값 출력: ❌ (no, masked only)
+- user_id/store_id/member_id 전체값 출력: ❌ (no)
+- invite_code 전체값 docs/console 기록: ❌ (no, masked only)
+- invitation id 전체값 docs/console 기록: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 생성/추가: ❌ (no)
+- main/gh-pages 작업: ❌ (no)
+- force push: ❌ (no)
+
+### 최종 판정
+
+- **PASS** (owner member/invite management UI browser smoke 완료)
+- staff/guest/no-membership browser smoke: PENDING (코드/계약 테스트로 대체 검증)
+
