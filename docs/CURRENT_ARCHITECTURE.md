@@ -4274,3 +4274,141 @@ no-membership authenticated user가 초기화/invite-code UI를 거쳐 owner가 
 - main/gh-pages 작업: ❌ (no)
 - force push: ❌ (no)
 
+---
+
+## 53. 3-6E.6: Owner Member/Invite Management UI (2026-07-24)
+
+### 목적
+
+owner가 브라우저 UI에서 직원/초대 상태를 관리할 수 있는 최소 UI를 구현한다.
+이번 단계는 **프론트 UI + 프론트 서비스 연결 + 테스트 + 문서화만** 수행한다.
+
+### 구현 범위
+
+- Owner 전용 “직원/초대 관리” 화면 추가 (route: `#/members`)
+- 직원 목록 조회: `list_store_members()` RPC
+- 직원 비활성화: `deactivate_store_member(p_member_id)` RPC
+- 초대 코드 생성: `generate_store_invite_code(p_role, p_invited_email, p_expires_in_days)` RPC
+- 초대 코드 목록: `list_store_invite_codes()` RPC
+- 초대 코드 취소: `revoke_store_invite_code(p_invitation_id)` RPC
+- staff/manager/guest/no-membership 사용자 접근 차단
+
+### 수정 파일
+
+| 파일 | 변경 |
+|---|---|
+| `index.html` | owner 전용 사이드바 메뉴(`nav-item-members`) 추가, `member-management.js` script load 추가 (app.js 로드 전) |
+| `js/app.js` | `members` route case 추가, `MemberManagement.renderPage()` + `init()` 호출 |
+| `js/app-bootstrap.js` | `_updateOwnerNavVisibility()` 함수 추가 (owner role일 때만 메뉴 표시, `document` 미존재 시 안전 종료) |
+| `js/member-management.js` | 신규 파일: 서비스 함수(RPC 호출) + UI 렌더링 + owner-only gate |
+| `css/style.css` | `.member-mgmt-container`, `.member-mgmt-card`, `.member-mgmt-table`, `.status-badge` 등 스타일 추가 |
+| `tests/member-management-ui-contract.test.mjs` | 신규 파일: UI 계약 테스트 29개 |
+| `docs/CURRENT_ARCHITECTURE.md` | 본 섹션 추가 |
+
+### Route/Menu 위치
+
+- 사이드바 `설정` 메뉴 앞에 `직원/초대 관리` 메뉴 추가
+- `id="nav-item-members"` 기본 `display:none`
+- `app-bootstrap._enterApp()` → `_updateOwnerNavVisibility()` 호출로 owner만 메뉴 표시
+- hash route `#/members` → `MemberManagement.renderPage()` + `init()`
+
+### Owner-only Gate
+
+- `MemberManagement.isOwner()`: `LESOULAppBootstrap.getContext().activeMembership.role === 'owner'` 확인
+- `renderPage()` 진입 시 `isOwner()` false → “이 화면은 매장 owner만 사용할 수 있습니다.” 차단 화면 반환
+- `_updateOwnerNavVisibility()`: owner 외 role에서는 메뉴 숨김
+- staff/manager/guest/no-membership: 메뉴 미표시 + 직접 route 접근 시 차단 화면
+
+### 직원 목록 UI
+
+- `list_store_members()` RPC 호출
+- 컬럼: 이름, masked_email, 역할, 상태(active/inactive), 가입일, 관리
+- 비활성화 버튼 표시 조건:
+  - `member.role !== 'owner'` (owner role 비활성화 금지)
+  - 본인 아님 (`member_id !== currentUserId`)
+  - `member.is_active === true`
+  - `member_id` 존재
+- inactive staff는 “비활성” 상태 표시, 비활성화 버튼 미표시
+
+### 비활성화 UI
+
+- confirm 대화상자 표시
+- `deactivate_store_member(p_member_id)` RPC 호출
+- 성공 후 `list_store_members()` 재조회
+- 버튼 중복 클릭 방지
+- 사용자 친화적 한국어 메시지
+
+### 초대 코드 생성 UI
+
+- role 선택: `staff` / `manager` (owner 선택 불가)
+- invited_email: optional
+- expires_in_days: 기본 7, 허용 1~30
+- 생성 성공 시 화면에 invite_code 표시 (사용자 복사용) + “복사” 버튼
+- **console/docs에는 invite_code 전체값 기록 금지**
+
+### 초대 코드 목록 UI
+
+- `list_store_invite_codes()` RPC 호출
+- 컬럼: 초대 코드(화면 표시), 역할, masked email, status, 생성일, 만료일, 관리
+- revoke 버튼 표시 조건: `status === 'active' && !used_at && !revoked_at`
+- revoke 클릭 시 confirm → `revoke_store_invite_code(p_invitation_id)` → 목록 재조회
+
+### 보안 정책
+
+| 항목 | 결과 |
+|---|---|
+| owner만 UI 접근 | ✅ |
+| staff/manager 관리 버튼 표시 금지 | ✅ |
+| guest/practice mode 표시 금지 | ✅ |
+| no-membership user 표시 금지 | ✅ |
+| owner 자기 자신 비활성화 버튼 표시 금지 | ✅ |
+| owner role member 비활성화 버튼 표시 금지 | ✅ |
+| inactive staff 비활성 상태 표시 | ✅ |
+| member_id 전체값 출력 금지 | ✅ (console/docs 기록 없음) |
+| invite_code 전체값 console/docs 출력 금지 | ✅ (화면에만 표시, 복사용) |
+| email 전체값 출력 금지 | ✅ (masked 표시) |
+| user_id/store_id 전체값 출력 금지 | ✅ |
+| service_role/token/key/password 출력 금지 | ✅ |
+
+### 테스트 결과
+
+| 항목 | 결과 |
+|---|---|
+| tests | ✅ **543 tests, 0 fail** (기존 514 + 신규 29) |
+| preflight | ✅ **PASS** |
+| browser smoke (owner) | ⏳ pending (코드/테스트 검증으로 대체) |
+| browser smoke (invite code) | ⏳ pending (코드/테스트 검증으로 대체) |
+| browser smoke (staff/guest/no-membership 차단) | ⏳ pending (코드/테스트 검증으로 대체) |
+
+### Side Effect
+
+- 이번 단계에서 새로 생성한 invite code 없음 (smoke 미수행)
+- 추가 staff deactivate 미수행
+- 기존 inactive staff 상태 유지
+
+### 제약 준수
+
+- 새 migration 파일 생성: ❌ (no)
+- 기존 migration 수정: ❌ (no)
+- supabase db push 실행: ❌ (no)
+- supabase db push --include-seed: ❌ (no)
+- supabase db reset --linked: ❌ (no)
+- supabase db pull: ❌ (no)
+- SQL Editor 수동 INSERT/UPDATE/DELETE: ❌ (no)
+- service_role 사용: ❌ (no)
+- service_role/token/key/password 출력: ❌ (no)
+- 이메일 전체값 출력: ❌ (no)
+- user_id/store_id 전체값 출력: ❌ (no)
+- invite_code 전체값 문서 기록: ❌ (no)
+- invitation id 전체값 문서 기록: ❌ (no)
+- member_id 전체값 문서 기록: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 생성/추가: ❌ (no)
+- main/gh-pages 작업: ❌ (no)
+- force push: ❌ (no)
+
+### 최종 판정
+
+- **PASS** (프론트 UI + 서비스 + 테스트 + 문서화 완료)
+- browser smoke test는 코드/계약 테스트 검증으로 대체 (PENDING)
+

@@ -168,6 +168,14 @@ const App = {
                 case 'settings':
                     content = Settings.render();
                     break;
+                case 'members':
+                    if (window.MemberManagement) {
+                        content = MemberManagement.renderPage();
+                        setTimeout(function() { MemberManagement.init(); }, 50);
+                    } else {
+                        content = '<p>직원 관리 모듈을 불러올 수 없습니다.</p>';
+                    }
+                    break;
                 default:
                     content = this.renderDashboard();
             }

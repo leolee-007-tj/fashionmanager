@@ -1204,3 +1204,244 @@ textarea.form-control {
         display: none;
     }
 }
+
+/* ============================================================
+   3-6E.6: Member Management UI Styles
+   ============================================================ */
+
+.member-mgmt-container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.member-mgmt-card {
+    background: var(--white);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 20px;
+    overflow: hidden;
+}
+
+.member-mgmt-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--gray-200);
+}
+
+.member-mgmt-card-header h3 {
+    margin: 0;
+    font-size: 16px;
+    color: var(--gray-800);
+}
+
+.member-mgmt-card-header i {
+    margin-right: 8px;
+    color: var(--primary);
+}
+
+.member-mgmt-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.member-mgmt-table th,
+.member-mgmt-table td {
+    padding: 10px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--gray-200);
+    font-size: 13px;
+}
+
+.member-mgmt-table th {
+    background: var(--gray-50);
+    font-weight: 600;
+    color: var(--gray-600);
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+}
+
+.member-mgmt-table tbody tr:hover {
+    background: var(--gray-50);
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-badge.status-active {
+    background: rgba(40, 167, 69, 0.1);
+    color: var(--success);
+}
+
+.status-badge.status-inactive {
+    background: rgba(220, 53, 69, 0.1);
+    color: var(--danger);
+}
+
+.status-badge.status-revoked {
+    background: rgba(108, 117, 125, 0.1);
+    color: var(--secondary);
+}
+
+.status-badge.status-used {
+    background: rgba(23, 162, 184, 0.1);
+    color: var(--info);
+}
+
+.status-badge.status-expired {
+    background: rgba(255, 193, 7, 0.1);
+    color: #856404;
+}
+
+.invite-generate-form {
+    padding: 20px;
+}
+
+.invite-generate-form .form-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.invite-generate-form label {
+    min-width: 120px;
+    font-size: 13px;
+    color: var(--gray-700);
+}
+
+.invite-generate-form select,
+.invite-generate-form input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid var(--gray-300);
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.invite-code-result {
+    margin-top: 16px;
+    padding: 16px;
+    background: var(--gray-50);
+    border-radius: var(--border-radius);
+}
+
+.invite-code-box {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 8px 0;
+}
+
+.invite-code-box code {
+    padding: 8px 16px;
+    background: var(--white);
+    border: 1px solid var(--gray-300);
+    border-radius: 4px;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--primary);
+    letter-spacing: 1px;
+}
+
+.invite-code-display {
+    padding: 2px 6px;
+    background: var(--gray-100);
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+.member-mgmt-access-denied {
+    text-align: center;
+    padding: 60px 20px;
+}
+
+.member-mgmt-access-denied h2 {
+    color: var(--danger);
+    margin-bottom: 12px;
+}
+
+.member-mgmt-access-denied i {
+    font-size: 48px;
+    margin-bottom: 16px;
+    display: block;
+}
+
+.muted-text {
+    color: var(--gray-500);
+    font-size: 13px;
+}
+
+.error-text {
+    color: var(--danger);
+    font-size: 13px;
+}
+
+.btn-sm {
+    padding: 4px 10px;
+    font-size: 12px;
+}
+
+.btn-danger {
+    background: var(--danger);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.btn-danger:hover {
+    opacity: 0.9;
+}
+
+.btn-warning {
+    background: var(--warning);
+    color: #212529;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.btn-warning:hover {
+    opacity: 0.9;
+}
+
+.btn-secondary {
+    background: var(--gray-500);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.btn-secondary:hover {
+    opacity: 0.9;
+}
+
+.btn-primary {
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.btn-primary:hover {
+    opacity: 0.9;
+}
+
+.btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

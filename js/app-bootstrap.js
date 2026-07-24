@@ -231,7 +231,17 @@
         if (ui) ui.showAppContext(_context);
         var logoutEl = _deps.getLogoutElement();
         if (logoutEl) logoutEl.hidden = false;
+        _updateOwnerNavVisibility();
         _state = 'ready';
+    }
+
+    // 3-6E.6: owner-only nav item visibility
+    function _updateOwnerNavVisibility() {
+        if (typeof document === 'undefined') return;
+        var navItem = document.getElementById('nav-item-members');
+        if (!navItem) return;
+        var isOwner = _context && _context.activeMembership && _context.activeMembership.role === 'owner';
+        navItem.style.display = isOwner ? '' : 'none';
     }
 
     function _invalidateBootstrap() {
