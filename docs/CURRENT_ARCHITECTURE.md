@@ -3134,3 +3134,89 @@ Finished supabase db push.
 - service_role/token/key/password 출력: ❌ (no)
 - main/gh-pages 작업: ❌ (no)
 
+## 42. 3-6E.2.4: Existing Owner Post-push Browser Smoke Test (2026-07-24)
+
+### 목적
+
+3-6E.2.3 remote DB push 이후 기존 owner 계정이 invite-code 없이도 정상적으로 로그인하고 LESOUL store에 접근 가능한지 브라우저에서 확인한다.
+
+### 테스트 환경
+
+| 항목 | 값 |
+|---|---|
+| 테스트 일시 | 2026-07-24 |
+| 대상 | existing owner post-push browser smoke |
+| local server | python3 -m http.server 8082 |
+| 접속 URL | http://localhost:8082 |
+| remote project | pocfvkicaicmouimmzkf |
+| remote migration 상태 | 012 applied, 013 applied |
+
+### Browser Smoke Test 결과
+
+| 검증 항목 | 결과 | 근거 |
+|---|---|---|
+| **login result** | ✅ **PASS** | 로그인 버튼 클릭 후 대시보드 진입 |
+| **owner context** | ✅ **PASS** | LESOUL 매장명 heading에 표시 (e25) |
+| **forced onboarding** | ❌ **no** | 매장 만들기 화면으로 강제 이동되지 않음 |
+| **guest mode misclassification** | ❌ **no** | 게스트 모드 UI 미표시, `hasGuestMode: false` |
+| **invite_code error** | ❌ **no** | `hasInviteCodeRequired: false` |
+| **products screen access** | ✅ **PASS** | 상품 목록 페이지 진입 가능 (#/products) |
+| **새 store 생성 정황** | ❌ **no** | 기존 store 유지 |
+
+### Body Text 검증
+
+```javascript
+{
+  hasLESOUL: true,              // ✅ LESOUL 매장명 확인
+  hasInviteCodeRequired: false, // ✅ Invite code 오류 없음
+  hasGuestMode: false           // ✅ 게스트 모드 아님
+}
+```
+
+### Console 검증
+
+- console errors: 없음 (none)
+- service_role/key/token/password 출력: 없음
+
+### Post-smoke 검증
+
+| 검증 항목 | 결과 |
+|---|---|
+| `node --test tests/*.test.mjs` | ✅ **396 tests, 0 fail** |
+| `bash scripts/remote-deployment-preflight.sh` | ✅ **PASS** |
+
+### 최종 판정
+
+| 항목 | 결과 |
+|---|---|
+| **Existing Owner Smoke** | ✅ **PASS** |
+| **LESOUL owner context** | ✅ 확인 |
+| **invite_code 오류** | ❌ 없음 |
+| **guest mode 오분류** | ❌ 없음 |
+| **상품 화면 접근** | ✅ 가능 |
+| **새 store 생성 정황** | ❌ 없음 |
+| **Tests** | ✅ 396 pass |
+| **Preflight** | ✅ PASS |
+
+### 다음 단계
+
+- 3-6E.3: `generate_store_invite_code` RPC 설계/구현
+- 3-6E.4: 프론트엔드 invite-code 입력 UI
+
+### 제약 준수
+
+- 새 migration 파일 생성: ❌ (no)
+- 기존 migration 파일 수정: ❌ (no)
+- JS/CSS/HTML 수정: ❌ (no)
+- supabase db push 실행: ❌ (no)
+- supabase db reset --linked: ❌ (no)
+- supabase db pull: ❌ (no)
+- 원격 INSERT/UPDATE/DELETE 수동: ❌ (no)
+- 원격 RPC 수동: ❌ (no)
+- create_initial_store 원격 수동: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 생성/추가: ❌ (no)
+- service_role/token/key/password 출력: ❌ (no)
+- 이메일 전체값 출력: ❌ (no)
+- main/gh-pages 작업: ❌ (no)
+
