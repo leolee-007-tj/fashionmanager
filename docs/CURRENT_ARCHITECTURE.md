@@ -3481,3 +3481,178 @@ Finished supabase db push.
 - user_id/store_id 전체값 출력: ❌ (no)
 - main/gh-pages 작업: ❌ (no)
 
+## 45. 3-6E.3.2: Invite Code 목록 조회/철회 RPC 설계/구현 (2026-07-24)
+
+### 목적
+
+owner가 자신이 생성한 invite code를 안전하게 조회하고 철회할 수 있는 RPC 2개를 추가한다.
+이번 단계는 local migration + tests + docs + dry-run까지만 진행한다.
+실제 remote db push는 아직 진행하지 않는다.
+
+### Migration 파일
+
+`supabase/migrations/20260711001500_store_invitation_management_rpcs.sql`
+
+### 함수 Signatures
+
+```sql
+-- 1. 목록 조회
+public.list_store_invite_codes()
+RETURNS TABLE (
+    id uuid,
+    invite_code text,
+    invited_email text,
+    role public.member_role,
+    expires_at timestamptz,
+    used_at timestamptz,
+    revoked_at timestamptz,
+    created_at timestamptz,
+    status text
+)
+
+-- 2. 철회
+public.revoke_store_invite_code(p_invitation_id uuid)
+RETURNS boolean
+```
+
+### 권한 정책 (두 함수 공통)
+
+| 항목 | 내용 |
+|---|---|
+| 실행 가능 role | authenticated (함수 내부에서 owner-only 추가 검증) |
+| owner-only | ✅ active owner membership이어야 함 |
+| manager/staff 실행 불가 | ✅ |
+| anon 실행 불가 | ✅ |
+| PUBLIC 실행 권한 | ❌ revoked |
+
+### list_store_invite_codes: Status 계산
+
+| 조건 | status |
+|---|---|
+| `revoked_at IS NOT NULL` | `revoked` |
+| `used_at IS NOT NULL` | `used` |
+| `expires_at < now()` | `expired` |
+| 그 외 | `active` |
+
+### list_store_invite_codes: 보안 특징
+
+- owner의 active store만 조회 (deleted store 제외)
+- `store_id = v_store_id` 필터로 다른 store invite 절대 노출 안 함
+- `created_at DESC` 순 정렬
+- `public.store_invitations`에서 SELECT만 수행
+
+### revoke_store_invite_code: 동작
+
+| 단계 | 동작 |
+|---|---|
+| 1 | `p_invitation_id IS NULL` → reject |
+| 2 | active owner membership 확인 |
+| 3 | 초대 존재 여부 + store 소유권 확인 |
+| 4 | 이미 revoked → idempotent `RETURN true` |
+| 5 | `used_at IS NOT NULL` → reject (사용된 초대는 철회 불가) |
+| 6 | `revoked_at = now()`, `revoked_by = auth.uid()` 업데이트 |
+| 7 | `GET DIAGNOSTICS`로 영향받은 행 확인 후 boolean 반환 |
+
+### revoke_store_invite_code: 보안 특징
+
+- owner의 active store에 속한 초대만 철회 가능
+- deleted store 제외
+- used_at IS NOT NULL 초대 철회 차단
+- idempotent: 이미 revoked된 초대는 성공 반환
+
+### Contract Tests
+
+`tests/store-invitation-management-rpcs-contract.test.mjs`
+
+검증 항목 (26개):
+- migration 파일 존재
+- list_store_invite_codes 함수 존재
+- revoke_store_invite_code 함수 존재
+- 두 함수 SECURITY DEFINER (주석 제외, 2개 카운트)
+- 두 함수 SET search_path = '' (주석 제외, 2개 카운트)
+- 두 함수 auth.uid() 사용
+- 두 함수 owner-only 로직 (store_members + is_active + owner role)
+- 두 함수 stores.deleted_at IS NULL 확인
+- list 함수 status 계산 (active/expired/used/revoked)
+- list 함수 created_at DESC 정렬
+- list 함수 store_id 필터로 다른 store 노출 방지
+- revoke 함수 NULL p_invitation_id 차단
+- revoke 함수 used_at 초대 철회 차단
+- revoke 함수 revoked_at/revoked_by 업데이트
+- revoke 함수 store_id 범위 내 update
+- revoke 함수 idempotent (already revoked → RETURN true)
+- public.stores insert/update/delete 없음
+- public.store_members insert/update/delete 없음
+- REVOKE ALL FROM PUBLIC (2개)
+- REVOKE ALL FROM anon (2개)
+- GRANT EXECUTE TO authenticated (2개)
+- service_role 문자열 없음
+- create_initial_store 언급 없음
+- generate_store_invite_code 언급 없음
+- GET DIAGNOSTICS 사용
+- revoke returns boolean
+
+### Remote 적용 상태
+
+| 항목 | 상태 |
+|---|---|
+| **실제 remote db push** | ❌ **no** (이번 단계에서 진행 안 함) |
+| **dry-run** | ✅ **PASS** (015 migration 1개만 표시) |
+
+### Dry-run 결과
+
+```
+DRY RUN: migrations will *not* be pushed to the database.
+Would push these migrations:
+ • 20260711001500_store_invitation_management_rpcs.sql
+```
+
+### 검증 결과
+
+| 검증 항목 | 결과 |
+|---|---|
+| `node --test tests/*.test.mjs` | ✅ **446 tests, 0 fail** (기존 420 + 신규 26) |
+| `bash scripts/remote-deployment-preflight.sh` | ✅ **PASS** |
+| `supabase db push --dry-run` | ✅ 015 migration 1개만 표시 |
+
+### 최종 판정
+
+| 항목 | 결과 |
+|---|---|
+| **Invitation Management RPCs 구현** | ✅ **PASS** |
+| **owner-only 정책** | ✅ 확인 |
+| **list status 계산** | ✅ 확인 |
+| **revoke 정책** | ✅ 확인 |
+| **used invite revoke 차단** | ✅ 확인 |
+| **idempotent revoke** | ✅ 확인 |
+| **실제 remote push** | ❌ no (dry-run만) |
+
+### 다음 단계
+
+- 3-6E.3.3: invite 코드 조회/철회 RPC remote 적용
+- 또는 3-6E.4: 프론트엔드 invite-code 입력 UI 구현
+
+### 제약 준수
+
+- 실제 supabase db push 실행: ❌ (no)
+- supabase db push --include-seed: ❌ (no)
+- supabase db reset --linked: ❌ (no)
+- supabase db pull: ❌ (no)
+- 원격 INSERT/UPDATE/DELETE 수동: ❌ (no)
+- 원격 RPC 수동: ❌ (no)
+- generate_store_invite_code 원격 실행: ❌ (no)
+- list_store_invite_codes 원격 실행: ❌ (no)
+- revoke_store_invite_code 원격 실행: ❌ (no)
+- create_initial_store 원격 수동: ❌ (no)
+- 새 migration 파일 생성: ❌ (no)
+- 기존 migration 파일 수정: ❌ (no)
+- JS/CSS/HTML 수정: ❌ (no)
+- 프론트 초대 UI 구현: ❌ (no)
+- 가격 계산 기능 구현: ❌ (no)
+- js/config.js commit: ❌ (no)
+- data_export.json 생성/추가: ❌ (no)
+- service_role/token/key/password 출력: ❌ (no)
+- 이메일 전체값 출력: ❌ (no)
+- user_id/store_id 전체값 출력: ❌ (no)
+- main/gh-pages 작업: ❌ (no)
+
