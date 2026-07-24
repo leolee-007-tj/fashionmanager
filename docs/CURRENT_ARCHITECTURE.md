@@ -4653,3 +4653,141 @@ owner가 아닌 사용자(staff/no-membership/guest)가 “직원/초대 관리�
 - active staff/no-membership/guest browser smoke: PENDING (별도 계정 부재)
 - 대체 검증: 29개 contract tests로 `isOwner()` gate + `renderAccessDenied()` + `_updateOwnerNavVisibility()` 검증 완료
 
+---
+
+## 56. 3-6F: Billing/Subscription Placeholder Architecture (2026-07-24)
+
+### 목적
+
+결제/구독 기능을 나중에 붙일 수 있도록 구조와 보안 원칙만 먼저 정의한다.
+현재 단계에서는 결제 기능을 구현하지 않는다.
+현재 앱 동작에는 영향이 없어야 한다.
+
+> **Important**: 이 섹션은 placeholder architecture 문서화일 뿐이다.
+> 실제 구현은 별도 단계(3-6F.x)에서 진행한다.
+
+### 권장 구현 단계 (미래 계획)
+
+#### Phase 1: Manual Subscription Placeholder
+
+- owner가 수동 결제 후 관리자 승인 방식
+- 가장 빠르고 안전한 1차 방식
+- 앱 내부에서는 subscription 상태만 읽도록 설계
+- DB에는 store-level subscription status 필드만 추가 (아직 안 만듦)
+- UI에는 현재 플랜 상태만 표시 (아직 안 만듦)
+
+#### Phase 2: Subscription DB/RLS 설계
+
+- `store_subscriptions` 또는 `stores` 내장 필드 중 선택
+- 후보 필드:
+  - `plan` (free / basic / pro / enterprise 등)
+  - `status` (active / canceled / past_due / trialing)
+  - `current_period_start`
+  - `current_period_end`
+  - `trial_until`
+  - `canceled_at`
+  - `provider` (stripe / alipay / wechat / manual)
+  - `provider_subscription_id` (결제사 구독 ID)
+- RLS: owner-only 조회/관리, staff는 조회만 (또는 못 봄)
+- write는 서버/Edge Function에서만 수행
+
+#### Phase 3: Edge Function 결제 서버
+
+- 결제 secret key는 브라우저에 절대 두지 않음
+- Supabase Edge Function 또는 별도 backend에서 checkout/session/payment request 생성
+- webhook 검증은 서버에서만 수행
+- 결제 성공/실패 이벤트는 webhook → DB 업데이트 흐름
+- 브라우저는 checkout URL만 받아서 리다이렉트
+
+#### Phase 4: Payment Provider Adapter
+
+- 후보 제공사:
+  - **Stripe Checkout/Billing**: 해외 SaaS형, global, developer friendly
+  - **Alipay**: 중국 고객 대상
+  - **WeChat Pay**: 중국 고객 대상
+- 지역/사업자/계정 조건에 따라 선택
+- 공통 인터페이스로 adapter 패턴 권장
+- provider-specific 로직은 서버에만 격리
+
+#### Phase 5: UI 연결
+
+- owner settings 페이지 또는 별도 billing page
+- 표시 항목:
+  - 현재 플랜
+  - 만료일
+  - 결제 상태
+  - 업그레이드/연장 안내
+  - 결제 이력 (간략)
+- 미결제 상태에서 기능 제한 여부는 별도 정책으로 결정
+- staff/manager에게는 billing 정보 노출 여부 별도 정책
+
+### 보안 원칙
+
+| 원칙 | 설명 |
+|---|---|
+| publishable/public key만 브라우저 허용 | 결제사의 공개 키만 프론트로 |
+| secret key 브라우저 금지 | 절대 브라우저에 내려보내지 않음 |
+| service_role 브라우저 금지 | 기존 정책 유지 |
+| webhook secret 브라우저 금지 | 서버에서만 보관 |
+| payment provider secret git/docs/config 기록 금지 | 절대 리포지토리에 커밋하지 않음 |
+| js/config.js에 결제 secret 저장 금지 | 기존 정책 유지 |
+| subscription status는 서버 검증 기준 | 클라이언트 상태만 믿고 기능 열지 않음 |
+| 클라이언트 localStorage만 믿고 유료 기능 열지 않음 | 반드시 서버/DB에서 현재 상태 검증 |
+| 결제 금액/플랜은 서버에서 결정 | 클라이언트에서 조작 불가 |
+| webhook signature 검증 필수 | 위조된 webhook 거부 |
+
+### 초기 정책 권장안
+
+- **지금은 결제 차단을 켜지 않는다.**
+- LESOUL owner는 계속 사용 가능.
+- 결제 기능은 placeholder만 둔다.
+- 실제 과금 전에는 운영 정책/환불 정책/가격 정책을 별도 문서화한다.
+- 중국 고객 결제는 Alipay/WeChat Pay 가능성을 검토하되, 구현은 나중에 한다.
+- 해외 SaaS형이면 Stripe Checkout/Billing을 우선 검토한다.
+- 가장 안전한 1차 방식은 manual payment + admin approval이다.
+
+### 현재 단계에서 하지 않는 것
+
+- ❌ subscription table 생성 안 함
+- ❌ migration 생성 안 함
+- ❌ Edge Function 생성 안 함
+- ❌ 결제 SDK 설치 안 함
+- ❌ 결제 버튼 UI 추가 안 함
+- ❌ 결제 secret/key 작성 안 함
+- ❌ 실제 결제 테스트 안 함
+- ❌ 가격 계산 기능 구현 안 함
+- ❌ JS/CSS/HTML 코드 수정 안 함
+- ❌ supabase db push 안 함
+- ❌ SQL Editor 작업 안 함
+
+### 향후 후보 섹션
+
+| 섹션 | 제목 |
+|---|---|
+| 3-6F.1 | Billing DB/RLS draft |
+| 3-6F.2 | Manual subscription admin flow |
+| 3-6F.3 | Billing UI placeholder |
+| 3-6F.4 | Edge Function payment architecture |
+| 3-6F.5 | Provider decision (Stripe vs Alipay vs WeChat Pay) |
+
+### 검증 결과
+
+| 항목 | 결과 |
+|---|---|
+| docs-only | ✅ yes |
+| code changes | ❌ no |
+| migration | ❌ no |
+| db push | ❌ no |
+| tests | ✅ **543 tests, 0 fail** |
+| preflight | ✅ **PASS** |
+| secret key in docs | ❌ no |
+| token/password in docs | ❌ no |
+| service_role in docs | ❌ no |
+| 실제 결제 API key in docs | ❌ no |
+
+### 최종 판정
+
+- **PASS** (Billing/Subscription Placeholder Architecture 문서화 완료)
+- 코드/DB/UI 변경 없음
+- 향후 결제 기능 구현 시 참조할 보안 원칙과 단계 계획 정의
+
