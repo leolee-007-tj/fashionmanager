@@ -827,6 +827,479 @@ const DB = {
     },
 
 
+    // ==================== Orders DataSource (3-8A.3) ====================
+    /**
+     * 3-8A.3: Orders DataSource Interface Extraction (read-only prototype)
+     *
+     * Orders 전용 data source 계층을 얇게 분리한다.
+     * 현재 활성 DataSource는 LocalOrdersDataSource이며,
+     * 내부 저장 방식은 기존 localStorage 그대로 유지한다.
+     *
+     * 3-8A.3에서 runtime feature flag gate를 추가했다.
+     * 기본값(LocalOrdersDataSource) 동작은 절대 바뀌지 않는다.
+     *
+     * SupabaseOrdersDataSource 후보가 되기 위한 필수 조건 (모두 true):
+     *   1. global LESOUL_CONFIG 존재
+     *   2. LESOUL_CONFIG.SUPABASE_ENABLED === true
+     *   3. LESOUL_CONFIG.ORDERS_SUPABASE_ENABLED === true
+     *   4. LESOULSupabase 초기화 정상
+     *   5. activeMembership.storeId 확인 가능
+     *   6a. local URL (localhost / 127.0.0.1) → 기존 조건 그대로 허용
+     *   6b. remote URL → ORDERS_SUPABASE_REMOTE_ENABLED === true 필요
+     *   7. service_role key 아님
+     *   8. client 명시적 존재
+     *
+     * 조건 중 하나라도 실패하면:
+     *   - ORDERS_SUPABASE_ENABLED !== true → 조용히 LocalOrdersDataSource 유지
+     *   - ORDERS_SUPABASE_ENABLED === true + 다른 필수 조건 실패 → 명확한 error throw
+     *     (조용히 데이터 저장 위치를 바꾸지 않는다)
+     *
+     * 이번 단계(3-8A.3)는 read-only listOrders만 허용한다.
+     * write 메서드(createOrder, updatePendingOrder, shipOrder, cancelOrder, completeOrder, deleteOrder, setOrders)는
+     * SupabaseOrdersDataSource에서 모두 throw한다.
+     */
+
+    _ordersDataSource: null,
+
+    /**
+     * 현재 활성 Orders DataSource를 반환한다.
+     * 기본값은 LocalOrdersDataSource.
+     *
+     * 3-8A.3: ORDERS_SUPABASE_ENABLED === true이고 모든 필수 조건이 충족되면
+     * SupabaseOrdersDataSource를 생성한다 (read-only).
+     */
+    getOrdersDataSource() {
+        if (!this._ordersDataSource) {
+            const resolved = this._resolveRuntimeOrdersDataSource();
+            this._ordersDataSource = resolved === null
+                ? this._createLocalOrdersDataSource()
+                : resolved;
+        }
+        return this._ordersDataSource;
+    },
+
+    /**
+     * 3-8A.3: Runtime feature flag gate로 SupabaseOrdersDataSource 후보를 판별한다.
+     *
+     * @returns {Object|null} SupabaseOrdersDataSource 인스턴스.
+     *   null을 반환하면 LocalOrdersDataSource를 사용한다.
+     *   필수 조건이 실패하면 error를 throw한다 (조용히 fallback하지 않음).
+     */
+    _resolveRuntimeOrdersDataSource() {
+        const globalObj = (typeof window !== 'undefined') ? window : globalThis;
+        const config = globalObj.LESOUL_CONFIG || {};
+
+        // 기본값 false — 조용히 LocalOrdersDataSource 유지.
+        if (config.ORDERS_SUPABASE_ENABLED !== true) {
+            return null;
+        }
+
+        // ORDERS_SUPABASE_ENABLED === true from here.
+        // 필수 조건을 모두 검사한다. 실패 시 명확한 error.
+
+        if (config.SUPABASE_ENABLED !== true) {
+            throw new Error('Orders Supabase runtime requires SUPABASE_ENABLED=true');
+        }
+
+        const supabaseClient = globalObj.LESOULSupabase;
+        if (!supabaseClient || typeof supabaseClient.isInitialized !== 'function' || !supabaseClient.isInitialized()) {
+            throw new Error('Orders Supabase runtime requires initialized Supabase client');
+        }
+
+        let client;
+        try {
+            client = supabaseClient.getClient();
+        } catch (e) {
+            throw new Error('Orders Supabase runtime requires accessible Supabase client');
+        }
+        if (!client) {
+            throw new Error('Orders Supabase runtime requires non-null Supabase client');
+        }
+
+        const url = String(client.supabaseUrl || config.SUPABASE_URL || '').toLowerCase();
+        const isLocalUrl = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(url);
+
+        // Remote URL guardrail
+        if (!isLocalUrl) {
+            if (config.ORDERS_SUPABASE_REMOTE_ENABLED !== true) {
+                throw new Error('Orders Supabase remote runtime is not enabled (ORDERS_SUPABASE_REMOTE_ENABLED)');
+            }
+        }
+
+        // service_role key 차단
+        const clientKey = config.SUPABASE_CLIENT_KEY || '';
+        if (typeof clientKey === 'string' && clientKey.indexOf('service_role') > -1) {
+            throw new Error('Orders Supabase runtime forbids service_role key');
+        }
+        // JWT role 확인
+        if (typeof clientKey === 'string' && clientKey.split('.').length === 3) {
+            try {
+                const payload = JSON.parse(atob(clientKey.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+                if (payload && payload.role === 'service_role') {
+                    throw new Error('Orders Supabase runtime forbids service_role key');
+                }
+            } catch (e) {
+                if (e && e.message && e.message.indexOf('service_role') > -1) throw e;
+                // decode 실패는 무시 (다른 검증에서 처리됨)
+            }
+        }
+
+        // active storeId 확인
+        const globalObjForMembership = (typeof window !== 'undefined') ? window : globalThis;
+        const bootstrapForMembership = globalObjForMembership.LESOULAppBootstrap;
+        let activeMembership = null;
+        if (bootstrapForMembership && typeof bootstrapForMembership.getContext === 'function') {
+            try {
+                const ctx = bootstrapForMembership.getContext();
+                if (ctx) activeMembership = ctx.activeMembership || null;
+            } catch (e) {
+                // context 접근 실패 — guest로 간주
+            }
+        }
+        const storeId = this._resolveActiveStoreId();
+        if (!storeId) {
+            // guest 모드 (activeMembership 없음)는 LocalOrdersDataSource로 fallback
+            if (activeMembership === null) {
+                return null;
+            }
+            throw new Error('Orders Supabase runtime requires active storeId');
+        }
+
+        return this._createControlledSupabaseOrdersDataSource(client, {
+            localOnly: isLocalUrl,
+            remoteEnabled: !isLocalUrl,
+            storeId: storeId,
+            url: url
+        });
+    },
+
+    /**
+     * 테스트 전용: Orders DataSource를 교체한다.
+     * 운영 코드에서 직접 호출하지 말 것.
+     */
+    setOrdersDataSourceForTesting(source) {
+        this._ordersDataSource = source;
+    },
+
+    resetOrdersDataSourceForTesting() {
+        this._ordersDataSource = null;
+    },
+
+    /**
+     * LocalOrdersDataSource 팩토리.
+     * 기존 localStorage 기반 orders API를 그대로 감싼다.
+     * 동작은 기존 DB.getOrders/addOrder/updateOrder/deleteOrder와 동일하다.
+     */
+    _createLocalOrdersDataSource() {
+        const db = this;
+        return {
+            name: 'LocalOrdersDataSource',
+
+            listOrders() {
+                return db.getOrders();
+            },
+
+            setOrders(orders) {
+                db.setOrders(orders);
+            },
+
+            createOrder(order) {
+                return db.addOrder(order);
+            },
+
+            updateOrder(id, updates) {
+                return db.updateOrder(id, updates);
+            },
+
+            deleteOrder(id) {
+                return db.deleteOrder(id);
+            },
+
+            findDuplicateOrder(customerId, productId, color, size) {
+                return db.findDuplicateOrder(customerId, productId, color, size);
+            }
+        };
+    },
+
+    /**
+     * 3-8A.3: SupabaseOrdersDataSource (read-only prototype)
+     *
+     * 이번 단계는 read-only listOrders만 허용한다.
+     * write 메서드는 모두 명확한 error를 throw한다.
+     *
+     * 보안 원칙:
+     *   - publishable key만 사용 (service_role 차단)
+     *   - store_id는 context.storeId로 강제 (클라이언트 입력 무신뢰)
+     *   - RLS에 의존 (우회 금지)
+     *   - 실제 remote write RPC 호출 금지 (create_order, ship_order, cancel_order, complete_order)
+     *
+     * @param {Object} client - Supabase client (명시적 주입)
+     * @param {Object} context - { localOnly: boolean, remoteEnabled: boolean, storeId: string, url?: string }
+     * @returns {Object} SupabaseOrdersDataSource (read-only)
+     */
+    _createControlledSupabaseOrdersDataSource(client, context) {
+        const db = this;
+
+        function _validateReadContext(methodName) {
+            if (!client) {
+                throw new Error(`SupabaseOrdersDataSource.${methodName} requires explicit client`);
+            }
+            if (!context || (context.localOnly !== true && context.remoteEnabled !== true)) {
+                throw new Error(`SupabaseOrdersDataSource.${methodName} requires valid context`);
+            }
+            if (!context.storeId) {
+                throw new Error(`SupabaseOrdersDataSource.${methodName} requires storeId`);
+            }
+            if (context.localOnly === true) {
+                const url = (client.supabaseUrl || context.url || '').toLowerCase();
+                if (!/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(url)) {
+                    throw new Error(`SupabaseOrdersDataSource.${methodName} requires localhost URL`);
+                }
+            }
+        }
+
+        function _wrapReadError(methodName, err) {
+            if (err && err.message && err.message.indexOf('requires ') === 0) {
+                throw err;
+            }
+            const wrapped = new Error(`SupabaseOrdersDataSource.${methodName} query failed`);
+            if (err && err.code) wrapped.code = err.code;
+            if (err && err.message) wrapped.details = err.message;
+            throw wrapped;
+        }
+
+        const _writeDisabledMsg = 'SupabaseOrdersDataSource write is not enabled yet (3-8A.3 read-only prototype)';
+
+        return {
+            name: 'SupabaseOrdersDataSource',
+
+            /**
+             * Read-only listOrders.
+             * orders table에서 store_id 기반 read-only select 수행.
+             * deleted_at IS NULL 조건으로 활성 주문만 조회.
+             */
+            listOrders(filters) {
+                _validateReadContext('listOrders');
+                let query = client.from('orders')
+                    .select([
+                        'id, legacy_id, store_id, order_number',
+                        'customer_id, product_id, legacy_customer_id, legacy_product_id',
+                        'customer_name_snapshot, product_title_snapshot, brand_snapshot, category_snapshot, color_snapshot, size_snapshot',
+                        'quantity, selling_price, actual_profit, actual_profit_margin, actual_cost_ratio',
+                        'actual_converted_cost_at_sale, china_cost_at_sale',
+                        'status, order_date, ship_date, shipping_company, tracking_number, notes',
+                        'created_at, updated_at, deleted_at, version'
+                    ].join(', '))
+                    .eq('store_id', context.storeId)
+                    .is('deleted_at', null)
+                    .order('order_date', { ascending: false });
+
+                if (filters) {
+                    if (filters.status) {
+                        query = query.eq('status', filters.status);
+                    }
+                    if (filters.customerId) {
+                        query = query.eq('customer_id', filters.customerId);
+                    }
+                    if (filters.productId) {
+                        query = query.eq('product_id', filters.productId);
+                    }
+                }
+
+                return query
+                    .then(response => {
+                        if (response.error) {
+                            throw new Error('SupabaseOrdersDataSource.listOrders query failed');
+                        }
+                        const rows = response.data || [];
+                        return rows.map(row => db.mapSupabaseRowToLegacyOrder(row));
+                    })
+                    .catch(err => _wrapReadError('listOrders', err));
+            },
+
+            /**
+             * Read-only getOrderById.
+             * 단일 주문을 id(legacy_id 또는 uuid)로 조회.
+             */
+            getOrderById(orderId) {
+                _validateReadContext('getOrderById');
+                // legacy_id (numeric) 우선 조회, 없으면 uuid id로 조회
+                const numericId = Number(orderId);
+                let query = client.from('orders')
+                    .select([
+                        'id, legacy_id, store_id, order_number',
+                        'customer_id, product_id, legacy_customer_id, legacy_product_id',
+                        'customer_name_snapshot, product_title_snapshot, brand_snapshot, category_snapshot, color_snapshot, size_snapshot',
+                        'quantity, selling_price, actual_profit, actual_profit_margin, actual_cost_ratio',
+                        'actual_converted_cost_at_sale, china_cost_at_sale',
+                        'status, order_date, ship_date, shipping_company, tracking_number, notes',
+                        'created_at, updated_at, deleted_at, version'
+                    ].join(', '))
+                    .eq('store_id', context.storeId)
+                    .is('deleted_at', null);
+
+                if (Number.isFinite(numericId) && numericId > 0) {
+                    query = query.eq('legacy_id', numericId);
+                } else {
+                    query = query.eq('id', orderId);
+                }
+
+                return query
+                    .maybeSingle()
+                    .then(response => {
+                        if (response.error) {
+                            throw new Error('SupabaseOrdersDataSource.getOrderById query failed');
+                        }
+                        if (!response.data) return null;
+                        return db.mapSupabaseRowToLegacyOrder(response.data);
+                    })
+                    .catch(err => _wrapReadError('getOrderById', err));
+            },
+
+            // ==================== Write methods (DISABLED in 3-8A.3) ====================
+
+            setOrders(orders) {
+                throw new Error(_writeDisabledMsg);
+            },
+
+            createOrder(order) {
+                throw new Error(_writeDisabledMsg);
+            },
+
+            updatePendingOrder(orderId, payload) {
+                throw new Error(_writeDisabledMsg);
+            },
+
+            shipOrder(orderId, payload) {
+                throw new Error(_writeDisabledMsg);
+            },
+
+            cancelOrder(orderId) {
+                throw new Error(_writeDisabledMsg);
+            },
+
+            completeOrder(orderId) {
+                throw new Error(_writeDisabledMsg);
+            },
+
+            updateOrder(id, updates) {
+                throw new Error(_writeDisabledMsg);
+            },
+
+            deleteOrder(id) {
+                throw new Error(_writeDisabledMsg);
+            },
+
+            findDuplicateOrder(customerId, productId, color, size) {
+                throw new Error(_writeDisabledMsg);
+            }
+        };
+    },
+
+    /**
+     * Orders read async helper (3-8A.3).
+     * 현재는 활성 DataSource의 listOrders()를 호출한다.
+     * 기존 sync DB.getOrders()는 유지된다.
+     */
+    getOrdersAsync() {
+        return this.getOrdersDataSource().listOrders();
+    },
+
+    /**
+     * 3-8A.3: Supabase orders row를 legacy order object로 변환한다.
+     * 순수 함수: 네트워크/localStorage 접근 없음.
+     *
+     * 필드 매핑 규칙 (ORDERS_REMOTE_DATASOURCE_CONTRACT.md 참조):
+     *   remote.id (uuid)       → legacy.remote_id (추적용)
+     *   remote.legacy_id        → legacy.id (local compatibility, nullable for new rows)
+     *   remote.order_number     → legacy.order_number
+     *   remote.customer_id      → legacy.customer_uuid
+     *   remote.legacy_customer_id → legacy.customer_id (local compatibility)
+     *   remote.product_id       → legacy.product_uuid
+     *   remote.legacy_product_id → legacy.product_id (local compatibility)
+     *   remote.*_snapshot        → legacy customer_name, product_name, brand, category, color, size
+     *   remote.actual_converted_cost_at_sale → legacy.actual_cost
+     *   remote.china_cost_at_sale → legacy.china_cost
+     *   remote.actual_profit_margin → legacy.profit_margin
+     *   remote.actual_cost_ratio → legacy.cost_ratio
+     *   remote.status            → legacy.status (PENDING/SHIPPED/COMPLETED/CANCELLED)
+     *   나머지 direct copy
+     *
+     * @param {Object} row - Supabase orders row
+     * @returns {Object} legacy order object (id는 legacy_id 기반, 없으면 null)
+     */
+    mapSupabaseRowToLegacyOrder(row) {
+        const safeValue = (v, fallback) => (v === undefined ? fallback : v);
+        const legacyId = row.legacy_id != null ? Number(row.legacy_id) : null;
+        const legacyCustomerId = row.legacy_customer_id != null ? Number(row.legacy_customer_id) : null;
+        const legacyProductId = row.legacy_product_id != null ? Number(row.legacy_product_id) : null;
+        return {
+            // legacy numeric id 우선. 없으면 null (신규 row의 경우).
+            // Supabase uuid id는 별도 remote_id 필드로 보존 (legacy id와 혼동 방지).
+            id: legacyId,
+            legacy_id: legacyId,
+            remote_id: safeValue(row.id, null),
+
+            // order_number
+            order_number: safeValue(row.order_number, ''),
+
+            // customer: uuid + legacy_id 2중 매핑
+            customer_id: legacyCustomerId,
+            customer_uuid: safeValue(row.customer_id, null),
+
+            // product: uuid + legacy_id 2중 매핑
+            product_id: legacyProductId,
+            product_uuid: safeValue(row.product_id, null),
+
+            // snapshot fields → local names
+            customer_name: safeValue(row.customer_name_snapshot, ''),
+            product_name: safeValue(row.product_title_snapshot, ''),
+            product_title: safeValue(row.product_title_snapshot, ''),
+            brand: safeValue(row.brand_snapshot, ''),
+            category: safeValue(row.category_snapshot, ''),
+            color: safeValue(row.color_snapshot, ''),
+            size: safeValue(row.size_snapshot, ''),
+
+            // quantity / price
+            quantity: Number(safeValue(row.quantity, 0)),
+            selling_price: Number(safeValue(row.selling_price, 0)),
+
+            // profit fields
+            actual_profit: Number(safeValue(row.actual_profit, 0)),
+            profit_margin: Number(safeValue(row.actual_profit_margin, 0)),
+            actual_profit_margin: Number(safeValue(row.actual_profit_margin, 0)),
+            cost_ratio: Number(safeValue(row.actual_cost_ratio, 0)),
+            actual_cost_ratio: Number(safeValue(row.actual_cost_ratio, 0)),
+
+            // cost snapshots (이름 다름 주의)
+            actual_cost: Number(safeValue(row.actual_converted_cost_at_sale, 0)),
+            actual_converted_cost_at_sale: Number(safeValue(row.actual_converted_cost_at_sale, 0)),
+            china_cost: Number(safeValue(row.china_cost_at_sale, 0)),
+            china_cost_at_sale: Number(safeValue(row.china_cost_at_sale, 0)),
+
+            // status (order_status enum)
+            status: safeValue(row.status, 'PENDING'),
+
+            // dates
+            order_date: safeValue(row.order_date, null),
+            ship_date: safeValue(row.ship_date, null),
+
+            // shipping
+            shipping_company: safeValue(row.shipping_company, ''),
+            tracking_number: safeValue(row.tracking_number, ''),
+
+            // notes
+            notes: safeValue(row.notes, ''),
+
+            // timestamps
+            created_at: safeValue(row.created_at, null),
+            updated_at: safeValue(row.updated_at, null),
+
+            // soft delete
+            deleted: row.deleted_at != null
+        };
+    },
+
     init() {
         const keywords = this.getKeywords();
         if (!keywords || keywords.length === 0) {

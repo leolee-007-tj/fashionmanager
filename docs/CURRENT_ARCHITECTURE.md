@@ -6945,3 +6945,127 @@ Orders remote 구현 전에 고정할 data source contract: `orders.js`가 Supab
 | 기존 787 tests | PENDING (이후 실행) |
 | preflight | PENDING (이후 실행) |
 
+## 63. 3-8A.3: Read-only Remote Orders List Prototype (2026-07-25)
+
+### 목적
+
+Orders remote 전환의 첫 구현으로, 읽기 전용 OrdersSupabaseDataSource prototype을 추가한다. 이번 단계는 `listOrders`/`getOrderById` read-only mapping까지만 허용하며, 주문 생성/수정/출고/취소/삭제는 remote mode에서도 아직 구현하지 않는다.
+
+### 수정 파일
+
+| 파일 | 변경 내용 |
+|---|---|
+| [js/db.js](file:///Users/lesoul888/Documents/LESOUL_STORE_APP/fashionmanager/js/db.js) | Orders DataSource 구조 추가 (LocalOrdersDataSource + SupabaseOrdersDataSource read-only + mapSupabaseRowToLegacyOrder) |
+| [js/config.example.js](file:///Users/lesoul888/Documents/LESOUL_STORE_APP/fashionmanager/js/config.example.js) | `ORDERS_SUPABASE_ENABLED`, `ORDERS_SUPABASE_REMOTE_ENABLED` flags 추가 (기본값 false) |
+| [tests/orders-remote-readonly-contract.test.mjs](file:///Users/lesoul888/Documents/LESOUL_STORE_APP/fashionmanager/tests/orders-remote-readonly-contract.test.mjs) | **신규 생성** — 29 contract tests |
+| docs/CURRENT_ARCHITECTURE.md | 3-8A.3 섹션 추가 |
+| docs/ORDERS_REMOTE_DATASOURCE_CONTRACT.md | 3-8A.3 status 업데이트 |
+
+### 구현 범위
+
+- ✅ `LocalOrdersDataSource` — 기존 localStorage API 래핑, 동작 100% 동일
+- ✅ `SupabaseOrdersDataSource` read-only — `listOrders()`, `getOrderById()` 만 구현
+- ✅ `mapSupabaseRowToLegacyOrder()` — remote row → legacy order 매핑
+- ✅ `getOrdersAsync()` — async helper (기존 sync `DB.getOrders()` 유지)
+- ✅ Feature flag gate — `ORDERS_SUPABASE_ENABLED` (기본값 false)
+- ❌ Write 메서드 — 모두 throw (`setOrders`, `createOrder`, `updatePendingOrder`, `shipOrder`, `cancelOrder`, `completeOrder`, `updateOrder`, `deleteOrder`, `findDuplicateOrder`)
+
+### Config Flags 추가
+
+```javascript
+ORDERS_SUPABASE_ENABLED: false,      // Orders remote 전체 on/off
+ORDERS_SUPABASE_REMOTE_ENABLED: false // 원격 supabase.co URL 허용
+```
+
+### LocalOrdersDataSource 요약
+
+기존 `DB.getOrders()` / `DB.addOrder()` / `DB.updateOrder()` / `DB.deleteOrder()` / `DB.findDuplicateOrder()`를 그대로 감싸는 thin wrapper. 동작은 기존과 100% 동일하며, 기본값으로 사용된다.
+
+### SupabaseOrdersDataSource read-only 요약
+
+| 메서드 | 구현 | 비고 |
+|---|---|---|
+| `listOrders(filters)` | ✅ read-only | `from('orders').select(...).eq('store_id', context.storeId).is('deleted_at', null).order('order_date', {ascending: false})` |
+| `getOrderById(orderId)` | ✅ read-only | legacy_id (numeric) 우선, 없으면 uuid id로 조회 |
+| `setOrders(orders)` | ❌ throw | write disabled |
+| `createOrder(order)` | ❌ throw | write disabled |
+| `updatePendingOrder(orderId, payload)` | ❌ throw | write disabled |
+| `shipOrder(orderId, payload)` | ❌ throw | write disabled |
+| `cancelOrder(orderId)` | ❌ throw | write disabled |
+| `completeOrder(orderId)` | ❌ throw | write disabled |
+| `updateOrder(id, updates)` | ❌ throw | write disabled |
+| `deleteOrder(id)` | ❌ throw | write disabled |
+| `findDuplicateOrder(...)` | ❌ throw | write disabled |
+
+### Mapping 요약
+
+`mapSupabaseRowToLegacyOrder(row)` — 순수 함수 (네트워크/localStorage 접근 없음):
+
+| Remote Field | Local Field | 비고 |
+|---|---|---|
+| `id` (uuid) | `remote_id` | 추적용 |
+| `legacy_id` (bigint) | `id`, `legacy_id` | local compatibility (nullable) |
+| `customer_id` (uuid) | `customer_uuid` | |
+| `legacy_customer_id` | `customer_id` | local compatibility |
+| `product_id` (uuid) | `product_uuid` | |
+| `legacy_product_id` | `product_id` | local compatibility |
+| `customer_name_snapshot` | `customer_name` | |
+| `product_title_snapshot` | `product_name`, `product_title` | |
+| `brand_snapshot` | `brand` | |
+| `category_snapshot` | `category` | |
+| `color_snapshot` | `color` | |
+| `size_snapshot` | `size` | |
+| `actual_converted_cost_at_sale` | `actual_cost` | 이름 다름 |
+| `china_cost_at_sale` | `china_cost` | 이름 다름 |
+| `actual_profit_margin` | `profit_margin`, `actual_profit_margin` | |
+| `actual_cost_ratio` | `cost_ratio`, `actual_cost_ratio` | |
+| `status` | `status` | PENDING/SHIPPED/COMPLETED/CANCELLED |
+| `deleted_at` | `deleted` (boolean) | soft delete |
+
+### Write Methods Disabled 정책
+
+모든 write 메서드는 `throw new Error('SupabaseOrdersDataSource write is not enabled yet (3-8A.3 read-only prototype)')`를 발생시킨다. 이는 remote write RPC (`create_order`, `ship_order`, `cancel_order`, `complete_order`) 호출을 완전히 차단한다.
+
+### Existing DB API Compatibility
+
+기존 sync API는 모두 유지된다:
+- `DB.getOrders()` — sync, localStorage 기반 (변경 없음)
+- `DB.setOrders()` — sync
+- `DB.addOrder()` — sync
+- `DB.updateOrder()` — sync
+- `DB.deleteOrder()` — sync
+- `DB.findDuplicateOrder()` — sync
+- `DB.getOrdersAsync()` — **신규**, async helper (활성 DataSource의 `listOrders()` 호출)
+
+### Remote Guard 정책
+
+1. `ORDERS_SUPABASE_ENABLED !== true` → 조용히 LocalOrdersDataSource 유지
+2. `SUPABASE_ENABLED !== true` → error throw
+3. `LESOULSupabase` 미초기화 → error throw
+4. `activeMembership.storeId` 없음 → guest는 local fallback, 있으면 error throw
+5. remote URL + `ORDERS_SUPABASE_REMOTE_ENABLED !== true` → error throw
+6. `service_role` key → error throw (JWT role 검증 포함)
+7. write 메서드 → 모두 throw
+
+### Tests 결과
+
+| 항목 | 결과 |
+|---|---|
+| 신규 contract tests | ✅ 29 tests (RO1-RO18 + feature flag gate + mapping behavior + local compatibility) |
+| 기존 804 tests | PENDING (이후 실행) |
+| preflight | PENDING (이후 실행) |
+
+### Go/No-Go
+
+| 항목 | 판정 |
+|---|---|
+| read-only prototype | ✅ GO |
+| write methods | **NO-GO** (3-8A.5+에서 구현) |
+| runtime remote 전환 | **NO-GO** (flags 기본 false, local mode 유지) |
+| production remote | **NO-GO** |
+
+### 다음 단계
+
+- **3-8A.4**: Normalized Mapping Tests — field mapping, status transition, shape contract 단위 테스트
+- **3-8A.5**: createOrder RPC Adapter (write 메서드 구현 시작)
+

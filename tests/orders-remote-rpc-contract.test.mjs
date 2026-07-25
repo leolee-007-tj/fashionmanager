@@ -273,20 +273,24 @@ describe('Orders Remote Schema/RLS/RPC Audit (OR1-OR18)', function () {
     });
 
     // ============================================================
-    // J. JS/CSS/HTML untouched audit (runtime check via git status)
+    // J. JS/CSS/HTML scope guard (runtime check via git status)
+    // 3-8A.3 implementation phase: js/db.js, js/config.example.js are allowed.
+    // Other JS files (orders.js, products.js, customers.js, analytics.js, app.js,
+    // supabase-client.js), css/, index.html, and supabase/migrations/ remain forbidden.
     // ============================================================
 
-    it('OR18: no JS/CSS/HTML files changed (audit-only)', function () {
+    it('OR18: only allowed JS files changed (db.js, config.example.js); other JS/CSS/HTML/migration untouched', function () {
         const changed = execSync('git diff --name-only HEAD', { cwd: REPO_ROOT, encoding: 'utf-8' }).trim();
         const lines = changed ? changed.split('\n') : [];
+        const allowedJs = new Set(['js/db.js', 'js/config.example.js']);
         const forbidden = lines.filter(f =>
-            f.startsWith('js/') ||
+            (f.startsWith('js/') && !allowedJs.has(f)) ||
             f.startsWith('css/') ||
             f === 'index.html' ||
             f.startsWith('supabase/migrations/')
         );
         assert.strictEqual(forbidden.length, 0,
-            `No JS/CSS/HTML/migration files should be changed in audit phase. Found: ${forbidden.join(', ')}`);
+            `Only js/db.js and js/config.example.js may change in 3-8A.3. Forbidden changes: ${forbidden.join(', ')}`);
     });
 
     // ============================================================

@@ -230,20 +230,24 @@ describe('Orders Remote DataSource Contract (OD1-OD17)', function () {
     });
 
     // ============================================================
-    // OD16: JS/CSS/HTML/migration files unchanged
+    // OD16: JS/CSS/HTML/migration files scope guard
+    // 3-8A.3 implementation phase: js/db.js, js/config.example.js, tests/ are allowed.
+    // Other JS files (orders.js, products.js, customers.js, analytics.js, app.js,
+    // supabase-client.js), css/, index.html, and supabase/migrations/ remain forbidden.
     // ============================================================
 
-    it('OD16: JS/CSS/HTML/migration files unchanged', function () {
+    it('OD16: only allowed JS files changed (db.js, config.example.js); other JS/CSS/HTML/migration untouched', function () {
         const changed = execSync('git diff --name-only HEAD', { cwd: REPO_ROOT, encoding: 'utf-8' }).trim();
         const lines = changed ? changed.split('\n') : [];
+        const allowedJs = new Set(['js/db.js', 'js/config.example.js']);
         const forbidden = lines.filter(f =>
-            f.startsWith('js/') ||
+            (f.startsWith('js/') && !allowedJs.has(f)) ||
             f.startsWith('css/') ||
             f === 'index.html' ||
             f.startsWith('supabase/migrations/')
         );
         assert.strictEqual(forbidden.length, 0,
-            `No JS/CSS/HTML/migration files should be changed in design phase. Found: ${forbidden.join(', ')}`);
+            `Only js/db.js and js/config.example.js may change in 3-8A.3. Forbidden changes: ${forbidden.join(', ')}`);
     });
 
     // ============================================================

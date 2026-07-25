@@ -1,8 +1,8 @@
 # Orders Remote DataSource Contract
 
-> 문서 버전: 1.0 (3-8A.2)
+> 문서 버전: 1.1 (3-8A.3)
 > 작성일: 2026-07-25
-> 상태: **DESIGNED — NOT IMPLEMENTED**
+> 상태: **READ-ONLY PROTOTYPE IMPLEMENTED (3-8A.3)** — write methods still disabled
 
 ---
 
