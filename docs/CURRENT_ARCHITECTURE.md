@@ -6195,6 +6195,344 @@ real DB actions executed: **no**
 - LESOUL premium boutique UI polish 전체 완료
 - 향후 authenticated owner smoke는 별도 세션에서 진행 권장
 
+## 60. 3-8A: Orders Remote DataSource Planning (2026-07-25)
+
+### 목적
+Orders 기능을 Supabase remote data source로 전환하기 전에 현재 local order flow, DB schema, RLS/RPC 필요성, 재고 영향, 고객/상품 연결 구조, 전환 리스크를 분석하고 문서화한다.
+**이번 단계는 docs-only planning이다. 코드 구현, DB 작업, migration 생성, supabase db push, 실제 주문 생성/수정/삭제 테스트는 금지한다.**
+
+### 현재 orders local flow 요약
+
+#### A. orders.js 구조
+
+| 기능 | 메서드명 | 흐름 |
+|---|---|---|
+| 주문 목록 렌더링 | `renderList()` | `load()` → `DB.getOrders()` → `applyFilters()` → HTML 렌더링. 매 렌더링마다 로드 (loaded 플래그 없음). `DB.getProducts()`와 `DB.getCustomers()`를 직접 조회하여 product/customer 이름 매칭 |
+| 주문 생성 | `submitAdd()` | ① 고객 해석 (선택 or 자동 생성) ② 상품 검증 (재고 확인) ③ `DB.updateProduct(productId, { reserved_stock: +quantity })` 재고 예약 ④ 주문번호 생성 (ORD-xxxx) ⑤ `DB.addOrder()` PENDING 상태로 저장 |
+| 주문 수정 | `submitEdit()` | 인라인 수정. `DB.getOrders()` → 상태/날짜/고객/가격 업데이트 → `DB.setOrders()`. **재고 조정 없음** (PENDING 상태에서만 수정 가능) |
+| 주문 출고 | `submitShip(id)` | ① `DB.updateProduct(productId, { current_stock: -qty, reserved_stock: -qty })` ② `DB.updateOrder(id, { status: 'SHIPPED', profit 계산 })` ③ `DB.addInventoryLog({ type: 'OUT' })` ④ `Customers.recalculateAll()` |
+| 주문 취소 | `cancel(id)` | PENDING 상태에서만. ① `DB.updateProduct(product.id, { reserved_stock: -quantity })` 재고 복구 ② `DB.updateOrder(id, { status: 'CANCELLED' })` |
+| 주문 완료 | `complete(id)` | SHIPPED → COMPLETED. 상태만 변경 + `Customers.recalculateAll()` |
+| 주문 삭제 | `delete(id)` | PENDING이면 reserved_stock 복구 후 orders에서 제거 |
+| 배치 삭제 | `batchDelete()` | 선택된 PENDING 주문들의 reserved_stock 복구 후 일괄 제거 |
+| 중복 감지 | `selectDuplicates()` | (customer_id + product_id + order_date) 조합으로 중복 감지 |
+
+#### B. 재고 영향 흐름
+
+```
+[주문 생성 (PENDING)]
+  product.reserved_stock += quantity     ← 예약만, current_stock 불변
+  inventory_logs: 생성 안 함 (local)
+
+[주문 출고 (PENDING → SHIPPED)]
+  product.current_stock  -= quantity
+  product.reserved_stock -= quantity
+  inventory_logs: type='OUT', quantity=-order.quantity
+  Customers.recalculateAll()
+
+[주문 취소 (PENDING → CANCELLED)]
+  product.reserved_stock -= quantity     ← 예약 복구
+  inventory_logs: 생성 안 함 (local)
+
+[주문 완료 (SHIPPED → COMPLETED)]
+  상태만 변경 (재고 변동 없음)
+  Customers.recalculateAll()
+
+[주문 삭제 (PENDING만)]
+  product.reserved_stock -= quantity     ← 예약 복구
+  orders에서 제거 (hard delete)
+```
+
+#### C. 상품/고객 연결 방식
+
+| 연결 | 방식 |
+|---|---|
+| order → product | `o.product_id` (numeric id). 렌더링 시 `DB.getProducts().find(p => p.id === o.product_id)` |
+| order → customer | `o.customer_id` (numeric id). 렌더링 시 `DB.getCustomers().find(c => c.id === o.customer_id)` |
+| customer recalculate | `Customers.recalculateAll()`: `o.customer_name === c.name` (이름 매칭) + `String(o.customer_id) === String(c.id)` (ID 매칭) 병용 |
+| 중복 주문 감지 | `(customer_id + product_id + order_date)` 조합 |
+| snapshot 필드 | local에는 없음. Supabase schema에만 customer_name_snapshot, product_title_snapshot 등 존재 |
+
+### db.js Orders API 요약
+
+| 함수 | 설명 |
+|---|---|
+| `getOrders()` | `localStorage.getItem('lesoul_gh_orders')` → JSON.parse → 배열 반환 |
+| `setOrders(orders)` | `localStorage.setItem('lesoul_gh_orders', JSON.stringify(orders))` |
+| `addOrder(order)` | `order.id = getNextId('orders')`, `order.created_at = new Date().toISOString()` 후 배열 push → setOrders |
+| `updateOrder(id, updates)` | ID로 찾기 → `{ ...orders[idx], ...updates }` 병합 → setOrders |
+| `deleteOrder(id)` | ID로 filter → setOrders |
+| `findDuplicateOrder(customerId, productId, color, size)` | customer_id + product_id + color + size 조합 (CANCELLED 제외) |
+| `addInventoryLog(log)` | `log.id = getNextId('inventory_logs')`, `log.created_at = new Date().toISOString()` 후 배열 push → setInventoryLogs |
+
+### Supabase Orders Schema/RLS 현재 상태 요약
+
+#### A. orders table 컬럼
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| id | uuid PK | gen_random_uuid() |
+| legacy_id | bigint | 기존 numeric id 매핑 |
+| store_id | uuid NOT NULL FK → stores | 매장 소속 |
+| order_number | text NOT NULL | ORD-xxxx 형식 |
+| customer_id | uuid FK → customers NULL | 고객 참조 (nullable) |
+| product_id | uuid FK → products NULL | 상품 참조 (nullable) |
+| legacy_customer_id | bigint | 기존 고객 id 매핑 |
+| legacy_product_id | bigint | 기존 상품 id 매핑 |
+| customer_name_snapshot | text | 고객명 스냅샷 |
+| product_title_snapshot | text | 상품명 스냅샷 |
+| brand_snapshot / category_snapshot / color_snapshot / size_snapshot | text | 스냅샷 필드 |
+| quantity | integer NOT NULL | 수량 |
+| selling_price | numeric NOT NULL | 판매가 |
+| actual_converted_cost_at_sale | numeric | 판매 시점 원가 스냅샷 |
+| china_cost_at_sale | numeric | 판매 시점 중국 원가 스냅샷 |
+| actual_profit / actual_profit_margin / actual_cost_ratio | numeric | 출고 시 계산 |
+| status | order_status NOT NULL DEFAULT 'PENDING' | PENDING/SHIPPED/COMPLETED/CANCELLED |
+| order_date / ship_date | date | 날짜 |
+| notes / shipping_company / tracking_number | text | 메모/배송 |
+| created_by / updated_by | uuid | 작성자/수정자 |
+| created_at / updated_at | timestamptz | 시간스탬프 |
+| deleted_at | timestamptz | soft delete |
+| version | integer DEFAULT 1 | 버전 |
+
+#### B. order_status enum
+- `PENDING` → `SHIPPED` → `COMPLETED`
+- `PENDING` → `CANCELLED`
+- 중간 상태 전환 금지 (예: SHIPPED → PENDING 불가)
+
+#### C. RLS 정책 (orders)
+
+| 정책 | 설명 |
+|---|---|
+| "Orders: owner/manager can view active" | owner/manager만, deleted_at IS NULL |
+| "Orders: owners can view deleted" | owner만, deleted_at IS NOT NULL |
+| "Orders: owner/manager can insert" | owner/manager만 |
+| "Orders: owner/manager can update" | owner/manager만 |
+| **DELETE 권한 없음** | soft delete만 가능 |
+
+#### D. inventory_logs table
+- append-only, no client write
+- columns: id, legacy_id, store_id, product_id, order_id, change_type (RESERVE/RELEASE/SHIP/RETURN), quantity_change, stock_before/after, reserved_before/after, notes, created_by, created_at
+
+#### E. 기존 RPC 존재 여부
+
+| RPC | 목적 | 구현 상태 |
+|---|---|---|
+| `public.create_order(...)` | 주문 생성 + 재고 예약 + RESERVE 로그 | ✅ 구현됨 |
+| `public.update_pending_order(...)` | PENDING 주문 수정 + 재고 조정 + 로그 | ✅ 구현됨 |
+| `public.ship_order(...)` | 출고 + 재고 차감 + SHIP 로그 + profit 계산 + 고객 집계 | ✅ 구현됨 |
+| `public.cancel_order(...)` | 취소 + 재고 복구 + RELEASE 로그 | ✅ 구현됨 |
+| `public.complete_order(...)` | 완료 + 고객 집계 재계산 | ✅ 구현됨 |
+| `private.recalculate_customer_aggregates(customer_id)` | 고객 집계 필드 재계산 | ✅ 구현됨 |
+| `private.generate_order_number(store_id)` | ORD-xxxx 번호 생성 | ✅ 구현됨 |
+
+#### F. RPC 보안 속성
+- 모두 `SECURITY DEFINER`, `SET search_path = ''`
+- `auth.uid()` 필수 (인증 확인)
+- owner/manager만 허용, staff/non-member 차단
+- store_id 기반 cross-store access 차단
+- deleted store/customer/product 차단
+- No dynamic SQL, explicit column lists
+- `REVOKE ALL FROM PUBLIC/anon`, `GRANT EXECUTE TO authenticated`
+
+### Products/Customers/Inventory_Logs Dependency
+
+| 의존성 | 설명 |
+|---|---|
+| order → product | product_id FK. 상품이 soft delete되어도 order 이력 유지 (스냅샷 필드 사용) |
+| order → customer | customer_id FK nullable. 고객이 삭제/변경되어도 order 이력 유지 (스냅샷 필드 사용) |
+| order → inventory_logs | inventory_logs.order_id FK. 출고/취소/생성 시 append-only 로그 생성 |
+| order → customers aggregate | 고객의 total_amount, total_profit, order_count 등이 SHIPPED+COMPLETED 주문에서 계산 |
+| analytics → orders | `_getShippedOrders()`: SHIPPED+COMPLETED 주문만 집계. `DB.getOrders()` 직접 호출 |
+| analytics → products | `_getOrderCost()`: 원가 스냅샷 우선 → 상품 현재 원가 fallback |
+| customers recalculate → orders | SHIPPED+COMPLETED 주문 기준 고객 집계 재계산 |
+
+### Remote Orders API 후보 (문서화 only, 구현 금지)
+
+#### A. list_orders (read)
+
+| 항목 | 내용 |
+|---|---|
+| 목적 | 활성 store의 주문 목록 조회 (페이지네이션, 필터, 정렬 지원) |
+| 입력값 | store_id, filters (status, date_range, customer_id, product_id), sort_by, sort_order, limit, offset |
+| 반환값 | orders 배열 (product/customer 조인 포함) |
+| 권한 | authenticated + store membership (owner/manager/staff 차등) |
+| 재고 영향 | 없음 |
+| 위험도 | 낮음 — 단순 read |
+
+#### B. create_order (write, 기존 존재)
+
+| 항목 | 내용 |
+|---|---|
+| 목적 | 주문 생성 + 재고 예약 + RESERVE inventory_log |
+| 입력값 | p_store_id, p_customer_id, p_product_id, p_quantity, p_selling_price, p_order_date, p_color, p_size, p_notes |
+| 반환값 | 생성된 order row |
+| 권한 | owner/manager만 |
+| 재고 영향 | reserved_stock 증가, inventory_logs RESERVE 생성 |
+| audit/inventory log | ✅ 자동 생성 |
+| 위험도 | 중간 — 재고 일관성, customer/product 존재 확인 필요 |
+| 기존 구현 | ✅ 존재 (`public.create_order`) |
+
+#### C. update_order_status (write, 기존 존재하는 RPC들 통합)
+
+| 항목 | 내용 |
+|---|---|
+| 목적 | 상태 전환 (PENDING→SHIPPED, PENDING→CANCELLED, SHIPPED→COMPLETED) |
+| 입력값 | p_order_id, p_target_status, 추가 필드 (ship_date, shipping_company, tracking_number, notes) |
+| 반환값 | 업데이트된 order row |
+| 권한 | owner/manager만 |
+| 재고 영향 | SHIPPED: current_stock/reserved_stock 차감, inventory_logs SHIP. CANCELLED: reserved_stock 복구, inventory_logs RELEASE |
+| audit/inventory log | ✅ 자동 생성 |
+| 위험도 | 높음 — 상태 전환 규칙, 재고 일관성, profit 계산 |
+| 기존 구현 | ✅ `public.ship_order`, `public.cancel_order`, `public.complete_order` |
+
+#### D. update_pending_order (write, 기존 존재)
+
+| 항목 | 내용 |
+|---|---|
+| 목적 | PENDING 주문의 상품/수량/가격/고객 변경 (재고 조정 포함) |
+| 입력값 | p_order_id, p_customer_id, p_product_id, p_quantity, p_selling_price, p_order_date, p_color, p_size, p_notes |
+| 반환값 | 업데이트된 order row |
+| 권한 | owner/manager만 |
+| 재고 영향 | 상품 변경 시 old product release + new product reserve. 수량 변경 시 차이만큼 reserve 조정 |
+| audit/inventory log | ✅ 자동 생성 (RELEASE + RESERVE) |
+| 위험도 | 높음 — deadlock 방지 (UUID 정렬 잠금), 재고 음수 방지 |
+| 기존 구현 | ✅ `public.update_pending_order` |
+
+#### E. get_order_detail (read)
+
+| 항목 | 내용 |
+|---|---|
+| 목적 | 단일 주문 상세 조회 (product/customer 조인, inventory_logs 포함) |
+| 입력값 | order_id |
+| 반환값 | order + product + customer + inventory_logs 배열 |
+| 권한 | authenticated + store membership |
+| 재고 영향 | 없음 |
+| 위험도 | 낮음 |
+
+### Remote DataSource 원칙
+
+1. **js/db.js를 gateway로 유지**: orders.js가 Supabase를 직접 호출하지 않도록 설계
+2. **Products remote 전환 때처럼 feature flag 기반 전환**: `ORDERS_SUPABASE_ENABLED` 기본값 false
+3. **기본값은 local 유지**: `ORDERS_SUPABASE_ENABLED !== true` → LocalOrdersDataSource
+4. **remote flag가 켜지고 active store가 있을 때만 remote orders 사용**: `activeMembership.storeId` 확인
+5. **실패 시 명확한 error 표시**: silent fallback 금지 (단, 기본값 false는 조용히 local 유지)
+6. **DataSource 구조**: Products와 동일한 패턴
+   - `getOrdersDataSource()` → LocalOrdersDataSource (기본) / SupabaseOrdersDataSource (후보)
+   - OrdersDataSource 인터페이스: listOrders, createOrder, updateOrder, cancelOrder, shipOrder, completeOrder, deleteOrder
+   - `isAsyncBoundaryEnabled('orders-read')`, `isAsyncBoundaryEnabled('orders-write')` 확장
+
+### Security 원칙
+
+| 원칙 | 설명 |
+|---|---|
+| publishable key만 사용 | browser에서 service_role 금지 |
+| RPC에서 검증 | order 생성/상태 변경은 RPC에서 권한+재고+store 검증 |
+| store_id 신뢰하지 않음 | 클라이언트 입력 store_id를 무조건 신뢰하지 않음. RPC에서 `private.current_store_role()` + `store_id` 강제 |
+| active membership 확인 |无멤버십 사용자는 LESOUL actual store context 접근 차단 |
+| owner/manager 권한 차등 | staff는 order 생성/수정/취소/출고 금지 (read-only 또는 특정 제한) |
+| RLS 우회 금지 | RPC는 SECURITY DEFINER지만, 직접 table DML은 revoke |
+| 서버 검증 | product/store/customer 존재 여부, deleted_at 체크, cross-store 차단 |
+| 중복 주문 방지 | RPC에서 order_number unique + (customer+product+date) 중복 체크 |
+| status transition 검증 | PENDING→SHIPPED→COMPLETED, PENDING→CANCELLED만 허용 |
+| inventory_logs 강제 | 상태 변경 시 inventory_logs 자동 생성 |
+| soft delete만 | orders DELETE 권한 없음. 취소는 status='CANCELLED'로 처리 |
+
+### 전환 시 위험 지점
+
+| # | 위험 | 영향 | 완화 방안 |
+|---|---|---|---|
+| 1 | 주문 생성 시 재고 차감 필요 | 재고 불일치 | RPC에서 FOR UPDATE + 재고 검증 + reserved_stock 증가 + RESERVE 로그 |
+| 2 | 주문 취소/삭제 시 재고 복구 필요 | 재고 불일치 | RPC에서 reserved_stock 복구 + RELEASE 로그. hard delete 금지 |
+| 3 | 상품 soft delete 시 주문 이력 유지 | 참조 무결성 | snapshot 필드 사용 (customer_name_snapshot, product_title_snapshot 등). product_id FK nullable |
+| 4 | 고객 없거나 삭제된 경우 주문 유지 | 참조 무결성 | customer_id FK nullable. snapshot 필드 사용 |
+| 5 | 금액 계산: client vs server | 계산 불일치 | server RPC에서 profit 계산 (actual_converted_cost_at_sale 기반). client는 참고용 계산만 |
+| 6 | status 변경 시 inventory_logs 강제 | 감사 추적 | 모든 상태 전환 RPC에서 inventory_logs 자동 생성 |
+| 7 | local orders와 remote orders 데이터 shape 차이 | 매핑 복잡 | legacy ↔ supabase mapping layer 필요. id (uuid) ↔ legacy_id (bigint) 구분 |
+| 8 | analytics가 local orders를 바라보고 있음 | 통계 불일치 | analytics도 orders remote 전환 시 연동 필요. `_getShippedOrders()` → remote query |
+| 9 | staff 권한 정책과 주문 조회/생성 권한 | 보안 위험 | staff는 읽기 전용 (재고/원가/집계 제한). 생성/수정/출고 금지 |
+| 10 | 중복 주문/네트워크 실패/부분 성공 | 데이터 일관성 | RPC atomic transaction. create_order idempotent 중복 체크 |
+| 11 | order_number 생성 경쟁 조건 | 중복 번호 | `pg_advisory_xact_lock`으로 per-store lock |
+| 12 | Excel 업로드와 remote orders 충돌 | 데이터 유실 | Excel 업로드도 RPC 기반으로 전환 필요 (향후 단계) |
+
+### RPC 후보 상세
+
+| RPC | 목적 | 입력 | 반환 | 권한 | 재고 영향 | 위험도 |
+|---|---|---|---|---|---|---|
+| `list_orders` | 목록 조회 | store_id, filters, pagination | orders[] | owner/manager/staff (차등) | 없음 | 낮음 |
+| `get_order_detail` | 상세 조회 | order_id | order + joins | owner/manager/staff | 없음 | 낮음 |
+| `create_order` | 생성 + 재고 예약 | store_id, customer_id, product_id, qty, price, ... | order | owner/manager | reserved_stock↑, RESERVE log | 중간 |
+| `update_pending_order` | PENDING 수정 | order_id, customer_id, product_id, qty, price, ... | order | owner/manager | product swap 시 release+reserve | 높음 |
+| `ship_order` | 출고 + 재고 차감 | order_id, ship_date, shipping, tracking | order | owner/manager | current_stock↓, reserved_stock↓, SHIP log | 높음 |
+| `cancel_order` | 취소 + 재고 복구 | order_id, notes | order | owner/manager | reserved_stock↓, RELEASE log | 중간 |
+| `complete_order` | 완료 + 고객 집계 | order_id | order | owner/manager | 없음 (customer aggregate recalc) | 낮음 |
+| `delete_order_hard` | hard delete (PENDING만) | order_id | void | owner만 | reserved_stock 복구 + RELEASE log | 높음 |
+| `batch_delete_orders` | 배치 삭제 | order_ids[] | {deleted, failed} | owner만 | 각 주문별 재고 복구 | 높음 |
+
+### 테스트 계획
+
+| # | 테스트 유형 | 내용 |
+|---|---|---|
+| 1 | Unit tests | OrdersDataSource 인터페이스 계약 (LocalOrdersDataSource와 동일 시그니처) |
+| 2 | Contract tests | RPC 함수 시그니처, SECURITY DEFINER, SET search_path, 권한 검증 |
+| 3 | Local mode regression | `ORDERS_SUPABASE_ENABLED=false`에서 기존 orders.js 동작 그대로 |
+| 4 | Remote flag off regression | feature flag off 시 remote 호출 없음 |
+| 5 | Remote read-only list contract | list_orders RPC mock 테스트 |
+| 6 | Create order RPC tests | 재고 예약, 중복 체크, customer/product 존재, store 검증 |
+| 7 | Status transition tests | PENDING→SHIPPED, PENDING→CANCELLED, SHIPPED→COMPLETED, invalid transition 차단 |
+| 8 | Inventory log tests | 각 상태 전환 시 올바른 change_type으로 로그 생성 |
+| 9 | RLS permission tests | owner/manager/staff/non-member 권한 차등 검증 |
+| 10 | Browser smoke | local-only flag-on orders CRUD (기존 Products smoke와 동일 패턴) |
+| 11 | Analytics regression | analytics가 remote orders를 정상 집계하는지 |
+| 12 | Excel upload regression | Excel 업로드 후 orders 데이터 정합성 유지 |
+
+### 단계별 구현 후보
+
+| 단계 | 내용 | 상태 |
+|---|---|---|
+| **3-8A** | Planning only (현재) | ✅ docs-only |
+| 3-8A.1 | orders schema/RLS/RPC audit (기존 RPC 검증, 누락 기능 확인) | PENDING |
+| 3-8A.2 | OrdersSupabaseDataSource contract design (인터페이스, feature flag, mapping) | PENDING |
+| 3-8A.3 | read-only remote orders list (list_orders + get_order_detail) | PENDING |
+| 3-8A.4 | order create RPC 연결 (create_order → OrdersDataSource.createOrder) | PENDING |
+| 3-8A.5 | order status update RPC 연결 (ship_order, cancel_order, complete_order) | PENDING |
+| 3-8A.6 | browser owner smoke (local-only flag-on orders CRUD) | PENDING |
+| 3-8A.7 | analytics compatibility review (analytics → remote orders 연동) | PENDING |
+| 3-8A.8 | Excel upload orders migration (Excel → RPC 기반 전환) | PENDING |
+
+### Go/No-Go 판정
+
+| 항목 | 판정 | 근거 |
+|---|---|---|
+| 이번 단계 implementation | **NO-GO** | docs-only planning. 코드/DB/migration 금지 |
+| planning | **GO** | 위험 요소 식별, RPC 후보 정리, 보안 원칙 수립 완료 |
+| DB migration | **GO (별도 3-8A.1 이후 판단)** | 기존 RPC가 충분하나, 누락 기능 (batch_delete, list_orders) 확인 후 결정 |
+| create RPC 구현 | **NO-GO (3-8A.1 이후)** | product/customer dependency 명확화 필요. 기존 RPC 재사용 가능성 높음 |
+| remote orders runtime 전환 | **NO-GO (3-8A.6 이후)** | browser smoke + analytics regression 이후 결정 |
+
+### 이번 단계 검증 결과
+
+| 항목 | 결과 |
+|---|---|
+| docs-only 작업 | ✅ 확인 |
+| JS 변경 | ❌ 없음 |
+| CSS 변경 | ❌ 없음 |
+| HTML 변경 | ❌ 없음 |
+| Migration 변경 | ❌ 없음 |
+| DB push | ❌ 없음 |
+| 실제 order/customer/product/inventory action | ❌ 없음 |
+| Service role 사용 | ❌ 없음 |
+| token/key/password 출력 | ❌ 없음 |
+| 실제 데이터 생성 | ❌ 없음 |
+| 기존 737 tests | PENDING (이후 실행) |
+| preflight | PENDING (이후 실행) |
+
+### 다음 단계
+
+- **3-8A.1**: 기존 orders RPC (create_order, update_pending_order, ship_order, cancel_order, complete_order) 기능 검증 + 누락 기능 (batch_delete_orders, list_orders with pagination) 확인
+- **3-8A.2**: OrdersSupabaseDataSource 인터페이스 설계 + mapping contract
+- **3-8A.3**: feature flag 기반 read-only remote orders list 구현
+
 
 
 
