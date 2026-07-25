@@ -1093,13 +1093,20 @@ textarea.form-control {
    - Mobile responsive, max-width 420px panel.
    ============================================================ */
 
+/* ============================================================
+   3-7E: Auth/Onboarding Premium Polish
+   - quiet luxury / premium boutique first impression
+   - auth root, panel, input, button, onboarding 보강
+   - 기존 selector/id/class 유지, JS 동작 영향 없음
+   ============================================================ */
+
 .auth-root {
     position: fixed;
     inset: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #8B7355 0%, #6A5641 100%);
+    background: linear-gradient(145deg, #8B7355 0%, #6A5641 55%, #5A4631 100%);
     padding: 1.5rem;
     z-index: 1000;
     overflow-y: auto;
@@ -1113,11 +1120,12 @@ textarea.form-control {
     width: 100%;
     max-width: 420px;
     background: var(--white);
-    border-radius: 16px;
-    box-shadow: 0 20px 60px rgba(42, 37, 32, 0.20);
+    border-radius: 14px;
+    border: 1px solid rgba(224, 216, 206, 0.6);
+    box-shadow: 0 24px 64px rgba(42, 37, 32, 0.22);
     padding: 2.5rem 2rem;
     box-sizing: border-box;
-    animation: authFadeIn 0.3s ease;
+    animation: authFadeIn 0.35s ease;
 }
 
 @keyframes authFadeIn {
@@ -1127,28 +1135,29 @@ textarea.form-control {
 
 .auth-logo {
     text-align: center;
-    font-size: 1.75rem;
-    font-weight: 600;
+    font-size: 1.8rem;
+    font-weight: 500;
     background: linear-gradient(135deg, #8B7355 0%, #6A5641 100%);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
     color: transparent;
-    letter-spacing: 0.1em;
-    margin-bottom: 1.25rem;
+    letter-spacing: 0.15em;
+    margin-bottom: 1.75rem;
 }
 
 .auth-title {
-    font-size: 1.35rem;
+    font-size: 1.3rem;
     font-weight: 600;
     color: var(--gray-800);
-    margin: 0 0 0.5rem 0;
+    margin: 0 0 0.4rem 0;
     text-align: center;
+    letter-spacing: 0.1px;
 }
 
 .auth-description {
-    font-size: 0.9rem;
-    color: var(--gray-600);
+    font-size: 0.88rem;
+    color: var(--gray-500);
     text-align: center;
     margin: 0 0 1.5rem 0;
 }
@@ -1166,19 +1175,21 @@ textarea.form-control {
 }
 
 .auth-label {
-    font-size: 0.85rem;
+    font-size: 0.82rem;
     font-weight: 500;
-    color: var(--gray-700);
+    color: var(--gray-600);
+    letter-spacing: 0.2px;
+    margin-left: 2px;
 }
 
 .auth-input {
     width: 100%;
-    padding: 0.7rem 0.9rem;
+    padding: 0.75rem 0.95rem;
     font-size: 0.95rem;
     color: var(--gray-800);
     background: var(--white);
     border: 1px solid var(--gray-300);
-    border-radius: 8px;
+    border-radius: 10px;
     box-sizing: border-box;
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
     font-family: inherit;
@@ -1188,7 +1199,7 @@ textarea.form-control {
 .auth-input:focus-visible {
     outline: none;
     border-color: var(--primary);
-    box-shadow: 0 0 0 3px rgba(139, 115, 85, 0.15);
+    box-shadow: 0 0 0 4px rgba(139, 115, 85, 0.12);
 }
 
 .auth-button-row {
@@ -1199,20 +1210,22 @@ textarea.form-control {
 
 .auth-button {
     flex: 1;
-    padding: 0.75rem 1rem;
+    padding: 0.8rem 1rem;
     font-size: 0.95rem;
-    font-weight: 600;
+    font-weight: 500;
+    letter-spacing: 0.3px;
     color: var(--white);
     background: var(--primary);
     border: none;
-    border-radius: 8px;
+    border-radius: 10px;
     cursor: pointer;
-    transition: background 0.15s ease, transform 0.1s ease;
+    transition: background 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
     font-family: inherit;
 }
 
 .auth-button:hover:not(:disabled) {
     background: var(--primary-dark);
+    box-shadow: 0 2px 8px rgba(106, 86, 65, 0.25);
 }
 
 .auth-button:active:not(:disabled) {
@@ -1221,7 +1234,7 @@ textarea.form-control {
 
 .auth-button:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 3px rgba(139, 115, 85, 0.35);
+    box-shadow: 0 0 0 4px rgba(139, 115, 85, 0.30);
 }
 
 .auth-button:disabled {
@@ -1231,25 +1244,26 @@ textarea.form-control {
 
 .auth-button-secondary {
     flex: 0 0 auto;
-    padding: 0.75rem 1.1rem;
+    padding: 0.8rem 1.1rem;
     font-size: 0.9rem;
     font-weight: 500;
     color: var(--gray-700);
     background: var(--gray-100);
     border: 1px solid var(--gray-300);
-    border-radius: 8px;
+    border-radius: 10px;
     cursor: pointer;
-    transition: background 0.15s ease;
+    transition: background 0.15s ease, border-color 0.15s ease;
     font-family: inherit;
 }
 
 .auth-button-secondary:hover:not(:disabled) {
     background: var(--gray-200);
+    border-color: var(--gray-400);
 }
 
 .auth-button-secondary:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 3px rgba(139, 115, 85, 0.25);
+    box-shadow: 0 0 0 4px rgba(139, 115, 85, 0.20);
 }
 
 .auth-button-secondary:disabled {
@@ -1263,11 +1277,11 @@ textarea.form-control {
 }
 
 .auth-error {
-    background: rgba(160, 86, 60, 0.08);
+    background: rgba(160, 86, 60, 0.10);
     color: #7A3E26;
-    border: 1px solid rgba(160, 86, 60, 0.30);
-    padding: 0.65rem 0.85rem;
-    border-radius: 8px;
+    border: 1px solid rgba(160, 86, 60, 0.25);
+    padding: 0.7rem 0.9rem;
+    border-radius: 10px;
     font-size: 0.85rem;
     line-height: 1.4;
     margin-top: 0.5rem;

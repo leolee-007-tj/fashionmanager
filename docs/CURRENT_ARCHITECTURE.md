@@ -5643,6 +5643,156 @@ scope: **legacy/local products visual smoke** (SUPABASE_ENABLED=false, owner aut
 - local server cleanup 완료
 - 향후 3-7E 이후 단계에서 추가 UI polish 예정
 
+---
+
+## 3-7E: Auth/Onboarding Premium Polish
+
+### 목적
+
+Auth / onboarding / invite-code 입력 화면의 시각 톤을 LESOUL premium boutique / quiet luxury 방향으로 polish.
+3-7B/C/D에서 정의한 global theme tokens와 일관성을 유지하며, LESOUL 첫인상을 강화.
+CSS-first 작업으로 JS 동작, HTML 구조, Auth 로직, Supabase/Auth 설정, DB 작업은 일절 금지.
+
+### 수정 파일
+
+- `css/style.css` (auth root/panel/input/button/error/onboarding 보강)
+- `tests/auth-onboarding-theme-contract.test.mjs` (신규 추가: 28개 테스트)
+- `docs/CURRENT_ARCHITECTURE.md` (본 섹션)
+
+### Auth root/panel polish 요약
+
+- `.auth-root`: 135deg gradient → 145deg 3-stop warm brown gradient (`#8B7355 → #6A5641 → #5A4631`)
+- `.auth-panel`: radius 16px → 14px (refined), soft beige border 추가, shadow depth 보강
+- `.auth-panel`: animation 0.3s → 0.35s ease (부드러운 진입)
+- `.auth-logo`: font-size 1.75rem → 1.8rem, weight 600 → 500, letter-spacing 0.1em → 0.15em, mb 1.25rem → 1.75rem (elegant spacing)
+
+### Auth input/button polish 요약
+
+- `.auth-input`: padding 0.7rem/0.9rem → 0.75rem/0.95rem, radius 8px → 10px
+- `.auth-input:focus`: ring 3px → 4px, rgba opacity 0.15 → 0.12 (subtle focus ring)
+- `.auth-button`: padding 0.75rem → 0.8rem, weight 600 → 500, letter-spacing 0.3px 추가, radius 8px → 10px
+- `.auth-button:hover`: shadow 추가 (subtle brown glow)
+- `.auth-button:focus-visible`: ring 3px → 4px, opacity 0.35 → 0.30
+- `.auth-button-secondary`: padding 0.75rem → 0.8rem, radius 8px → 10px, border transition 추가
+- `.auth-button-secondary:hover`: border-color var(--gray-400) (refined border transition)
+- `.auth-button-secondary:focus-visible`: ring 3px → 4px, opacity 0.25 → 0.20
+
+### Auth typography hierarchy 요약
+
+- `.auth-title`: 1.35rem → 1.3rem, mb 0.5rem → 0.4rem, letter-spacing 0.1px
+- `.auth-description`: 0.9rem → 0.88rem, var(--gray-600) → var(--gray-500) (muted)
+- `.auth-label`: 0.85rem → 0.82rem, var(--gray-700) → var(--gray-600), letter-spacing 0.2px, ml 2px (refined label)
+- `.auth-error`: radius 8px → 10px, padding 0.65rem → 0.7rem, opacity 미세 조정
+
+### Onboarding/invite-code visual polish 요약
+
+- `.auth-store-option`: 기존 premium tone 유지 (var(--gray-100) + brown hover)
+- `.auth-store-option:hover`: brown rgba tint 유지
+- invite-code / onboarding 관련 selector는 JS 렌더링 기반, CSS rule은 auth-panel 공통 스타일 상속
+- guest/practice mode 버튼은 auth-button-secondary 스타일 공유 → tone 일관성 유지
+- no-membership/onboarding 메시지는 auth-description 스타일 상속 → calm tone
+
+### Auth context badge/logout 보완 여부
+
+- 3-7B에서 이미 premium tone 적용됨, 이번 단계에서 추가 변경 없음
+- hidden/display 제어는 JS 그대로 유지
+- `.auth-context-badge`: warm brown tint pill 유지
+- `.auth-logout-button`: outline style (warm gray) 유지
+
+### 변경 금지 항목 준수
+
+| 항목 | 상태 |
+|---|---|
+| JS 동작 변경 | ❌ 없음 (auth-ui.js/auth-service.js/app-bootstrap.js/app.js 미수정) |
+| HTML 구조 변경 | ❌ 없음 (index.html 미수정) |
+| Auth 로직 변경 | ❌ 없음 |
+| Invite join 로직 변경 | ❌ 없음 |
+| Supabase Auth 설정 변경 | ❌ 없음 |
+| DB/Supabase 작업 | ❌ 없음 |
+| migration 파일 | ❌ 미수정/미생성 |
+| 기존 selector/id/class | ✅ 모두 유지 |
+| login/signup submit 동작 | ✅ 유지 |
+| guest/practice mode 동작 | ✅ 유지 |
+| SUPABASE_ENABLED 동작 | ✅ 유지 |
+| `js/config.js` | ❌ 미생성/미커밋 |
+| `data_export.json` | ❌ 미생성/미커밋 |
+| service_role/token/key/password | ❌ 미출력 |
+| supabase db push/reset/pull | ❌ 없음 |
+
+### Tests 결과
+
+| 항목 | 결과 |
+|---|---|
+| 전체 tests | **675 tests, 0 fail** |
+| 기존 tests | 647 → all pass |
+| 신규 tests (auth-onboarding-theme-contract) | 28 → all pass |
+| AO1~AO4 | auth root/panel premium tone 검증 ✅ |
+| AO5~AO7 | auth input premium tone 검증 ✅ |
+| AO8~AO11 | auth button premium tone 검증 ✅ |
+| AO12~AO14 | auth error/store option premium tone 검증 ✅ |
+| AO15~AO16 | auth context badge/logout premium tone 검증 ✅ |
+| AO17~AO20 | legacy blue/purple purge 검증 ✅ |
+| AO21~AO26 | auth HTML contract 검증 ✅ |
+| AO27~AO28 | sensitive data safety 검증 ✅ |
+
+### Preflight 결과
+
+| 항목 | 결과 |
+|---|---|
+| Branch check | ✅ PASS |
+| Staged files check | ✅ PASS |
+| Tracked forbidden files check | ✅ PASS |
+| service_role / sb_secret_ scan | ✅ PASS |
+| token/session/key console.log scan | ✅ PASS |
+| config.example.js default flags | ✅ PASS |
+| .gitignore check | ✅ PASS |
+| supabase migrations/tests check | ✅ PASS |
+| **전체** | ✅ **PASS** |
+
+### Browser Visual Smoke 결과
+
+scope: **legacy/local visual smoke** (SUPABASE_ENABLED=false, auth/onboarding no-membership browser visual smoke PENDING)
+login/signup/invite join 실행 여부: **no**
+
+| 항목 | 결과 |
+|---|---|
+| dashboard 표시 | ✅ 정상 |
+| products 표시 | ✅ 정상 |
+| 3-7B header/sidebar tone 유지 | ✅ 확인 |
+| 3-7C dashboard tone 유지 | ✅ 확인 |
+| 3-7D products tone 유지 | ✅ 확인 |
+| body background warm ivory | ✅ 확인 |
+| stat-card background warm white | ✅ 확인 |
+| auth-root DOM 존재 | ✅ 확인 (hidden 상태여도 DOM 존재) |
+| console error | ✅ 없음 |
+| layout 깨짐 | ✅ 없음 |
+
+- SUPABASE_ENABLED=false로 auth/onboarding 화면을 실제 렌더링하지 못했으므로 "auth/onboarding no-membership browser visual smoke PENDING"으로 기록
+- auth/onboarding CSS contract는 28개 테스트로 모두 검증 완료
+- 실제 인증 화면 테스트는 별도 세션에서 Supabase Cloud 인증 후 진행 권장
+
+### Local Server Hygiene 결과
+
+| 항목 | 결과 |
+|---|---|
+| 작업 전 check | ✅ no listeners, no http.server |
+| 서버 실행 | python3 -m http.server 8080 |
+| 서버 종료 | `--kill` 모드로 정리 |
+| 작업 후 check | ✅ no listeners on 8080-8089, no http.server processes |
+
+### 최종 판정
+
+- **PASS** (Auth/Onboarding Premium Polish 완료)
+- CSS-only 변경, JS/HTML/Auth logic/Invite join logic/DB/migration 변경 없음
+- 기존 647 + 신규 28 = 675 tests all pass
+- preflight PASS
+- legacy/local visual smoke PASS (3-7B/C/D tone 유지, no error, no layout break)
+- auth/onboarding no-membership browser visual smoke: PENDING (별도 세션에서 Supabase 인증 후 진행 권장)
+- login/signup/invite join 실행 없음 (CSS-only 단계)
+- local server cleanup 완료
+- 향후 3-7F 이후 단계에서 추가 UI polish 예정
+
+
 
 
 
