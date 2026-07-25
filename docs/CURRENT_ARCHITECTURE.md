@@ -6820,3 +6820,128 @@ Orders remote 전환 전에 기존 Supabase SQL migration 안에 구현된 order
 | 기존 737 tests | PENDING (이후 실행) |
 | preflight | PENDING (이후 실행) |
 
+## 62. 3-8A.2: OrdersSupabaseDataSource Contract Design (2026-07-25)
+
+### 목적
+
+Orders remote 구현 전에 고정할 data source contract: `orders.js`가 Supabase를 직접 호출하지 않도록 하기 위한 boundary, `js/db.js` gateway 유지, local mode regression 방지.
+**이번 단계는 design + docs + tests 작업이다. 실제 OrdersSupabaseDataSource 구현 금지.**
+
+### 수정 파일
+
+| 파일 | 변경 내용 |
+|---|---|
+| `docs/ORDERS_REMOTE_DATASOURCE_CONTRACT.md` | **신규 생성** — 상세 contract 문서 |
+| `docs/CURRENT_ARCHITECTURE.md` | 3-8A.2 섹션 추가 (요약) |
+| `tests/orders-remote-datasource-contract.test.mjs` | **신규 생성** — 17 contract tests |
+
+### 상세 문서
+
+→ [ORDERS_REMOTE_DATASOURCE_CONTRACT.md](file:///Users/lesoul888/Documents/LESOUL_STORE_APP/fashionmanager/docs/ORDERS_REMOTE_DATASOURCE_CONTRACT.md)
+
+### Feature Flag 후보
+
+| Flag | 기본값 | 설명 |
+|---|---|---|
+| `ORDERS_SUPABASE_ENABLED` | `false` | Orders remote 전체 on/off |
+| `ORDERS_SUPABASE_REMOTE_ENABLED` | `false` | 원격 supabase.co URL 허용 |
+
+활성화 조건 (모두 충족): `SUPABASE_ENABLED=true`, `ORDERS_SUPABASE_ENABLED=true`, `LESOULSupabase.isInitialized()`, `activeMembership.storeId` 존재, service_role key 아님.
+
+### DataSource Interface 후보
+
+**LocalOrdersDataSource** (기존, 유지): `listOrders`, `setOrders`, `createOrder`, `updateOrder`, `deleteOrder`, `findDuplicateOrder`
+
+**SupabaseOrdersDataSource** (원격, 후보):
+
+| 메서드 | Local Equivalent | Remote Source | Side Effects | 위험도 |
+|---|---|---|---|---|
+| `listOrders(filters)` | `DB.getOrders()` | orders table SELECT + RLS | 없음 | 낮음 |
+| `getOrderById(orderId)` | `DB.getOrders().find(...)` | orders table SELECT | 없음 | 낮음 |
+| `createOrder(payload)` | `DB.addOrder()` | `public.create_order` RPC | reserved_stock + inventory_logs RESERVE | 중간 |
+| `updatePendingOrder(orderId, payload)` | `DB.updateOrder(id, {...})` | `public.update_pending_order` RPC | 재고 조정 + inventory_logs | 높음 |
+| `shipOrder(orderId, payload)` | `Orders.submitShip()` | `public.ship_order` RPC | stock 차감 + profit + inventory_logs SHIP + customer recalc | 높음 |
+| `cancelOrder(orderId)` | `Orders.cancel()` | `public.cancel_order` RPC | reserved_stock 복구 + inventory_logs RELEASE | 중간 |
+| `completeOrder(orderId)` | `Orders.complete()` | `public.complete_order` RPC | customer aggregate recalc | 낮음 |
+| `deleteOrder(id)` | `DB.deleteOrder()` (hard delete) | **금지** (RLS DELETE 차단) | N/A | 높음 |
+
+### Field Mapping 요약
+
+- **id 매핑**: local numeric `id` → remote `legacy_id` (bigint), remote `id` (uuid)는 `remote_id`로 보존
+- **customer_id/product_id**: local numeric → remote uuid + legacy_id **2중 매핑** 필요
+- **snapshot fields**: `customer_name_snapshot`, `product_title_snapshot`, `brand_snapshot`, `category_snapshot`, `color_snapshot`, `size_snapshot`
+- **이름 다름**: `actual_cost` ↔ `actual_converted_cost_at_sale`, `china_cost` ↔ `china_cost_at_sale`
+- **삭제 방식**: local hard delete → remote soft delete (`deleted_at`) 또는 `cancel_order` 대체
+
+### Status Transition Mapping 요약
+
+| Local Action | Remote RPC | 입력 → 출력 상태 |
+|---|---|---|
+| submitAdd | `create_order` | → PENDING |
+| submitEdit (PENDING) | `update_pending_order` | PENDING → PENDING |
+| submitShip | `ship_order` | PENDING → SHIPPED |
+| cancel | `cancel_order` | PENDING → CANCELLED |
+| complete | `complete_order` | SHIPPED → COMPLETED |
+| delete/batchDelete | **금지** → cancel_order 대체 | N/A → CANCELLED |
+
+### Inventory Side Effect Boundary
+
+- **Local mode**: `orders.js`가 stock/reserved_stock 직접 조정
+- **Remote mode**: RPC가 atomic transaction으로 stock/reserved_stock + inventory_logs 처리. `orders.js`는 직접 조정 **금지**
+- 성공 후 UI refresh, 실패 시 error 표시, local fallback으로 재고 변경 **금지**
+
+### Analytics Compatibility
+
+- `analytics.js`는 `DB.getOrders()` 의존 → remote mode에서 `DB.getOrders()`가 normalized remote orders 반환 필요
+- `_getShippedOrders()`의 shipped/completed 기준 유지
+- 원가 계산: snapshot 우선, product fallback 후순위
+- 상세: 3-8A.8에서 검증
+
+### Customers Compatibility
+
+- `Customers.recalculateAll()`이 `DB.getOrders()` 호출
+- Remote RPC가 server-side aggregate 처리 → client 중복 계산 주의
+- 단기: recalculateAll 유지, 장기: remote aggregate RPC 통일
+
+### Error Handling Contract
+
+주요 시나리오: 활성 store 없음, 멤버십 없음, staff 권한 거부, 상품/고객 삭제됨, 재고 부족, 잘못된 상태 전이, 네트워크 실패 (RPC 성공 후 refresh 실패), 중복 주문, stale version/conflict. RPC 성공 후 서버측 변경은 이미 반영됨 → 재시도 아닌 refresh 필요.
+
+### Implementation Phases
+
+| 단계 | 설명 | Go/No-Go |
+|---|---|---|
+| 3-8A.2 | Contract Design (이번 단계) | ✅ GO |
+| 3-8A.3 | Read-only listOrders prototype | ✅ NEXT |
+| 3-8A.4 | Normalized Mapping Tests | ✅ NEXT |
+| 3-8A.5 | createOrder RPC Adapter | NO-GO until 3-8A.3+3-8A.4 |
+| 3-8A.6 | ship/cancel/complete RPC Adapters | NO-GO until 3-8A.5 |
+| 3-8A.7 | Browser Owner Smoke | NO-GO until 3-8A.6 |
+| 3-8A.8 | Analytics/Customers Compatibility | NO-GO |
+| 3-8A.9 | Staff/No-Membership Negative Smoke | NO-GO |
+| 3-8A.10 | Cleanup and Go/No-Go | NO-GO |
+
+### Go/No-Go
+
+| 항목 | 판정 |
+|---|---|
+| 이번 단계 implementation | **NO-GO** |
+| contract design | **GO** ✅ |
+| read-only remote list | **NEXT** |
+| production order remote 전환 | **NO-GO** until 3-8A.7+3-8A.8 |
+
+### 이번 단계 검증 결과
+
+| 항목 | 결과 |
+|---|---|
+| design-only 작업 | ✅ 확인 |
+| JS 변경 | ❌ 없음 |
+| CSS 변경 | ❌ 없음 |
+| HTML 변경 | ❌ 없음 |
+| Migration 변경 | ❌ 없음 |
+| DB push | ❌ 없음 |
+| 실제 order/customer/product/inventory action | ❌ 없음 |
+| 신규 contract tests | ✅ 17 tests 추가 |
+| 기존 787 tests | PENDING (이후 실행) |
+| preflight | PENDING (이후 실행) |
+
