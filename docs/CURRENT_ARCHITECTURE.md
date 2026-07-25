@@ -4961,3 +4961,106 @@ Supabase Cloud MVP 전환 작업의 현재 준비 상태를 요약한다.
 - 코드/DB/UI 변경 없음
 - 향후 작업은 3-6G.1 → 3-7A → 3-7B → 3-8A → 3-8B 순서 권장
 
+---
+
+## 58. 3-6G.1: Runtime Config & Local Server Hygiene (2026-07-24)
+
+### 목적
+
+local server 포트 누적 방지를 위한 운영 규칙과 정리 스크립트를 도입한다.
+이전 smoke run에서 8080~8089에 남아 있던 http.server 프로세스를 정리하고,
+앞으로 local server는 기본적으로 8080만 사용하도록 문서화한다.
+
+### 정정 사항
+
+이전 3-6G 보고에서 8081~8083을 “다른 프로세스”로 유지했다고 기록했지만,
+사용자 확인 결과 8081~8083도 fashionmanager 웹앱 작업 중 생성된 local http.server였다.
+따라서 8081~8083도 정리 대상이다.
+
+### 정리 전 8080~8089 상태
+
+| PORT | PID | Command |
+|---|---|---|
+| 8081 | 11728 | `Python -m http.server 8081` |
+| 8082 | 27931 | `Python -m http.server 8082` |
+| 8083 | 30530 | `Python -m http.server 8083` |
+
+(8080, 8084~8089는 리스너 없음)
+
+### 종료한 python http.server PID/PORT 요약
+
+| PORT | PID | 결과 |
+|---|---|---|
+| 8081 | 11728 | ✅ stopped |
+| 8082 | 27931 | ✅ stopped |
+| 8083 | 30530 | ✅ stopped |
+
+비-http.server 프로세스는 건드리지 않음.
+
+### 정리 후 8080~8089 상태
+
+- 8080~8089: **no listeners**
+- http.server processes: **no http.server processes**
+
+### Hygiene Script 추가
+
+- 파일: [scripts/local-server-hygiene.sh](file:///Users/lesoul888/Documents/LESOUL_STORE_APP/fashionmanager/scripts/local-server-hygiene.sh)
+- 실행 권한: `chmod +x` 적용
+- 모드:
+  - `bash scripts/local-server-hygiene.sh` (기본, check-only)
+  - `bash scripts/local-server-hygiene.sh --kill` (http.server 종료)
+- 동작:
+  - 8080~8089 포트의 리스너 확인
+  - `python3 -m http.server` 명령어 매칭 시에만 종료
+  - 비-http.server 프로세스는 유지
+  - 코드/DB/migration/config 변경 없음
+
+### 검증 결과
+
+| 단계 | 결과 |
+|---|---|
+| check-only 모드 | ✅ 정상 동작 |
+| `--kill` 모드 | ✅ 정상 동작 (http.server만 종료) |
+| 최종 check 모드 | ✅ no listeners / no http.server |
+
+### 운영 규칙 (Local Server Hygiene Policy)
+
+1. **기본 포트는 8080**
+   - local smoke/test 서버는 가급적 `python3 -m http.server 8080` 사용
+2. **8081~8089는 임시 fallback으로만 사용**
+   - 8080이 이미 사용 중일 때만 8081, 8082 순서로 fallback
+   - smoke 종료 후 반드시 종료 또는 hygiene script로 정리
+3. **smoke/test 종료 후 정리**
+   - 서버 실행 시 `Ctrl+C`로 종료, 또는
+   - `bash scripts/local-server-hygiene.sh --kill` 실행
+4. **서버 새로 실행 전 확인**
+   - `bash scripts/local-server-hygiene.sh` (check-only)로 잔여 프로세스 확인
+5. **js/config.js 정책**
+   - `js/config.js`는 local-only이며 gitignored
+   - `js/config.example.js`는 template/fallback
+6. **browser config 보안 정책**
+   - browser config에는 publishable/public key만 허용
+   - `service_role` / secret / token / password는 browser config 금지
+
+### 검증 결과
+
+| 항목 | 결과 |
+|---|---|
+| docs-only + script | ✅ yes |
+| app code changes | ❌ no |
+| migration | ❌ no |
+| db push | ❌ no |
+| tests | ✅ **543 tests, 0 fail** |
+| preflight | ✅ **PASS** |
+| 실제 token/key/password 값 | ❌ no |
+| js/config.js commit | ❌ no |
+| migration 변경 | ❌ no |
+| data_export.json | ❌ no |
+
+### 최종 판정
+
+- **PASS** (Runtime Config & Local Server Hygiene 완료)
+- 8081~8083 잔여 http.server 정리 완료
+- hygiene script 도입으로 향후 포트 누적 방지
+- app 코드/DB/UI 변경 없음
+
