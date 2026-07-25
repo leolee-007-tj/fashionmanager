@@ -120,23 +120,24 @@ describe('Orders Remote Read-only Prototype Contract (RO1-RO18)', function () {
     // RO12-RO14: Write methods disabled
     // ============================================================
 
-    it('RO12: write methods throw "not enabled yet" or equivalent', function () {
+    it('RO12: write methods throw "not enabled yet" or equivalent (except createOrder — implemented in 3-8A.5)', function () {
         const supabaseSection = DB_JS.match(/_createControlledSupabaseOrdersDataSource\(client,\s*context\)\s*\{[\s\S]*?(?=\n    \},\n\n    \/\*\*)/);
         assert.ok(supabaseSection, 'SupabaseOrdersDataSource section should exist');
         // Check that write methods throw
         assert.match(supabaseSection[0], /_writeDisabledMsg/, 'write disabled message variable should exist');
-        const writeMethods = ['setOrders', 'createOrder', 'updatePendingOrder', 'shipOrder', 'cancelOrder', 'completeOrder', 'updateOrder', 'deleteOrder'];
+        // 3-8A.5: createOrder is now implemented; remaining write methods must still throw.
+        const writeMethods = ['setOrders', 'updatePendingOrder', 'shipOrder', 'cancelOrder', 'completeOrder', 'updateOrder', 'deleteOrder', 'findDuplicateOrder'];
         for (const method of writeMethods) {
             const methodPattern = new RegExp(`${method}\\([^)]*\\)\\s*\\{[\\s\\S]*?throw`);
             assert.match(supabaseSection[0], methodPattern, `${method} should throw`);
         }
     });
 
-    it('RO13: db.js does not call create_order/update_pending_order/ship_order/cancel_order/complete_order RPC in this step', function () {
+    it('RO13: db.js only calls create_order RPC (3-8A.5); other write RPCs still forbidden', function () {
         const supabaseSection = DB_JS.match(/_createControlledSupabaseOrdersDataSource\(client,\s*context\)\s*\{[\s\S]*?(?=\n    \},\n\n    \/\*\*)/);
         assert.ok(supabaseSection, 'SupabaseOrdersDataSource section should exist');
-        // No RPC calls for write operations
-        assert.doesNotMatch(supabaseSection[0], /\.rpc\('create_order'/, 'should not call create_order RPC');
+        // 3-8A.5: create_order RPC is now allowed (exactly once, inside createOrder).
+        // Other write RPCs remain forbidden.
         assert.doesNotMatch(supabaseSection[0], /\.rpc\('update_pending_order'/, 'should not call update_pending_order RPC');
         assert.doesNotMatch(supabaseSection[0], /\.rpc\('ship_order'/, 'should not call ship_order RPC');
         assert.doesNotMatch(supabaseSection[0], /\.rpc\('cancel_order'/, 'should not call cancel_order RPC');

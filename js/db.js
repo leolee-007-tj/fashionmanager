@@ -1057,19 +1057,21 @@ const DB = {
 
     /**
      * 3-8A.3: SupabaseOrdersDataSource (read-only prototype)
+     * 3-8A.5: createOrder RPC Adapter 추가 (나머지 write methods는 여전히 disabled)
      *
-     * 이번 단계는 read-only listOrders만 허용한다.
-     * write 메서드는 모두 명확한 error를 throw한다.
+     * 이번 단계는 read-only listOrders + createOrder RPC adapter만 허용한다.
+     * 나머지 write 메서드는 모두 명확한 error를 throw한다.
      *
      * 보안 원칙:
      *   - publishable key만 사용 (service_role 차단)
      *   - store_id는 context.storeId로 강제 (클라이언트 입력 무신뢰)
      *   - RLS에 의존 (우회 금지)
-     *   - 실제 remote write RPC 호출 금지 (create_order, ship_order, cancel_order, complete_order)
+     *   - create_order RPC만 허용 (ship/cancel/complete/update/delete는 여전히 금지)
+     *   - orders/inventory_logs/products 테이블 직접 insert/update/delete 금지
      *
      * @param {Object} client - Supabase client (명시적 주입)
      * @param {Object} context - { localOnly: boolean, remoteEnabled: boolean, storeId: string, url?: string }
-     * @returns {Object} SupabaseOrdersDataSource (read-only)
+     * @returns {Object} SupabaseOrdersDataSource
      */
     _createControlledSupabaseOrdersDataSource(client, context) {
         const db = this;
@@ -1092,6 +1094,16 @@ const DB = {
             }
         }
 
+        /**
+         * 3-8A.5: write context validation.
+         * createOrder 호출 전에 client/context/storeId를 재검증한다.
+         */
+        function _validateWriteContext(methodName) {
+            _validateReadContext(methodName);
+            // write는 localOnly/remoteEnabled 모두 허용하되, 반드시 명시적 context 필요
+            // (추가 제한은 runtime feature flag gate에서 이미 검증됨)
+        }
+
         function _wrapReadError(methodName, err) {
             if (err && err.message && err.message.indexOf('requires ') === 0) {
                 throw err;
@@ -1102,7 +1114,123 @@ const DB = {
             throw wrapped;
         }
 
-        const _writeDisabledMsg = 'SupabaseOrdersDataSource write is not enabled yet (3-8A.3 read-only prototype)';
+        /**
+         * 3-8A.5: createOrder 오류 전용 wrapper.
+         * validation 오류는 그대로 throw하고, RPC 오류는 wrap한다.
+         */
+        function _wrapCreateOrderError(err) {
+            if (err && err.message && (
+                err.message.indexOf('requires ') === 0 ||
+                err.message.indexOf('createOrder') === 0 ||
+                err.message.indexOf('SupabaseOrdersDataSource.createOrder') === 0 ||
+                err.message.indexOf('Invalid') === 0 ||
+                err.message.indexOf('Missing') === 0
+            )) {
+                throw err;
+            }
+            const wrapped = new Error('SupabaseOrdersDataSource.createOrder RPC failed');
+            if (err && err.code) wrapped.code = err.code;
+            if (err && err.message) wrapped.details = err.message;
+            throw wrapped;
+        }
+
+        const _writeDisabledMsg = 'SupabaseOrdersDataSource write is not enabled yet (3-8A.5: only createOrder implemented)';
+
+        /**
+         * 3-8A.5: createOrder payload를 create_order RPC parameter로 변환.
+         *
+         * RPC signature (migration 20260711000900):
+         *   create_order(
+         *     p_store_id uuid,         → context.storeId (untrusted payload 무시)
+         *     p_customer_id uuid,      → payload.customer_uuid (remote uuid만 허용)
+         *     p_product_id uuid,       → payload.product_uuid (remote uuid만 허용)
+         *     p_quantity integer,      → payload.quantity (positive integer)
+         *     p_selling_price numeric, → payload.selling_price (>= 0)
+         *     p_order_date date,       → payload.order_date (YYYY-MM-DD)
+         *     p_color text,            → payload.color (optional)
+         *     p_size text,             → payload.size (optional)
+         *     p_notes text             → payload.notes (optional)
+         *   )
+         *   RETURNS public.orders (단일 row)
+         *
+         * 검증 정책:
+         *   - legacy numeric id만 있는 경우 → throw (remote uuid 필요)
+         *   - quantity는 positive integer
+         *   - selling_price는 number >= 0
+         *   - order_date는 필수 (YYYY-MM-DD 또는 Date-compatible)
+         *   - color/size/notes는 optional
+         *   - store_id는 payload에서 무시하고 context.storeId 사용
+         */
+        function _buildCreateOrderRpcPayload(payload) {
+            if (!payload || typeof payload !== 'object') {
+                throw new Error('createOrder requires non-null payload object');
+            }
+
+            // customer uuid: payload.customer_uuid 우선, 없으면 customer_id가 uuid인지 확인
+            let customerUuid = null;
+            if (payload.customer_uuid && typeof payload.customer_uuid === 'string' &&
+                /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.customer_uuid)) {
+                customerUuid = payload.customer_uuid;
+            } else if (payload.customer_id && typeof payload.customer_id === 'string' &&
+                /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.customer_id)) {
+                customerUuid = payload.customer_id;
+            }
+            if (!customerUuid) {
+                throw new Error('createOrder requires valid customer_uuid (remote uuid). Legacy numeric customer_id is not accepted in remote mode.');
+            }
+
+            // product uuid: payload.product_uuid 우선, 없으면 product_id가 uuid인지 확인
+            let productUuid = null;
+            if (payload.product_uuid && typeof payload.product_uuid === 'string' &&
+                /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.product_uuid)) {
+                productUuid = payload.product_uuid;
+            } else if (payload.product_id && typeof payload.product_id === 'string' &&
+                /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.product_id)) {
+                productUuid = payload.product_id;
+            }
+            if (!productUuid) {
+                throw new Error('createOrder requires valid product_uuid (remote uuid). Legacy numeric product_id is not accepted in remote mode.');
+            }
+
+            // quantity: positive integer
+            const quantity = Number(payload.quantity);
+            if (!Number.isInteger(quantity) || quantity < 1) {
+                throw new Error('createOrder requires quantity to be a positive integer');
+            }
+
+            // selling_price: number >= 0
+            const sellingPrice = Number(payload.selling_price);
+            if (!Number.isFinite(sellingPrice) || sellingPrice < 0) {
+                throw new Error('createOrder requires selling_price to be a non-negative number');
+            }
+
+            // order_date: 필수 (YYYY-MM-DD 또는 Date-compatible string)
+            const orderDate = payload.order_date;
+            if (!orderDate || (typeof orderDate !== 'string' && !(orderDate instanceof Date))) {
+                throw new Error('createOrder requires order_date');
+            }
+            const orderDateStr = orderDate instanceof Date
+                ? orderDate.toISOString().slice(0, 10)
+                : String(orderDate);
+
+            // optional fields
+            const color = (payload.color != null && typeof payload.color === 'string') ? payload.color : null;
+            const size = (payload.size != null && typeof payload.size === 'string') ? payload.size : null;
+            const notes = (payload.notes != null && typeof payload.notes === 'string') ? payload.notes : null;
+
+            // store_id는 payload에서 무시하고 context.storeId 사용 (untrusted input)
+            return {
+                p_store_id: context.storeId,
+                p_customer_id: customerUuid,
+                p_product_id: productUuid,
+                p_quantity: quantity,
+                p_selling_price: sellingPrice,
+                p_order_date: orderDateStr,
+                p_color: color,
+                p_size: size,
+                p_notes: notes
+            };
+        }
 
         return {
             name: 'SupabaseOrdersDataSource',
@@ -1190,14 +1318,53 @@ const DB = {
                     .catch(err => _wrapReadError('getOrderById', err));
             },
 
-            // ==================== Write methods (DISABLED in 3-8A.3) ====================
+            // ==================== Write methods ====================
+            // 3-8A.5: createOrder only is implemented. Others remain disabled.
 
             setOrders(orders) {
                 throw new Error(_writeDisabledMsg);
             },
 
-            createOrder(order) {
-                throw new Error(_writeDisabledMsg);
+            /**
+             * 3-8A.5: createOrder RPC Adapter.
+             *
+             * remote mode에서 주문 생성은 public.create_order RPC만 사용한다.
+             * orders table 직접 insert, product stock update, inventory_logs insert
+             * 모두 금지 — create_order RPC가 atomic하게 처리한다.
+             *
+             * @param {Object} payload - {
+             *   customer_uuid: string (remote uuid, 필수),
+             *   product_uuid: string (remote uuid, 필수),
+             *   quantity: positive integer (필수),
+             *   selling_price: number >= 0 (필수),
+             *   order_date: string|Date (필수),
+             *   color?: string,
+             *   size?: string,
+             *   notes?: string
+             * }
+             * @returns {Promise<Object>} normalized legacy-compatible order
+             */
+            createOrder(payload) {
+                _validateWriteContext('createOrder');
+
+                let rpcPayload;
+                try {
+                    rpcPayload = _buildCreateOrderRpcPayload(payload);
+                } catch (e) {
+                    return Promise.reject(e);
+                }
+
+                return client.rpc('create_order', rpcPayload)
+                    .then(response => {
+                        if (response.error) {
+                            throw new Error('SupabaseOrdersDataSource.createOrder RPC failed');
+                        }
+                        if (!response.data) {
+                            throw new Error('SupabaseOrdersDataSource.createOrder returned no data');
+                        }
+                        return db.mapSupabaseRowToLegacyOrder(response.data);
+                    })
+                    .catch(err => _wrapCreateOrderError(err));
             },
 
             updatePendingOrder(orderId, payload) {

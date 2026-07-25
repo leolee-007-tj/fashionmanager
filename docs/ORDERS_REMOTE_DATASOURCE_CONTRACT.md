@@ -1,8 +1,8 @@
 # Orders Remote DataSource Contract
 
-> 문서 버전: 1.2 (3-8A.4)
+> 문서 버전: 1.3 (3-8A.5)
 > 작성일: 2026-07-25
-> 상태: **MAPPING TESTS COMPLETE (3-8A.4)** — write methods still disabled, normalized mapping verified
+> 상태: **CREATE_ORDER RPC ADAPTER IMPLEMENTED (3-8A.5)** — createOrder adapter added, not remote-smoked; ship/cancel/complete/update/delete still disabled
 
 ---
 
@@ -326,7 +326,7 @@ recalculateAll() {
 | **3-8A.2** | Contract Design | 이 문서 + contract tests | ✅ GO |
 | **3-8A.3** | Read-only listOrders | `listOrders()` 원격 조회 prototype, RLS SELECT 기반 | ✅ NEXT |
 | **3-8A.4** | Normalized Mapping Tests | field mapping, status transition, shape contract 단위 테스트 | ✅ NEXT |
-| **3-8A.5** | createOrder RPC Adapter | `createOrder()` → `public.create_order` 연결 | NO-GO until 3-8A.3 + 3-8A.4 pass |
+| **3-8A.5** | createOrder RPC Adapter | `createOrder()` → `public.create_order` 연결 | ✅ GO (adapter implemented, not remote-smoked) |
 | **3-8A.6** | ship/cancel/complete RPC Adapters | `shipOrder`, `cancelOrder`, `completeOrder` RPC 연결 | NO-GO until 3-8A.5 pass |
 | **3-8A.7** | Browser Owner Smoke | owner 계정으로 read + create + ship + cancel + complete smoke test | NO-GO until 3-8A.6 pass |
 | **3-8A.8** | Analytics/Customers Compatibility | analytics + customers recalculateAll remote 연동 검증 | NO-GO until 3-8A.7 pass |
@@ -465,3 +465,170 @@ recalculateAll() {
 - 영향 범위: `_createLocalOrdersDataSource` 내부
 - 외부 API 변경 없음
 - 기존 sync `DB.getOrders()`, `DB.addOrder()` 등은 그대로 유지
+
+---
+
+## O. 3-8A.5 createOrder RPC Adapter
+
+### O.1 목적
+
+`SupabaseOrdersDataSource.createOrder(payload)` adapter를 구현한다.
+remote mode에서 주문 생성은 `public.create_order` RPC만 사용한다.
+
+- 코드 구현 + contract tests + docs 작업
+- 실제 remote DB에 주문 생성 금지
+- 브라우저에서 실제 `create_order` 실행 금지
+- `ship/cancel/complete/update/delete` 구현 금지
+
+### O.2 create_order RPC Signature 확인 결과
+
+Migration `supabase/migrations/20260711000900_order_inventory_rpc.sql`에서 확인한 정확한 signature:
+
+```sql
+CREATE OR REPLACE FUNCTION public.create_order(
+    p_store_id uuid,
+    p_customer_id uuid,
+    p_product_id uuid,
+    p_quantity integer,
+    p_selling_price numeric,
+    p_order_date date DEFAULT current_date,
+    p_color text DEFAULT NULL,
+    p_size text DEFAULT NULL,
+    p_notes text DEFAULT NULL
+)
+RETURNS public.orders
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+```
+
+- 반환값: 단일 `public.orders` row (uuid, not uuid scalar)
+- `shipping_company` / `tracking_number`는 create_order parameter에 **없음** (ship_order에서만 처리)
+- RPC 내부에서 재고 예약(reserved_stock 증가) + inventory_logs RESERVE log 생성을 atomic하게 처리
+
+### O.3 createOrder Adapter 구현 요약
+
+`js/db.js` 내 `_createControlledSupabaseOrdersDataSource`에 `createOrder(payload)` 메서드 추가:
+
+1. `_validateWriteContext('createOrder')` 호출 (client/context/storeId 재검증)
+2. `_buildCreateOrderRpcPayload(payload)`로 payload 검증 + RPC parameter mapping
+3. `client.rpc('create_order', rpcPayload)` 호출
+4. `response.error` 있으면 throw
+5. `response.data` 없으면 throw
+6. `db.mapSupabaseRowToLegacyOrder(response.data)`로 결과 정규화
+7. 정규화된 legacy-compatible order 반환
+
+### O.4 Payload Validation Policy
+
+| 필드 | 검증 규칙 | 실패 시 |
+|---|---|---|
+| `payload` 자체 | non-null object | throw `createOrder requires non-null payload object` |
+| `customer_uuid` | UUID 형식 문자열 (payload.customer_uuid 우선, 없으면 customer_id가 UUID인지 확인) | throw `createOrder requires valid customer_uuid...` |
+| `product_uuid` | UUID 형식 문자열 (payload.product_uuid 우선, 없으면 product_id가 UUID인지 확인) | throw `createOrder requires valid product_uuid...` |
+| `quantity` | positive integer (>= 1) | throw `createOrder requires quantity to be a positive integer` |
+| `selling_price` | number >= 0 (finite) | throw `createOrder requires selling_price to be a non-negative number` |
+| `order_date` | string 또는 Date 객체 (필수) | throw `createOrder requires order_date` |
+| `color` | optional string (null/undefined → null) | — |
+| `size` | optional string (null/undefined → null) | — |
+| `notes` | optional string (null/undefined → null) | — |
+| `store_id` | **payload에서 무시**, context.storeId 사용 | — |
+
+**legacy numeric id만 있는 경우**: remote uuid가 없으면 createOrder를 실행하지 않고 throw.
+
+### O.5 RPC Payload Mapping
+
+| RPC Parameter | Source | 설명 |
+|---|---|---|
+| `p_store_id` | `context.storeId` | untrusted payload.store_id 무시 |
+| `p_customer_id` | `payload.customer_uuid` (또는 UUID 형식의 customer_id) | remote uuid만 허용 |
+| `p_product_id` | `payload.product_uuid` (또는 UUID 형식의 product_id) | remote uuid만 허용 |
+| `p_quantity` | `Number(payload.quantity)` | positive integer |
+| `p_selling_price` | `Number(payload.selling_price)` | number >= 0 |
+| `p_order_date` | `payload.order_date` (Date → YYYY-MM-DD 변환) | string |
+| `p_color` | `payload.color` 또는 null | optional |
+| `p_size` | `payload.size` 또는 null | optional |
+| `p_notes` | `payload.notes` 또는 null | optional |
+
+### O.6 Error Handling
+
+다음 상황은 명확히 throw:
+
+- missing active store / context validation 실패
+- missing remote customer uuid (legacy numeric id만 있는 경우)
+- missing remote product uuid (legacy numeric id만 있는 경우)
+- invalid quantity (0, 음수, 소수, 누락)
+- invalid selling_price (음수, NaN, 누락)
+- missing order_date
+- RPC error (`response.error` 존재)
+- no returned order data (`response.data` null)
+
+`_wrapCreateOrderError`는 validation 오류(`requires`, `createOrder`, `SupabaseOrdersDataSource.createOrder`, `Invalid`, `Missing`로 시작)는 그대로 throw하고, RPC 오류는 `SupabaseOrdersDataSource.createOrder RPC failed`로 wrap.
+
+### O.7 Forbidden Direct Writes
+
+createOrder adapter는 다음을 수행하지 **않는다**:
+
+- `from('orders').insert(...)` 직접 호출 금지
+- `from('products').update(...)` 직접 호출 금지 (재고 예약은 create_order RPC가 담당)
+- `from('inventory_logs').insert(...)` 직접 호출 금지 (RESERVE log는 create_order RPC가 담당)
+- `ship_order` / `cancel_order` / `complete_order` / `update_pending_order` RPC 호출 금지
+
+### O.8 Remaining Disabled Methods
+
+다음 write 메서드는 여전히 `throw new Error(_writeDisabledMsg)` 유지:
+
+- `setOrders(orders)`
+- `updatePendingOrder(orderId, payload)`
+- `shipOrder(orderId, payload)`
+- `cancelOrder(orderId)`
+- `completeOrder(orderId)`
+- `updateOrder(id, updates)`
+- `deleteOrder(id)`
+- `findDuplicateOrder(customerId, productId, color, size)`
+
+### O.9 Local Mode Compatibility
+
+- `ORDERS_SUPABASE_ENABLED` 기본값 `false` 유지
+- 기본 DataSource = `LocalOrdersDataSource` 유지
+- 기존 sync API (`DB.getOrders`, `DB.addOrder`, `DB.updateOrder`, `DB.deleteOrder`, `DB.findDuplicateOrder`) 변경 없음
+- `DB.getOrdersAsync()` 등 async helper 기존 동작 유지
+- runtime feature flag gate에서 `ORDERS_SUPABASE_ENABLED !== true`이면 조용히 LocalOrdersDataSource 유지
+
+### O.10 Test Results (3-8A.5)
+
+| 항목 | 결과 |
+|---|---|
+| createOrder adapter contract tests | 28 tests, 0 fail |
+| 전체 tests | 894 tests, 0 fail |
+| createOrder calls `client.rpc('create_order', ...)` | ✅ PASS |
+| createOrder does not call `from('orders').insert` | ✅ PASS |
+| createOrder does not call product update directly | ✅ PASS |
+| createOrder does not insert into inventory_logs directly | ✅ PASS |
+| createOrder uses context.storeId (not payload.store_id) | ✅ PASS |
+| createOrder maps customer/product uuid | ✅ PASS |
+| createOrder rejects legacy numeric ids without uuid | ✅ PASS |
+| createOrder validates quantity / selling_price / order_date | ✅ PASS |
+| createOrder normalizes RPC result with mapSupabaseRowToLegacyOrder | ✅ PASS |
+| createOrder throws on RPC error / no data | ✅ PASS |
+| remaining write methods still disabled | ✅ PASS |
+| no forbidden RPC calls (ship/cancel/complete/update_pending) | ✅ PASS |
+| local DB sync APIs unchanged | ✅ PASS |
+| ORDERS_SUPABASE_ENABLED default false | ✅ PASS |
+| no migration changes | ✅ PASS |
+| no secrets/tokens | ✅ PASS |
+| preflight | ✅ PASS |
+
+### O.11 Go/No-Go
+
+| 항목 | 판정 |
+|---|---|
+| 3-8A.5 createOrder adapter 구현 | **GO** ✅ |
+| remote browser smoke (createOrder 실제 호출) | **NO-GO** (이번 단계에서 금지) |
+| ship/cancel/complete/update/delete adapter | **NO-GO** (3-8A.6 예정) |
+| production order remote 전환 | **NO-GO** |
+
+### O.12 다음 단계
+
+- **3-8A.6**: ship/cancel/complete RPC Adapters (`shipOrder`, `cancelOrder`, `completeOrder` RPC 연결)
+- **3-8A.7**: Browser Owner Smoke (owner 계정으로 read + create + ship + cancel + complete smoke test)
+- **3-8A.8**: Analytics/Customers Compatibility 검증
