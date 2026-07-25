@@ -1,8 +1,8 @@
 # Orders Remote DataSource Contract
 
-> 문서 버전: 1.1 (3-8A.3)
+> 문서 버전: 1.2 (3-8A.4)
 > 작성일: 2026-07-25
-> 상태: **READ-ONLY PROTOTYPE IMPLEMENTED (3-8A.3)** — write methods still disabled
+> 상태: **MAPPING TESTS COMPLETE (3-8A.4)** — write methods still disabled, normalized mapping verified
 
 ---
 
@@ -366,12 +366,13 @@ recalculateAll() {
 
 ---
 
-## M. 이번 단계 검증 결과
+## M. 3-8A.3 검증 결과 (Read-only Prototype)
 
 | 항목 | 결과 |
 |---|---|
-| design-only 작업 | ✅ 확인 |
-| JS 변경 | ❌ 없음 |
+| read-only prototype | ✅ 구현 완료 |
+| JS 변경 | ✅ js/db.js + js/config.example.js |
+| write methods | ❌ 모두 throw (미구현) |
 | CSS 변경 | ❌ 없음 |
 | HTML 변경 | ❌ 없음 |
 | Migration 변경 | ❌ 없음 |
@@ -379,7 +380,88 @@ recalculateAll() {
 | 실제 order/customer/product/inventory action | ❌ 없음 |
 | Service role 사용 | ❌ 없음 |
 | token/key/password 출력 | ❌ 없음 |
-| 구현된 feature flag | ❌ 문서화만 |
-| 구현된 DataSource | ❌ 문서화만 |
-| 기존 787 tests | PENDING |
-| preflight | PENDING |
+| 기존 tests | 833 pass |
+| preflight | PASS |
+
+---
+
+## N. 3-8A.4 Mapping Invariants & Test Results
+
+### N.1 Mapping Invariants
+
+#### id / remote_id / legacy_id 정책
+- `row.id` (uuid) → `order.remote_id` (원본 보존)
+- `row.legacy_id` (numeric) → `order.id` + `order.legacy_id`
+- legacy_id가 **없으면** `order.id = null` (신규 remote row)
+- **절대**: uuid가 `order.id`로 누설되지 않음
+
+#### customer / product uuid + legacy 2중 매핑
+- `row.customer_id` (uuid) → `order.customer_uuid`
+- `row.legacy_customer_id` (numeric) → `order.customer_id`
+- `row.product_id` (uuid) → `order.product_uuid`
+- `row.legacy_product_id` (numeric) → `order.product_id`
+- local compatibility를 위해 `customer_id`/`product_id`는 여전히 numeric
+
+#### Snapshot fields
+- `customer_name_snapshot` → `customer_name`
+- `product_title_snapshot` → `product_name` + `product_title`
+- `brand_snapshot` → `brand`
+- `category_snapshot` → `category`
+- `color_snapshot` → `color`
+- `size_snapshot` → `size`
+
+#### Financial fields
+- `actual_converted_cost_at_sale` → `actual_cost` (+ 원본 필드명 보존)
+- `china_cost_at_sale` → `china_cost` (+ 원본 필드명 보존)
+- `actual_profit_margin` → `profit_margin` (+ 원본 보존)
+- `actual_cost_ratio` → `cost_ratio` (+ 원본 보존)
+- 모든 숫자 필드는 `Number()`로 numeric 강제
+
+#### null / undefined 정책
+- `safeValue(v, fallback)`: `v === undefined` → fallback, `null`은 null 그대로
+- 이는 `mapSupabaseRowToLegacyProduct`와 동일한 정책
+- null을 빈 문자열로 변환하지 않음
+
+#### Soft delete
+- `deleted_at is null` → `deleted: false`
+- `deleted_at is not null` → `deleted: true`
+
+#### Status
+- `PENDING`, `SHIPPED`, `COMPLETED`, `CANCELLED` 그대로 보존
+- mapper 내에서 status 변환 로직 없음
+
+#### Mapper purity
+- 순수 함수: 동일 입력 → 동일 출력
+- localStorage/sessionStorage 접근 없음
+- fetch/네트워크 호출 없음
+- Supabase client 호출 없음
+- 입력 row mutation 없음
+
+### N.2 Test Results (3-8A.4)
+
+| 항목 | 결과 |
+|---|---|
+| mapping contract tests | 33 tests, 0 fail |
+| 전체 tests | 866 tests, 0 fail |
+| mapper purity | ✅ PASS |
+| id/remote_id/legacy_id 정책 | ✅ PASS |
+| customer/product 2중 매핑 | ✅ PASS |
+| snapshot fields mapping | ✅ PASS |
+| financial fields mapping | ✅ PASS |
+| null edge case handling | ✅ PASS |
+| numeric string handling | ✅ PASS |
+| input mutation 없음 | ✅ PASS |
+| default DataSource = LocalOrdersDataSource | ✅ PASS |
+| write methods disabled | ✅ PASS (여전히 throw) |
+| no migration changes | ✅ PASS |
+| no secrets/tokens | ✅ PASS |
+| preflight | ✅ PASS |
+
+### N.3 js/db.js Bug Fix (3-8A.4)
+
+`LocalOrdersDataSource`의 모든 메서드를 `Promise.resolve()`로 감싸서 `ProductsDataSource` 패턴과 일치시켰다.
+3-8A.3에서 누락된 부분으로, `DB.getOrdersAsync()`가 항상 Promise를 반환하도록 보정한다.
+
+- 영향 범위: `_createLocalOrdersDataSource` 내부
+- 외부 API 변경 없음
+- 기존 sync `DB.getOrders()`, `DB.addOrder()` 등은 그대로 유지

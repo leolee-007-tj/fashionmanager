@@ -7066,6 +7066,166 @@ ORDERS_SUPABASE_REMOTE_ENABLED: false // 원격 supabase.co URL 허용
 
 ### 다음 단계
 
-- **3-8A.4**: Normalized Mapping Tests — field mapping, status transition, shape contract 단위 테스트
 - **3-8A.5**: createOrder RPC Adapter (write 메서드 구현 시작)
+
+---
+
+## 64. 3-8A.4: Orders Normalized Mapping Tests (2026-07-25)
+
+### 목적
+
+3-8A.3에서 추가한 `mapSupabaseRowToLegacyOrder` 및 read-only `SupabaseOrdersDataSource`의 normalized order shape를 더 강하게 검증한다.
+이번 단계는 mapping correctness 검증이며, remote write 구현은 금지된다.
+
+### 수정 파일
+
+| 파일 | 변경 내용 |
+|---|---|
+| `js/db.js` | `LocalOrdersDataSource` 모든 메서드 Promise 반환으로 수정 (Products 패턴 일치) |
+| `tests/orders-remote-mapping-contract.test.mjs` | 신규: M1-M30 mapping contract 테스트 |
+| `tests/orders-remote-readonly-contract.test.mjs` | 변경 없음 |
+| `tests/orders-remote-datasource-contract.test.mjs` | 변경 없음 |
+| `docs/CURRENT_ARCHITECTURE.md` | 3-8A.4 섹션 추가 |
+| `docs/ORDERS_REMOTE_DATASOURCE_CONTRACT.md` | status 업데이트 |
+
+### Mapping Invariants
+
+#### 1. Mapper purity
+- `mapSupabaseRowToLegacyOrder`는 **순수 함수**
+- `localStorage`, `sessionStorage` 접근 없음
+- `fetch` 또는 네트워크 호출 없음
+- Supabase client 호출 없음
+- 입력 row mutation 없음
+- 동일 입력 → 동일 출력 보장
+
+#### 2. id / remote_id / legacy_id 정책
+| Remote field | Local field | 타입 | 설명 |
+|---|---|---|---|
+| `id` (uuid) | `remote_id` | string | Supabase UUID 원본 보존 |
+| `legacy_id` (numeric) | `id` | number \| null | local compatibility용 주 id |
+| `legacy_id` (numeric) | `legacy_id` | number \| null | 명시적 legacy_id 필드도 보존 |
+
+- legacy_id가 **있으면**: `id` = numeric (local 호환 우선)
+- legacy_id가 **없으면**: `id` = null (신규 remote row)
+- **절대**: uuid `id`가 `order.id`로 누설되지 않음
+
+#### 3. customer / product uuid + legacy 2중 매핑
+| Remote field | Local field | 타입 |
+|---|---|---|
+| `customer_id` (uuid) | `customer_uuid` | string \| null |
+| `legacy_customer_id` (numeric) | `customer_id` | number \| null |
+| `product_id` (uuid) | `product_uuid` | string \| null |
+| `legacy_product_id` (numeric) | `product_id` | number \| null |
+
+- local order shape의 `customer_id`/`product_id`는 여전히 numeric (legacy 기반)
+- uuid는 `*_uuid` 별도 필드로 보존
+- 두 값이 모두 있으면 독립적으로 접근 가능
+
+#### 4. Snapshot fields mapping
+| Remote field | Local field |
+|---|---|
+| `customer_name_snapshot` | `customer_name` |
+| `product_title_snapshot` | `product_name`, `product_title` |
+| `brand_snapshot` | `brand` |
+| `category_snapshot` | `category` |
+| `color_snapshot` | `color` |
+| `size_snapshot` | `size` |
+
+#### 5. Financial fields mapping
+| Remote field | Local field | 비고 |
+|---|---|---|
+| `actual_converted_cost_at_sale` | `actual_cost`, `actual_converted_cost_at_sale` | 원본 필드명도 보존 |
+| `china_cost_at_sale` | `china_cost`, `china_cost_at_sale` | 원본 필드명도 보존 |
+| `actual_profit_margin` | `profit_margin`, `actual_profit_margin` | |
+| `actual_cost_ratio` | `cost_ratio`, `actual_cost_ratio` | |
+| `actual_profit` | `actual_profit` | 직접 매핑 |
+| `selling_price` | `selling_price` | 직접 매핑 |
+| `quantity` | `quantity` | 직접 매핑 |
+
+- 모든 금액/수량 필드는 `Number()`로 numeric 강제
+- numeric string 입력 → number 출력
+- Products mapper와 일관성 유지
+
+#### 6. null / undefined 처리 정책
+- `safeValue(v, fallback)`: `v === undefined`일 때만 fallback, `null`은 null 그대로 보존
+- 이는 `mapSupabaseRowToLegacyProduct`와 동일한 정책
+- null snapshot fields → null (빈 문자열로 변환하지 않음)
+- legacy_id가 null → id = null, remote_id는 보존
+
+#### 7. deleted_at → deleted boolean
+- `deleted_at IS NULL` → `deleted: false`
+- `deleted_at IS NOT NULL` → `deleted: true`
+
+#### 8. Status preservation
+- `PENDING`, `SHIPPED`, `COMPLETED`, `CANCELLED` 그대로 보존
+- status 변환 로직은 mapper에 없음 (write RPC에서 처리)
+
+### Existing DB API compatibility
+
+| API | 동작 |
+|---|---|
+| `DB.getOrders()` | sync 유지, localStorage에서 직접 조회 (변경 없음) |
+| `DB.setOrders()` | sync 유지 (변경 없음) |
+| `DB.addOrder()` | sync 유지 (변경 없음) |
+| `DB.updateOrder()` | sync 유지 (변경 없음) |
+| `DB.deleteOrder()` | sync 유지 (변경 없음) |
+| `DB.getOrdersAsync()` | `getOrdersDataSource().listOrders()` → Promise |
+| `DB.getOrdersDataSource()` | 기본값 `LocalOrdersDataSource` |
+
+- **기존 local mode 100% 보존**
+- `ORDERS_SUPABASE_ENABLED` 기본값 `false`
+- write methods는 여전히 Supabase mode에서 throw
+
+### js/db.js 수정 사항
+
+`LocalOrdersDataSource`의 모든 메서드를 `Promise.resolve()`로 감싸서 Products 패턴과 일치시켰다.
+3-8A.3에서 누락된 부분으로, `DB.getOrdersAsync()`가 항상 Promise를 반환하도록 보정한다.
+
+- `listOrders()`: `Promise.resolve(db.getOrders())`
+- `setOrders()`: `Promise.resolve()`
+- `createOrder()`: `Promise.resolve(db.addOrder(order))`
+- `updateOrder()`: `Promise.resolve(db.updateOrder(id, updates))`
+- `deleteOrder()`: `Promise.resolve(db.deleteOrder(id))`
+- `findDuplicateOrder()`: `Promise.resolve(db.findDuplicateOrder(...))`
+
+### Write methods still disabled
+
+SupabaseOrdersDataSource의 모든 write 메서드는 여전히 `throw Error('Remote orders write is not enabled yet')`:
+- `setOrders`, `createOrder`, `updatePendingOrder`, `shipOrder`, `cancelOrder`, `completeOrder`, `updateOrder`, `deleteOrder`, `findDuplicateOrder`
+
+### Tests 결과
+
+- **33 tests pass** (orders-remote-mapping-contract.test.mjs)
+- **전체 866 tests, 0 fail** (기존 833 + 33 신규)
+- M1-M30 + M-inv-1/2/3 comprehensive invariants 모두 통과
+- mapper purity 검증 통과
+- id/remote_id/legacy_id 정책 검증 통과
+- customer/product uuid+legacy 2중 매핑 검증 통과
+- snapshot fields mapping 검증 통과
+- financial fields mapping 검증 통과
+- null edge case 검증 통과
+- numeric string handling 검증 통과
+- no migration changes 통과
+- no secrets/tokens 통과
+
+### Preflight 결과
+
+- **PASS** (모든 preflight checks 통과)
+
+### Go/No-Go
+
+| 항목 | 판정 |
+|---|---|
+| mapping correctness | ✅ GO (33 tests all pass) |
+| mapper purity | ✅ GO |
+| local mode regression | ✅ GO (기존 sync API 완전 유지) |
+| write methods disabled | ✅ GO (여전히 모두 throw) |
+| no migration | ✅ GO |
+| no db push | ✅ GO |
+| no remote write RPC | ✅ GO |
+
+### 다음 단계
+
+- **3-8A.5**: createOrder RPC Adapter — write 메서드 구현 시작 (create_order RPC 연결)
+- **3-8A.6**: ship/cancel/complete RPC Adapters
 

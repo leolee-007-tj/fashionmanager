@@ -995,28 +995,62 @@ const DB = {
         return {
             name: 'LocalOrdersDataSource',
 
+            /**
+             * 주문 목록 조회 (read).
+             * @returns {Promise<Array>} 주문 배열
+             */
             listOrders() {
-                return db.getOrders();
+                return Promise.resolve(db.getOrders());
             },
 
+            /**
+             * 주문 전체 교체 (write).
+             * @param {Array} orders - 주문 배열
+             * @returns {Promise<void>}
+             */
             setOrders(orders) {
                 db.setOrders(orders);
+                return Promise.resolve();
             },
 
+            /**
+             * 주문 생성 (write).
+             * @param {Object} order - 주문 데이터
+             * @returns {Promise<Object>} 생성된 주문 (id 포함)
+             */
             createOrder(order) {
-                return db.addOrder(order);
+                const result = db.addOrder(order);
+                return Promise.resolve(result);
             },
 
+            /**
+             * 주문 수정 (write).
+             * @param {number|string} id - 주문 ID
+             * @param {Object} updates - 업데이트할 필드
+             * @returns {Promise<Object|null>} 수정된 주문 또는 null
+             */
             updateOrder(id, updates) {
-                return db.updateOrder(id, updates);
+                const result = db.updateOrder(id, updates);
+                return Promise.resolve(result);
             },
 
+            /**
+             * 주문 삭제 (write).
+             * @param {number|string} id - 주문 ID
+             * @returns {Promise<boolean>} 삭제 여부
+             */
             deleteOrder(id) {
-                return db.deleteOrder(id);
+                const result = db.deleteOrder(id);
+                return Promise.resolve(result);
             },
 
+            /**
+             * 중복 주문 찾기 (read).
+             * @returns {Promise<Object|null>} 중복 주문 또는 null
+             */
             findDuplicateOrder(customerId, productId, color, size) {
-                return db.findDuplicateOrder(customerId, productId, color, size);
+                const result = db.findDuplicateOrder(customerId, productId, color, size);
+                return Promise.resolve(result);
             }
         };
     },
