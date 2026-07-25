@@ -5348,4 +5348,144 @@ CSS-first 작업으로 JS 동작, HTML 구조, DB/Supabase 작업은 일절 금�
 - local server cleanup 완료
 - 향후 3-7C 이후 단계에서 추가 UI polish 예정
 
+---
+
+## 3-7C: Dashboard Premium Cards Polish
+
+### 목적
+
+Dashboard 화면의 KPI cards, chart cards, quick summary 영역을 LESOUL premium boutique admin tone에 맞게 polish.
+3-7B에서 정의한 global theme tokens를 기반으로 dashboard-specific CSS 보강.
+CSS-first 작업으로 JS 동작, HTML 구조, DB/Supabase 작업은 일절 금지.
+
+### 수정 파일
+
+- `css/style.css` (KPI stat-card, chart-container, card typography, badge/flash premium rgba, dashboard 보강 규칙)
+- `tests/dashboard-theme-contract.test.mjs` (신규 추가: 26개 테스트)
+- `docs/CURRENT_ARCHITECTURE.md` (본 섹션)
+
+### Dashboard KPI card 변경 요약
+
+- `.stat-card`: padding 20px 22px로 조정, transition 추가, hover 시 subtle lift (`translateY(-1px)` + shadow-md)
+- `.stat-card::before`: top accent 3px → 2px, opacity 0.85 (과하지 않은 muted brown accent)
+- `.stat-card .stat-label`: font-size 11px, letter-spacing 0.8px, font-weight 500 (refined admin tone)
+- `.stat-card .stat-value`: letter-spacing -0.3px, line-height 1.2 (숫자 가독성 강화)
+- `.stat-card .stat-icon`: font-size 30px, `var(--primary)` 명시적 적용, opacity 0.12
+- `.stat-card .stat-value` overflow-wrap: anywhere (긴 숫자 카드 너비 초과 방지)
+
+### Chart container 변경 요약
+
+- `.chart-container`: padding 22px 24px, overflow: hidden (canvas 영역 깔끔하게 정리)
+- `.chart-container h3`: font-weight 600, letter-spacing 0.2px (refined header)
+- `.chart-container canvas`: max-width 100% (responsive 보강, 기존 canvas 동작 유지)
+
+### Typography hierarchy 변경 요약
+
+- `.card`: padding 24px → 22px 24px (refined spacing)
+- `.card h2`: font-size 18px → 17px, letter-spacing 0.1px, h2 i font-size 16px 명시
+- `.card h3`: font-size 16px → 15px, letter-spacing 0.1px, h3 i 신규 규칙 (var(--primary), 14px)
+- 색상 hierarchy 유지: title `var(--gray-800)`, secondary `var(--gray-700)`, muted `var(--gray-500)`
+
+### Dashboard 보강 규칙 (신규)
+
+- `.action-bar h3`: margin 0, font-size 15px, font-weight 600, gap 8px 정렬
+- `.action-bar h3 i`: var(--primary), 14px
+- `.action-bar h3 .text-warning`: var(--warning) 명시
+- `.action-bar + .table` 등: margin-top 4px (action-bar와 table 사이 여백 정리)
+- `.card > p.text-muted` / `.card .action-bar + p.text-muted`: 12px padding (빈 데이터 안내 텍스트 가독성)
+- `.card p.text-warning`: var(--warning), font-weight 500
+
+### 상태/위험 색상 premium tone 전환
+
+- `.badge-pending/shipped/completed/cancelled/high/medium/low`: raw hex → premium rgba tone
+  - pending: camel rgba, completed: sage rgba, cancelled: warm gray rgba, low: terracotta rgba
+- `.flash-success/error/warning/info`: raw hex → premium rgba tone
+  - success: sage rgba, error: terracotta rgba, warning: camel rgba, info: slate rgba
+
+### 변경 금지 항목 준수
+
+| 항목 | 상태 |
+|---|---|
+| JS 동작 변경 | ❌ 없음 (app.js/analytics.js/products.js/auth-ui.js 미수정) |
+| HTML 구조 변경 | ❌ 없음 (index.html 미수정) |
+| DB/Supabase 작업 | ❌ 없음 |
+| migration 파일 | ❌ 미수정/미생성 |
+| 기존 selector/id/class | ✅ 모두 유지 |
+| 기존 route/hash 동작 | ✅ 유지 |
+| auth/bootstrap 동작 | ✅ 유지 |
+| chart canvas width/height 강제 변경 | ❌ 없음 (max-width 100%만 추가) |
+| `js/config.js` | ❌ 미생성/미커밋 |
+| `data_export.json` | ❌ 미생성/미커밋 |
+| service_role/token/key/password | ❌ 미출력 |
+| supabase db push/reset/pull | ❌ 없음 |
+
+### Tests 결과
+
+| 항목 | 결과 |
+|---|---|
+| 전체 tests | **616 tests, 0 fail** |
+| 기존 tests | 590 → all pass |
+| 신규 tests (dashboard-theme-contract) | 26 → all pass |
+| DC1~DC7 | KPI stat-card premium tone 검증 ✅ |
+| DC8~DC11 | chart-container premium tone 검증 ✅ |
+| DC12~DC14 | card typography hierarchy 검증 ✅ |
+| DC15~DC18 | legacy blue/purple purge 검증 ✅ |
+| DC19~DC22 | badge/flash premium rgba 검증 ✅ |
+| DC23~DC24 | dashboard responsive contract 검증 ✅ |
+| DC25~DC26 | sensitive data safety 검증 ✅ |
+
+### Preflight 결과
+
+| 항목 | 결과 |
+|---|---|
+| Branch check | ✅ PASS |
+| Staged files check | ✅ PASS |
+| Tracked forbidden files check | ✅ PASS |
+| service_role / sb_secret_ scan | ✅ PASS |
+| token/session/key console.log scan | ✅ PASS |
+| config.example.js default flags | ✅ PASS |
+| .gitignore check | ✅ PASS |
+| supabase migrations/tests check | ✅ PASS |
+| **전체** | ✅ **PASS** |
+
+### Browser Visual Smoke 결과
+
+scope: **legacy/local visual smoke** (SUPABASE_ENABLED=false, owner authenticated smoke PENDING)
+
+| 항목 | 결과 |
+|---|---|
+| dashboard 표시 | ✅ 정상 (header/sections 렌더링 확인) |
+| stat-card 존재 | ✅ 확인 |
+| stat-card premium tone 적용 | ✅ 확인 |
+| stat-value soft charcoal 색상 | ✅ 확인 (var(--gray-800) = #3A3530) |
+| sidebar/header 3-7B tone 유지 | ✅ 확인 |
+| console error | ✅ 없음 |
+| layout 깨짐 | ✅ 없음 |
+| products route 이동 후 복귀 | ✅ 정상 동작 |
+| 스크린샷 | ⚠️ 캡처 실패 (브라우저 탭 백그라운드) — visual 확인은 완료됨 |
+
+- owner 로그인을 하지 않았으므로 "owner authenticated smoke"가 아닌 "legacy/local visual smoke"로 기록
+- chart-container는 dashboard에 chart가 없어 skip (analytics route에서 별도 확인 권장)
+
+### Local Server Hygiene 결과
+
+| 항목 | 결과 |
+|---|---|
+| 작업 전 check | ✅ no listeners, no http.server |
+| 서버 실행 | python3 -m http.server 8080 |
+| 서버 종료 | `--kill` 모드로 정리 |
+| 작업 후 check | ✅ no listeners on 8080-8089, no http.server processes |
+
+### 최종 판정
+
+- **PASS** (Dashboard Premium Cards Polish 완료)
+- CSS-only 변경, JS/HTML/DB/migration 변경 없음
+- 기존 590 + 신규 26 = 616 tests all pass
+- preflight PASS
+- legacy/local visual smoke PASS (premium tone, no error, no layout break)
+- authenticated owner smoke: PENDING (별도 세션에서 진행 권장)
+- local server cleanup 완료
+- 향후 3-7D 이후 단계에서 추가 UI polish 예정
+
+
 
