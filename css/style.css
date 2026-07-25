@@ -42,12 +42,18 @@
     box-sizing: border-box;
 }
 
+img {
+    max-width: 100%;
+    height: auto;
+}
+
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', 'Noto Sans SC', sans-serif;
     background: var(--background);
     color: var(--gray-800);
     line-height: 1.6;
     font-size: 14px;
+    overflow-x: hidden;
 }
 
 #app {
@@ -878,68 +884,6 @@ textarea.form-control {
 .font-bold { font-weight: 700; }
 .w-100 { width: 100%; }
 
-@media (max-width: 1024px) {
-    .sidebar { width: 70px; }
-    .nav-text { display: none; }
-    .nav-link { justify-content: center; padding: 14px; }
-    .main-content { margin-left: 70px; }
-    .header-inner { padding-left: 90px; }
-}
-
-@media (max-width: 768px) {
-    .main-content { padding: 16px; }
-    .card { padding: 16px; }
-    .form-row { flex-direction: column; }
-    .stats-grid { grid-template-columns: repeat(2, 1fr); }
-    .filter-row { flex-direction: column; align-items: stretch; }
-    .filter-row .form-group { width: 100%; }
-    .action-bar { flex-direction: column; align-items: stretch; }
-}
-
-@media (max-width: 480px) {
-    .sidebar {
-        top: auto;
-        bottom: 0;
-        width: 100%;
-        height: 60px;
-        border-right: none;
-        border-top: 1px solid var(--gray-200);
-    }
-    .nav-menu {
-        display: flex;
-        padding: 0;
-        height: 100%;
-        overflow-x: auto;
-    }
-    .nav-item {
-        flex: 1;
-        margin: 0;
-        min-width: 60px;
-    }
-    .nav-link {
-        flex-direction: column;
-        padding: 8px 4px;
-        border-left: none;
-        border-top: 3px solid transparent;
-        height: 100%;
-        gap: 2px;
-    }
-    .nav-link.active {
-        background: rgba(139, 115, 85, 0.10);
-        border-left: none;
-        border-top-color: var(--primary);
-    }
-    .nav-link i { font-size: 18px; }
-    .nav-text { display: block; font-size: 10px; }
-    .main-content {
-        margin-left: 0;
-        margin-bottom: 60px;
-    }
-    .header-inner { padding-left: 16px; }
-    .store-subtitle { display: none; }
-    .stats-grid { grid-template-columns: 1fr; }
-}
-
 .sidebar-toggle {
     background: transparent;
     border: 1px solid var(--border-color);
@@ -1422,31 +1366,7 @@ textarea.form-control {
     display: none !important;
 }
 
-/* Mobile responsive */
-@media (max-width: 480px) {
-    .auth-root {
-        padding: 1rem;
-    }
-    .auth-panel {
-        padding: 2rem 1.25rem;
-        border-radius: 12px;
-    }
-    .auth-logo {
-        font-size: 1.5rem;
-    }
-    .auth-title {
-        font-size: 1.2rem;
-    }
-    .auth-button-row {
-        flex-direction: column;
-    }
-    .auth-button-secondary {
-        flex: 1;
-    }
-    .auth-context-badge {
-        display: none;
-    }
-}
+/* 3-7G: auth mobile responsive merged into main @media blocks above */
 
 /* ============================================================
    3-6E.6: Member Management UI Styles
@@ -1760,4 +1680,171 @@ textarea.form-control {
 .btn-primary:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+/* ============================================================
+   3-7G: Mobile Responsive Polish
+   - media queries placed at end so base rules match first
+   - premium boutique tone maintained across breakpoints
+   ============================================================ */
+@media (max-width: 1024px) {
+    .sidebar { width: 70px; }
+    .nav-text { display: none; }
+    .nav-link { justify-content: center; padding: 14px; }
+    .main-content { margin-left: 70px; }
+    .header-inner { padding-left: 90px; }
+    .stats-grid { gap: 1rem; }
+    .chart-container { padding: 1.25rem; }
+    .member-mgmt-container { padding: 1.5rem 1rem; }
+    .member-mgmt-card-header { padding: 0.85rem 1.25rem; }
+    .member-mgmt-table th,
+    .member-mgmt-table td { padding: 0.65rem 1rem; }
+}
+
+@media (max-width: 768px) {
+    .main-content { padding: 16px; }
+    .card { padding: 16px; }
+    .form-row { flex-direction: column; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 0.85rem; }
+    .filter-row { flex-direction: column; align-items: stretch; gap: 0.6rem; }
+    .filter-row .form-group { width: 100%; }
+    .filter-row .search-box { width: 100%; }
+    .action-bar { flex-direction: column; align-items: stretch; gap: 0.6rem; }
+    .action-bar-left, .action-bar-right { width: 100%; }
+    .action-bar .btn + .btn { margin-left: 0; }
+    .chart-container { padding: 1rem; }
+    .chart-container h3 { font-size: 0.9rem; }
+    .table-responsive, .card > .table, .card > div > .table {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .table { min-width: 480px; }
+    .member-mgmt-container { padding: 1.25rem 0.85rem; }
+    .member-mgmt-card { margin-bottom: 1rem; }
+    .member-mgmt-card-header {
+        padding: 0.85rem 1rem;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    .member-mgmt-card-header h3 { font-size: 0.9rem; }
+    .member-mgmt-table th,
+    .member-mgmt-table td { padding: 0.6rem 0.85rem; font-size: 0.8rem; }
+    .member-mgmt-table { min-width: 520px; }
+    .invite-generate-form { padding: 1.25rem; }
+    .invite-generate-form .form-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.4rem;
+    }
+    .invite-generate-form label { min-width: 0; }
+    .invite-code-box {
+        flex-wrap: wrap;
+        gap: 0.6rem;
+    }
+    .invite-code-box code {
+        font-size: 0.95rem;
+        padding: 0.55rem 1rem;
+        max-width: 100%;
+        overflow-wrap: anywhere;
+        word-break: break-all;
+    }
+    .auth-root { padding: 1rem; }
+    .auth-panel {
+        max-width: 100%;
+        padding: 2rem 1.5rem;
+    }
+    .header-right { gap: 0.4rem; }
+}
+
+@media (max-width: 480px) {
+    .sidebar {
+        top: auto;
+        bottom: 0;
+        width: 100%;
+        height: 60px;
+        border-right: none;
+        border-top: 1px solid var(--gray-200);
+    }
+    .nav-menu {
+        display: flex;
+        padding: 0;
+        height: 100%;
+        overflow-x: auto;
+    }
+    .nav-item {
+        flex: 1;
+        margin: 0;
+        min-width: 60px;
+    }
+    .nav-link {
+        flex-direction: column;
+        padding: 8px 4px;
+        border-left: none;
+        border-top: 3px solid transparent;
+        height: 100%;
+        gap: 2px;
+    }
+    .nav-link.active {
+        background: rgba(139, 115, 85, 0.10);
+        border-left: none;
+        border-top-color: var(--primary);
+    }
+    .nav-link i { font-size: 18px; }
+    .nav-text { display: block; font-size: 10px; }
+    .main-content {
+        margin-left: 0;
+        margin-bottom: 60px;
+        padding: 0.85rem;
+    }
+    .header-inner { padding-left: 16px; padding-right: 12px; }
+    .store-subtitle { display: none; }
+    .store-name {
+        max-width: 160px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .stats-grid { grid-template-columns: 1fr; gap: 0.75rem; }
+    .card { padding: 0.85rem; }
+    .card h2 { font-size: 1rem; }
+    .card h3 { font-size: 0.9rem; }
+    .chart-container { padding: 0.85rem; }
+    .chart-container h3 { font-size: 0.85rem; }
+    .action-bar .btn,
+    .action-bar-left .btn,
+    .action-bar-right .btn {
+        width: 100%;
+        justify-content: center;
+    }
+    .filter-row .btn { width: 100%; }
+    .table { min-width: 400px; font-size: 0.8rem; }
+    .member-mgmt-container { padding: 0.85rem 0.6rem; }
+    .member-mgmt-card-header {
+        padding: 0.75rem 0.85rem;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .member-mgmt-card-header h3 { font-size: 0.85rem; }
+    .member-mgmt-table { min-width: 480px; }
+    .member-mgmt-table th,
+    .member-mgmt-table td { padding: 0.55rem 0.75rem; font-size: 0.75rem; }
+    .invite-generate-form { padding: 0.85rem; }
+    .invite-code-result { padding: 0.85rem; }
+    .invite-code-box code {
+        font-size: 0.85rem;
+        padding: 0.5rem 0.85rem;
+        letter-spacing: 1px;
+    }
+    .auth-root { padding: 0.75rem; }
+    .auth-panel {
+        padding: 1.75rem 1.25rem;
+        border-radius: 12px;
+    }
+    .auth-logo { font-size: 1.5rem; }
+    .auth-title { font-size: 1.2rem; }
+    .auth-button-row { flex-direction: column; }
+    .auth-button-secondary { flex: 1; }
+    .auth-context-badge { display: none; }
+    .header-right { gap: 0.25rem; }
+    .header-right .btn { padding: 0.35rem 0.55rem; font-size: 0.75rem; }
 }
