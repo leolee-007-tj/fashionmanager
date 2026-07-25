@@ -4791,3 +4791,173 @@ owner가 아닌 사용자(staff/no-membership/guest)가 “직원/초대 관리�
 - 코드/DB/UI 변경 없음
 - 향후 결제 기능 구현 시 참조할 보안 원칙과 단계 계획 정의
 
+---
+
+## 57. 3-6G: Supabase Cloud MVP Final Readiness Audit (2026-07-24)
+
+### 목적
+
+Supabase Cloud MVP 전환 작업의 현재 준비 상태를 요약한다.
+지금까지 완료된 범위와 아직 남은 범위를 명확히 구분한다.
+운영 투입 전 위험 요소를 정리한다.
+
+> **Important**: 이 섹션은 audit/docs-only 작업이다.
+> 코드/DB/Edge Function/결제 기능 변경 없음.
+
+### 완료된 영역
+
+#### 1. Git/GitHub Safety
+
+| 항목 | 상태 |
+|---|---|
+| cleaned branch 사용 | ✅ PASS (`feature/supabase-cloud-migration`) |
+| main/gh-pages 직접 작업 없음 | ✅ PASS |
+| force push 없음 | ✅ PASS |
+| data_export.json 없음 | ✅ PASS |
+| js/config.js commit 없음 | ✅ PASS |
+| GitHub Support ticket | ⚠️ PARTIAL (민감데이터 purge ticket은 아직 닫지 않음, GitHub 확인 후 close 예정) |
+
+#### 2. Supabase Remote DB
+
+| 항목 | 상태 |
+|---|---|
+| remote project linked | ✅ PASS |
+| migrations Local/Remote 동기화 | ✅ PASS (Local 19 = Remote 19) |
+| 19 migrations applied | ✅ PASS |
+| latest applied migration | ✅ `20260711001700_store_member_management_rpcs.sql` |
+| no seed push | ✅ PASS |
+| no reset/pull | ✅ PASS |
+
+#### 3. Auth / Membership
+
+| 항목 | 상태 |
+|---|---|
+| owner login flow | ✅ PASS (3-6E.2.4 smoke) |
+| no-membership onboarding flow | ✅ PASS (3-6E.4.2 smoke) |
+| invite-code join flow | ✅ PASS (3-6E.4.2 smoke) |
+| guest/practice separation | ✅ PASS (3-6E.4.1-FIX) |
+| owner-only actual LESOUL access policy | ✅ PASS |
+
+#### 4. Invite System
+
+| 항목 | 상태 |
+|---|---|
+| store_invitations foundation | ✅ PASS (3-6E.1) |
+| create_initial_store invite-code hardening | ✅ PASS (3-6E.2) |
+| generate_store_invite_code | ✅ PASS (3-6E.3) |
+| list_store_invite_codes | ✅ PASS (3-6E.3.2) |
+| revoke_store_invite_code | ✅ PASS (3-6E.3.2) |
+| owner browser smoke | ✅ PASS (3-6E.4.2, 3-6E.6.1) |
+| no active invite leftover from smoke | ✅ PASS (모든 smoke invite는 revoked 처리됨) |
+
+#### 5. Member Management
+
+| 항목 | 상태 |
+|---|---|
+| list_store_members | ✅ PASS (3-6E.5) |
+| deactivate_store_member | ✅ PASS (3-6E.5.1) |
+| owner UI route `#/members` | ✅ PASS (3-6E.6) |
+| owner member/invite UI browser smoke | ✅ PASS (3-6E.6.1) |
+| non-owner browser smoke | ⏳ PENDING (별도 계정 부재, 3-6E.6.2) |
+| contract tests cover owner-only gate | ✅ PASS (29개 contract tests) |
+
+#### 6. Products Remote Path
+
+| 항목 | 상태 |
+|---|---|
+| Supabase Product DataSource exists | ✅ PASS |
+| create/update/delete product RPC path exists | ✅ PASS |
+| prior owner browser product smoke | ✅ PASS |
+| guest/no-membership actual LESOUL product access restricted | ✅ PASS |
+| orders/customers/analytics full remote conversion | ⏳ PENDING |
+
+#### 7. Billing Placeholder
+
+| 항목 | 상태 |
+|---|---|
+| architecture documented | ✅ PASS (3-6F) |
+| no payment implementation | ✅ (구현 안 함) |
+| no Edge Function | ✅ (생성 안 함) |
+| no secret key | ✅ (작성 안 함) |
+| no DB table yet | ✅ (생성 안 함) |
+
+#### 8. Test/Preflight
+
+| 항목 | 상태 |
+|---|---|
+| current tests result | ✅ **543 tests, 0 fail** |
+| current preflight result | ✅ **PASS** |
+| GitHub Actions CI | ❌ PENDING (설정 안 됨) |
+
+### Remaining Work
+
+아래 항목은 PENDING으로 명확히 기록:
+
+- ⏳ staff/no-membership/guest actual browser smoke with separate accounts
+- ⏳ orders remote migration/data source
+- ⏳ customers remote migration/data source
+- ⏳ analytics remote aggregation
+- ⏳ expenses/settings/keywords remote review
+- ⏳ billing DB/RLS actual implementation
+- ⏳ billing UI actual implementation
+- ⏳ premium boutique UI redesign
+- ⏳ GitHub cached sensitive object purge 확인 (Support ticket close는 GitHub 확인 후)
+- ⏳ main/gh-pages merge/deploy decision (나중에 결정)
+
+### Risk Register
+
+| Risk | Current Level | Mitigation |
+|---|---|---|
+| GitHub cached sensitive object pending | ⚠️ Medium | Support ticket 유지, GitHub purge 확인 전까지 ticket close 금지 |
+| no CI | ⚠️ Medium | preflight + local tests로 대체, 향후 GitHub Actions 도입 검토 |
+| local-only js/config.js dependency | ⚠️ Medium | config.example.js로 template 제공, 실제 config는 gitignored |
+| no full non-owner browser test account | ⚠️ Low | contract tests로 owner-only gate 검증, 별도 계정 확보 시 smoke 보완 |
+| orders/customers still local or partially remote | ⚠️ Medium | 3-8A/3-8B에서 remote 전환 계획 |
+| manual Supabase remote operations risk | ⚠️ Medium | preflight + dry-run + db push gate 유지 |
+| payment not implemented | ℹ️ Low | billing placeholder로 정책만 정의, 실제 구현은 후순위 |
+| browser smoke depends on local config | ⚠️ Low | local server + config.js 의존성 명시, 운영 환경 분리 시 별도 검증 필요 |
+
+### Go/No-Go 판정
+
+| 항목 | 판정 |
+|---|---|
+| Internal owner testing | ✅ **GO** |
+| Public multi-user production | ❌ **NO-GO** |
+| Paid subscription production | ❌ **NO-GO** |
+| Product CRUD owner smoke | ✅ **GO with caution** |
+| Staff/member management | ✅ **GO for owner**, ⏳ PENDING for real staff account browser verification |
+
+### Next Recommended Steps
+
+1. **3-6G.1**: Runtime Config & Local Server Hygiene
+2. **3-7A**: Premium Boutique UI Polish Plan
+3. **3-7B**: Dashboard / Products UI Polish
+4. **3-8A**: Orders Remote DataSource Planning
+5. **3-8B**: Customers Remote DataSource Planning
+6. Billing actual implementation은 뒤로 미룸
+
+### 검증 결과
+
+| 항목 | 결과 |
+|---|---|
+| docs-only | ✅ yes |
+| code changes | ❌ no |
+| migration | ❌ no |
+| db push | ❌ no |
+| tests | ✅ **543 tests, 0 fail** |
+| preflight | ✅ **PASS** |
+| 실제 token/key/password 값 in docs | ❌ no |
+| js/config.js in docs | ❌ no |
+| migration 변경 | ❌ no |
+| data_export.json | ❌ no |
+
+> 보안 원칙 설명을 위해 `service_role`, `token`, `key`, `password` 등의 단어가 “금지/위험” 문맥으로 등장하는 것은 허용. 실제 값이나 예시 키는 금지.
+
+### 최종 판정
+
+- **PASS** (Supabase Cloud MVP Final Readiness Audit 문서화 완료)
+- Internal owner testing: **GO**
+- Public multi-user / paid subscription production: **NO-GO**
+- 코드/DB/UI 변경 없음
+- 향후 작업은 3-6G.1 → 3-7A → 3-7B → 3-8A → 3-8B 순서 권장
+
