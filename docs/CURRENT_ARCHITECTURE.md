@@ -5197,3 +5197,155 @@ LESOUL의 실제 브랜드 톤에 맞는 고급 여성복 편집샵/프라이빗
 - UI 구현 없음, 코드/DB 변경 없음
 - 향후 3-7B ~ 3-7G 단계에서 CSS-first 점진 적용 예정
 
+---
+
+## 3-7B: Global Theme Tokens + Header/Sidebar CSS Polish
+
+### 목적
+
+LESOUL 앱의 전체 시각 톤을 premium boutique / quiet luxury 방향으로 전환.
+CSS-first 작업으로 JS 동작, HTML 구조, DB/Supabase 작업은 일절 금지.
+브랜드 톤: beige / ivory / warm white / muted brown / soft charcoal.
+
+### 수정 파일
+
+- `css/style.css` (theme tokens 재정의 + header/sidebar/auth/card/button 등 premium tone 적용)
+- `tests/ui-theme-contract.test.mjs` (신규 추가: 47개 테스트)
+- `docs/CURRENT_ARCHITECTURE.md` (본 섹션)
+
+### Theme Token 변경 요약
+
+| Token | 기존 값 | 3-7B 값 | 비고 |
+|---|---|---|---|
+| `--primary` | `#667eea` (파랑) | `#8B7355` (muted brown) | boutique brown |
+| `--primary-dark` | `#764ba2` (보라) | `#6A5641` (deep brown) |  |
+| `--primary-light` | (없음) | `#B8A088` (soft brown) | 신규 추가 |
+| `--gradient` | 파랑→보라 | `#8B7355 → #6A5641` | brown gradient |
+| `--success` | `#28a745` | `#6B8E5A` | muted sage |
+| `--warning` | `#ffc107` | `#C9A36A` | warm camel |
+| `--danger` | `#dc3545` | `#A0563C` | muted terracotta |
+| `--info` | `#17a2b8` | `#7B8C9A` | muted slate |
+| `--white` | `#ffffff` | `#FAF7F2` | warm white |
+| `--background` | (없음) | `#F5F1EB` | warm ivory (신규) |
+| `--border-color` | (없음) | `#E0D8CE` | soft beige gray (신규) |
+| `--gray-50..900` | 차가운 회색 | warm gray ramp |  |
+| `--border-radius` | `8px` | `12px` | refined |
+| `--shadow-sm/md/lg` | 차가운 검정 그림자 | warm charcoal rgba |  |
+| `--sidebar-width` | `220px` | `220px` | 유지 |
+| `--header-height` | `60px` | `60px` | 유지 |
+
+기존 변수명은 모두 유지, 값만 premium tone으로 조정. 신규 변수는 추가만(`--primary-light`, `--background`, `--border-color`).
+
+### Header Polish 요약
+
+- `.header`: gradient 배경 → `var(--white)` warm white, `border-bottom: 1px solid var(--border-color)`, subtle shadow
+- `.store-name`: letter-spacing 2px, refined font weight 600
+- `.store-subtitle`: muted warm gray
+- `.lang-btn`: transparent 배경, subtle hover, 기존 파랑 box-shadow 제거
+- `.sidebar-toggle`: transparent + border, warm hover
+
+### Sidebar Polish 요약
+
+- `.sidebar`: `var(--white)` 배경, `border-right: 1px solid var(--border-color)`
+- `.nav-menu`: padding 조정 (14px 10px)
+- `.nav-link`: warm gray text, 8px border-radius, margin 0 4px
+- `.nav-link:hover`: warm ivory background + `--primary-dark` text
+- `.nav-link.active`: `rgba(139, 115, 85, 0.10)` 배경 + `--primary-dark` text + brown border-left
+- `.nav-link i`: warm gray, active 시 brown
+- `.sidebar.collapsed` 70px 규칙 유지
+
+### 기타 Premium Tone 적용
+
+- `.card`, `.stat-card`, `.chart-container`, `.member-mgmt-card`: warm white 배경 + soft beige border
+- `.btn-primary`: `var(--primary)` flat (gradient 제거)
+- `.preference-tag`: brown flat
+- `.stat-card::before`: brown 3px (gradient 4px → flat 3px)
+- `.upload-area:hover/.dragover`: brown rgba
+- `.form-control:focus`: brown rgba shadow
+- `.auth-root`: brown gradient 배경
+- `.auth-panel`: warm white, warm shadow
+- `.auth-logo`: brown gradient text
+- `.auth-button`: brown flat
+- `.auth-input:focus`: brown shadow
+- `.auth-context-badge`: warm brown tint pill
+- `.auth-logout-button`: outline style (warm gray)
+- `.badge-vip/gold/silver/bronze`: warm gold/camel/taupe/bronze gradient
+- `.classification-badge.category/color/size`: warm brown/terracotta/sage tint
+- `.status-badge.*`: premium tone rgba
+
+### 변경 금지 항목 준수
+
+| 항목 | 상태 |
+|---|---|
+| JS 동작 변경 | ❌ 없음 |
+| HTML 구조 변경 | ❌ 없음 (index.html 미수정) |
+| DB/Supabase 작업 | ❌ 없음 |
+| migration 파일 | ❌ 미수정 |
+| 기존 selector/id/class | ✅ 모두 유지 |
+| 기존 route/hash 동작 | ✅ 유지 |
+| auth/bootstrap 동작 | ✅ 유지 |
+| `js/config.js` | ❌ 미생성/미커밋 |
+| `data_export.json` | ❌ 미생성/미커밋 |
+| service_role/token/key/password | ❌ 미출력 |
+
+### Tests 결과
+
+| 항목 | 결과 |
+|---|---|
+| 전체 tests | **590 tests, 0 fail** |
+| 기존 tests | 543 → all pass |
+| 신규 tests (ui-theme-contract) | 47 → all pass |
+| TC1~TC11 | premium theme tokens 검증 ✅ |
+| TC12~TC29 | critical selectors 유지 검증 ✅ |
+| TC30~TC37 | index.html DOM contract 검증 ✅ |
+| TC38~TC40 | JS logic untouched 검증 ✅ |
+| TC41~TC45 | mobile responsive contract 검증 ✅ |
+| TC46~TC47 | sensitive data safety 검증 ✅ |
+
+### Preflight 결과
+
+| 항목 | 결과 |
+|---|---|
+| Branch check | ✅ PASS |
+| Staged files check | ✅ PASS |
+| Tracked forbidden files check | ✅ PASS |
+| service_role / sb_secret_ scan | ✅ PASS |
+| token/session/key console.log scan | ✅ PASS |
+| config.example.js default flags | ✅ PASS |
+| .gitignore check | ✅ PASS |
+| supabase migrations/tests check | ✅ PASS |
+| **전체** | ✅ **PASS** |
+
+### Browser Visual Smoke 결과
+
+| 항목 | 결과 |
+|---|---|
+| 페이지 로드 | ✅ 정상 |
+| premium brown tone 적용 | ✅ 확인 (기존 파랑/보라 아님) |
+| console error | ✅ 없음 |
+| layout 깨짐 | ✅ 없음 |
+| 스크린샷 | ✅ 캡처 완료 |
+
+- SUPABASE_ENABLED=false (legacy mode)로 대시보드 직접 렌더링됨
+- owner 로그인 후 화면은 사용자 직접 확인 권장
+
+### Local Server Hygiene 결과
+
+| 항목 | 결과 |
+|---|---|
+| 작업 전 check | ✅ no listeners, no http.server |
+| 서버 실행 | python3 -m http.server 8080 |
+| 서버 종료 | `--kill` 모드로 정리 |
+| 작업 후 check | ✅ no listeners on 8080-8089, no http.server processes |
+
+### 최종 판정
+
+- **PASS** (Global Theme Tokens + Header/Sidebar CSS Polish 완료)
+- CSS-only 변경, JS/HTML/DB/migration 변경 없음
+- 기존 543 + 신규 47 = 590 tests all pass
+- preflight PASS
+- browser smoke PASS (premium brown tone, no error, no layout break)
+- local server cleanup 완료
+- 향후 3-7C 이후 단계에서 추가 UI polish 예정
+
+

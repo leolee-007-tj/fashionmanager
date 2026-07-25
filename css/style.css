@@ -1,28 +1,38 @@
+/* ============================================================
+   3-7B: Premium Boutique Theme Tokens
+   - quiet luxury / premium boutique / Korean select shop
+   - beige / ivory / warm white / muted brown / soft charcoal
+   - 기존 변수명 유지, 값만 premium tone으로 조정
+   ============================================================ */
 :root {
-    --primary: #667eea;
-    --primary-dark: #764ba2;
-    --gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    --success: #28a745;
-    --warning: #ffc107;
-    --danger: #dc3545;
-    --info: #17a2b8;
-    --secondary: #6c757d;
-    --white: #ffffff;
-    --gray-50: #f8f9fa;
-    --gray-100: #f8f9fa;
-    --gray-200: #e9ecef;
-    --gray-300: #dee2e6;
-    --gray-400: #ced4da;
-    --gray-500: #adb5bd;
-    --gray-600: #6c757d;
-    --gray-700: #495057;
-    --gray-800: #343a40;
+    --primary: #8B7355;          /* muted brown (boutique brown) */
+    --primary-dark: #6A5641;     /* deep warm brown */
+    --primary-light: #B8A088;    /* soft brown (추가 토큰) */
+    --gradient: linear-gradient(135deg, #8B7355 0%, #6A5641 100%);
+    --success: #6B8E5A;          /* muted sage green */
+    --warning: #C9A36A;          /* warm camel */
+    --danger: #A0563C;           /* muted terracotta */
+    --info: #7B8C9A;             /* muted slate */
+    --secondary: #8A8275;        /* warm gray */
+    --white: #FAF7F2;            /* warm white */
+    --background: #F5F1EB;       /* warm ivory (추가 토큰) */
+    --border-color: #E0D8CE;     /* soft beige gray (추가 토큰) */
+    --gray-50: #FAF7F2;          /* warm white */
+    --gray-100: #F5F1EB;         /* warm ivory */
+    --gray-200: #E8E0D5;         /* warm beige */
+    --gray-300: #D4C9B8;         /* soft beige gray */
+    --gray-400: #B5A99A;         /* warm taupe */
+    --gray-500: #8A8275;         /* warm gray */
+    --gray-600: #6B6358;         /* warm dark gray */
+    --gray-700: #4A4540;         /* warm charcoal */
+    --gray-800: #3A3530;         /* soft charcoal */
+    --gray-900: #2A2520;         /* deep charcoal (추가 토큰) */
     --sidebar-width: 220px;
     --header-height: 60px;
-    --border-radius: 8px;
-    --shadow-sm: 0 2px 4px rgba(0,0,0,0.05);
-    --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
-    --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+    --border-radius: 12px;       /* refined 8 → 12 */
+    --shadow-sm: 0 1px 3px rgba(74, 69, 64, 0.04);
+    --shadow-md: 0 2px 8px rgba(74, 69, 64, 0.06);
+    --shadow-lg: 0 6px 18px rgba(74, 69, 64, 0.10);
     --transition: all 0.2s ease;
 }
 
@@ -34,7 +44,7 @@
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', 'Noto Sans SC', sans-serif;
-    background: var(--gray-100);
+    background: var(--background);
     color: var(--gray-800);
     line-height: 1.6;
     font-size: 14px;
@@ -51,10 +61,11 @@ body {
     left: 0;
     right: 0;
     height: var(--header-height);
-    background: var(--gradient);
-    color: white;
+    background: var(--white);
+    color: var(--gray-800);
     z-index: 100;
-    box-shadow: var(--shadow-md);
+    box-shadow: var(--shadow-sm);
+    border-bottom: 1px solid var(--border-color);
 }
 
 .header-inner {
@@ -73,14 +84,17 @@ body {
 
 .store-name {
     font-size: 20px;
-    font-weight: 700;
-    letter-spacing: 1px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    color: var(--gray-800);
 }
 
 .store-subtitle {
-    font-size: 13px;
-    opacity: 0.9;
+    font-size: 12px;
+    opacity: 0.65;
     font-weight: 400;
+    color: var(--gray-600);
+    letter-spacing: 0.5px;
 }
 
 .header-right {
@@ -95,27 +109,31 @@ body {
 }
 
 .lang-btn {
-    background: rgba(255,255,255,0.15);
-    border: none;
+    background: transparent;
+    border: 1px solid transparent;
     border-radius: 50%;
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
     cursor: pointer;
-    font-size: 18px;
+    font-size: 16px;
     transition: var(--transition);
     display: flex;
     align-items: center;
     justify-content: center;
+    opacity: 0.55;
 }
 
 .lang-btn:hover {
-    background: rgba(255,255,255,0.3);
+    background: var(--gray-100);
+    opacity: 0.85;
 }
 
 .lang-btn.active {
-    background: rgba(255,255,255,0.5);
-    box-shadow: inset 0 2px 6px rgba(0,0,0,0.3);
-    transform: scale(0.95);
+    background: var(--gray-100);
+    border-color: var(--border-color);
+    box-shadow: none;
+    transform: scale(0.96);
+    opacity: 1;
 }
 
 .sidebar {
@@ -124,15 +142,15 @@ body {
     left: 0;
     bottom: 0;
     width: var(--sidebar-width);
-    background: white;
-    border-right: 1px solid var(--gray-200);
+    background: var(--white);
+    border-right: 1px solid var(--border-color);
     overflow-y: auto;
     z-index: 90;
 }
 
 .nav-menu {
     list-style: none;
-    padding: 12px 0;
+    padding: 14px 10px;
 }
 
 .nav-item {
@@ -143,22 +161,24 @@ body {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 12px 20px;
-    color: var(--gray-700);
+    padding: 11px 16px;
+    color: var(--gray-600);
     text-decoration: none;
     transition: var(--transition);
     border-left: 3px solid transparent;
+    border-radius: 8px;
     font-weight: 500;
+    margin: 0 4px;
 }
 
 .nav-link:hover {
     background: var(--gray-100);
-    color: var(--primary);
+    color: var(--primary-dark);
 }
 
 .nav-link.active {
-    background: linear-gradient(90deg, rgba(102,126,234,0.1) 0%, transparent 100%);
-    color: var(--primary);
+    background: rgba(139, 115, 85, 0.10);
+    color: var(--primary-dark);
     border-left-color: var(--primary);
     font-weight: 600;
 }
@@ -166,7 +186,13 @@ body {
 .nav-link i {
     width: 20px;
     text-align: center;
-    font-size: 16px;
+    font-size: 15px;
+    color: var(--gray-500);
+    transition: var(--transition);
+}
+
+.nav-link.active i {
+    color: var(--primary);
 }
 
 .nav-text {
@@ -182,11 +208,12 @@ body {
 }
 
 .card {
-    background: white;
+    background: var(--white);
     border-radius: var(--border-radius);
     padding: 24px;
     margin-bottom: 20px;
     box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border-color);
 }
 
 .card h2 {
@@ -230,8 +257,12 @@ body {
 }
 
 .btn-primary {
-    background: var(--gradient);
-    color: white;
+    background: var(--primary);
+    color: var(--white);
+}
+
+.btn-primary:hover {
+    background: var(--primary-dark);
 }
 
 .btn-secondary {
@@ -245,11 +276,11 @@ body {
 
 .btn-success {
     background: var(--success);
-    color: white;
+    color: var(--white);
 }
 
 .btn-success:hover {
-    background: #218838;
+    background: #557A4A;
 }
 
 .btn-warning {
@@ -259,16 +290,16 @@ body {
 
 .btn-danger {
     background: var(--danger);
-    color: white;
+    color: var(--white);
 }
 
 .btn-danger:hover {
-    background: #c82333;
+    background: #834531;
 }
 
 .btn-info {
     background: var(--info);
-    color: white;
+    color: var(--white);
 }
 
 .btn-sm {
@@ -295,14 +326,15 @@ body {
     border-radius: var(--border-radius);
     font-size: 14px;
     transition: var(--transition);
-    background: white;
+    background: var(--white);
     font-family: inherit;
+    color: var(--gray-800);
 }
 
 .form-control:focus {
     outline: none;
     border-color: var(--primary);
-    box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
+    box-shadow: 0 0 0 3px rgba(139, 115, 85, 0.12);
 }
 
 .form-row {
@@ -411,12 +443,13 @@ textarea.form-control {
 }
 
 .stat-card {
-    background: white;
+    background: var(--white);
     border-radius: var(--border-radius);
     padding: 20px;
     box-shadow: var(--shadow-sm);
     position: relative;
     overflow: hidden;
+    border: 1px solid var(--border-color);
 }
 
 .stat-card::before {
@@ -425,8 +458,8 @@ textarea.form-control {
     top: 0;
     left: 0;
     right: 0;
-    height: 4px;
-    background: var(--gradient);
+    height: 3px;
+    background: var(--primary);
 }
 
 .stat-card .stat-label {
@@ -579,12 +612,12 @@ textarea.form-control {
 
 .upload-area:hover {
     border-color: var(--primary);
-    background: rgba(102,126,234,0.05);
+    background: rgba(139, 115, 85, 0.05);
 }
 
 .upload-area.dragover {
     border-color: var(--primary);
-    background: rgba(102,126,234,0.1);
+    background: rgba(139, 115, 85, 0.10);
 }
 
 .upload-area i {
@@ -604,11 +637,12 @@ textarea.form-control {
 }
 
 .chart-container {
-    background: white;
+    background: var(--white);
     border-radius: var(--border-radius);
     padding: 20px;
     box-shadow: var(--shadow-sm);
     margin-bottom: 20px;
+    border: 1px solid var(--border-color);
 }
 
 .chart-container h3 {
@@ -624,8 +658,8 @@ textarea.form-control {
 }
 
 .preference-tag {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
+    background: var(--primary);
+    color: var(--white);
     padding: 6px 14px;
     border-radius: 20px;
     font-size: 12px;
@@ -711,7 +745,7 @@ textarea.form-control {
         gap: 2px;
     }
     .nav-link.active {
-        background: var(--gray-50);
+        background: rgba(139, 115, 85, 0.10);
         border-left: none;
         border-top-color: var(--primary);
     }
@@ -727,14 +761,14 @@ textarea.form-control {
 }
 
 .sidebar-toggle {
-    background: rgba(255,255,255,0.15);
-    border: none;
-    color: white;
-    width: 36px;
-    height: 36px;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--gray-700);
+    width: 34px;
+    height: 34px;
     border-radius: 8px;
     cursor: pointer;
-    font-size: 16px;
+    font-size: 15px;
     transition: var(--transition);
     display: flex;
     align-items: center;
@@ -742,7 +776,8 @@ textarea.form-control {
 }
 
 .sidebar-toggle:hover {
-    background: rgba(255,255,255,0.25);
+    background: var(--gray-100);
+    color: var(--primary-dark);
 }
 
 .sidebar.collapsed {
@@ -769,10 +804,10 @@ textarea.form-control {
 .flex-wrap { flex-wrap: wrap; }
 .flex-column { flex-direction: column; }
 
-.badge-vip { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; }
-.badge-gold { background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); color: white; }
-.badge-silver { background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%); color: white; }
-.badge-bronze { background: linear-gradient(135deg, #cd7f32 0%, #b8860b 100%); color: white; }
+.badge-vip { background: linear-gradient(135deg, #C9A36A 0%, #A8824A 100%); color: var(--white); }
+.badge-gold { background: linear-gradient(135deg, #D4B07A 0%, #B8915A 100%); color: var(--white); }
+.badge-silver { background: linear-gradient(135deg, #B5A99A 0%, #8A8275 100%); color: var(--white); }
+.badge-bronze { background: linear-gradient(135deg, #A57855 0%, #835E3F 100%); color: var(--white); }
 
 .keywords-grid {
     display: flex;
@@ -834,34 +869,34 @@ textarea.form-control {
 }
 
 .classification-badge.category {
-    background: #e0e7ff;
-    color: #4338ca;
-    border-color: #c7d2fe;
+    background: rgba(139, 115, 85, 0.12);
+    color: #6A5641;
+    border-color: rgba(139, 115, 85, 0.30);
 }
 
 .classification-badge.color {
-    background: #fce7f3;
-    color: #be185d;
-    border-color: #fbcfe8;
+    background: rgba(160, 86, 60, 0.10);
+    color: #7A3E26;
+    border-color: rgba(160, 86, 60, 0.28);
 }
 
 .classification-badge.size {
-    background: #d1fae5;
-    color: #047857;
-    border-color: #a7f3d0;
+    background: rgba(107, 142, 90, 0.12);
+    color: #4A6240;
+    border-color: rgba(107, 142, 90, 0.30);
 }
 
 .classification-badge.unclassified {
-    background: #f3f4f6;
-    color: #9ca3af;
-    border-color: #e5e7eb;
+    background: var(--gray-100);
+    color: var(--gray-500);
+    border-color: var(--gray-200);
     font-style: italic;
 }
 
 /* ============================================================
-   Auth Gate UI (3-4B)
+   Auth Gate UI (3-4B / 3-7B premium tone)
    - Rendered into #auth-root only.
-   - Uses purple gradient theme consistent with existing app.
+   - Premium boutique tone: muted brown + warm ivory.
    - Mobile responsive, max-width 420px panel.
    ============================================================ */
 
@@ -871,7 +906,7 @@ textarea.form-control {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #8B7355 0%, #6A5641 100%);
     padding: 1.5rem;
     z-index: 1000;
     overflow-y: auto;
@@ -884,9 +919,9 @@ textarea.form-control {
 .auth-panel {
     width: 100%;
     max-width: 420px;
-    background: #ffffff;
+    background: var(--white);
     border-radius: 16px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 20px 60px rgba(42, 37, 32, 0.20);
     padding: 2.5rem 2rem;
     box-sizing: border-box;
     animation: authFadeIn 0.3s ease;
@@ -900,27 +935,27 @@ textarea.form-control {
 .auth-logo {
     text-align: center;
     font-size: 1.75rem;
-    font-weight: 700;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    font-weight: 600;
+    background: linear-gradient(135deg, #8B7355 0%, #6A5641 100%);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
     color: transparent;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.1em;
     margin-bottom: 1.25rem;
 }
 
 .auth-title {
     font-size: 1.35rem;
     font-weight: 600;
-    color: #343a40;
+    color: var(--gray-800);
     margin: 0 0 0.5rem 0;
     text-align: center;
 }
 
 .auth-description {
     font-size: 0.9rem;
-    color: #6c757d;
+    color: var(--gray-600);
     text-align: center;
     margin: 0 0 1.5rem 0;
 }
@@ -940,16 +975,16 @@ textarea.form-control {
 .auth-label {
     font-size: 0.85rem;
     font-weight: 500;
-    color: #495057;
+    color: var(--gray-700);
 }
 
 .auth-input {
     width: 100%;
     padding: 0.7rem 0.9rem;
     font-size: 0.95rem;
-    color: #343a40;
-    background: #ffffff;
-    border: 1px solid #dee2e6;
+    color: var(--gray-800);
+    background: var(--white);
+    border: 1px solid var(--gray-300);
     border-radius: 8px;
     box-sizing: border-box;
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -959,8 +994,8 @@ textarea.form-control {
 .auth-input:focus,
 .auth-input:focus-visible {
     outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(139, 115, 85, 0.15);
 }
 
 .auth-button-row {
@@ -974,17 +1009,17 @@ textarea.form-control {
     padding: 0.75rem 1rem;
     font-size: 0.95rem;
     font-weight: 600;
-    color: #ffffff;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: var(--white);
+    background: var(--primary);
     border: none;
     border-radius: 8px;
     cursor: pointer;
-    transition: opacity 0.15s ease, transform 0.1s ease;
+    transition: background 0.15s ease, transform 0.1s ease;
     font-family: inherit;
 }
 
 .auth-button:hover:not(:disabled) {
-    opacity: 0.92;
+    background: var(--primary-dark);
 }
 
 .auth-button:active:not(:disabled) {
@@ -993,7 +1028,7 @@ textarea.form-control {
 
 .auth-button:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.35);
+    box-shadow: 0 0 0 3px rgba(139, 115, 85, 0.35);
 }
 
 .auth-button:disabled {
@@ -1006,9 +1041,9 @@ textarea.form-control {
     padding: 0.75rem 1.1rem;
     font-size: 0.9rem;
     font-weight: 500;
-    color: #495057;
-    background: #f8f9fa;
-    border: 1px solid #dee2e6;
+    color: var(--gray-700);
+    background: var(--gray-100);
+    border: 1px solid var(--gray-300);
     border-radius: 8px;
     cursor: pointer;
     transition: background 0.15s ease;
@@ -1016,12 +1051,12 @@ textarea.form-control {
 }
 
 .auth-button-secondary:hover:not(:disabled) {
-    background: #eef2ff;
+    background: var(--gray-200);
 }
 
 .auth-button-secondary:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.25);
+    box-shadow: 0 0 0 3px rgba(139, 115, 85, 0.25);
 }
 
 .auth-button-secondary:disabled {
@@ -1035,9 +1070,9 @@ textarea.form-control {
 }
 
 .auth-error {
-    background: #fef2f2;
-    color: #b91c1c;
-    border: 1px solid #fecaca;
+    background: rgba(160, 86, 60, 0.08);
+    color: #7A3E26;
+    border: 1px solid rgba(160, 86, 60, 0.30);
     padding: 0.65rem 0.85rem;
     border-radius: 8px;
     font-size: 0.85rem;
@@ -1051,7 +1086,7 @@ textarea.form-control {
 }
 
 .auth-link {
-    color: #667eea;
+    color: var(--primary);
     text-decoration: none;
     font-size: 0.9rem;
     font-weight: 500;
@@ -1063,14 +1098,14 @@ textarea.form-control {
 
 .auth-link:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 0 0 2px rgba(139, 115, 85, 0.4);
     border-radius: 4px;
 }
 
 .auth-loading {
     text-align: center;
     padding: 1.5rem 0;
-    color: #6c757d;
+    color: var(--gray-600);
     font-size: 0.95rem;
 }
 
@@ -1080,8 +1115,8 @@ textarea.form-control {
     width: 1.25rem;
     height: 1.25rem;
     margin-right: 0.5rem;
-    border: 2px solid #e9ecef;
-    border-top-color: #667eea;
+    border: 2px solid var(--gray-200);
+    border-top-color: var(--primary);
     border-radius: 50%;
     vertical-align: middle;
     animation: authSpin 0.8s linear infinite;
@@ -1100,8 +1135,8 @@ textarea.form-control {
 
 .auth-store-option {
     padding: 0.85rem 1rem;
-    background: #f8f9fa;
-    border: 1px solid #e9ecef;
+    background: var(--gray-100);
+    border: 1px solid var(--gray-200);
     border-radius: 10px;
     cursor: pointer;
     transition: border-color 0.15s ease, background 0.15s ease, transform 0.1s ease;
@@ -1109,8 +1144,8 @@ textarea.form-control {
 
 .auth-store-option:hover,
 .auth-store-option:focus-visible {
-    border-color: #667eea;
-    background: #eef2ff;
+    border-color: var(--primary);
+    background: rgba(139, 115, 85, 0.06);
     outline: none;
 }
 
@@ -1120,14 +1155,14 @@ textarea.form-control {
 
 .auth-store-name-text {
     font-weight: 600;
-    color: #343a40;
+    color: var(--gray-800);
     font-size: 0.95rem;
     margin-bottom: 0.2rem;
 }
 
 .auth-store-role-text {
     font-size: 0.8rem;
-    color: #6c757d;
+    color: var(--gray-600);
     text-transform: capitalize;
 }
 
@@ -1136,9 +1171,9 @@ textarea.form-control {
     display: inline-block;
     padding: 0.35rem 0.7rem;
     font-size: 0.8rem;
-    color: #495057;
-    background: #eef2ff;
-    border: 1px solid #c7d2fe;
+    color: var(--gray-700);
+    background: rgba(139, 115, 85, 0.08);
+    border: 1px solid var(--border-color);
     border-radius: 999px;
     margin-right: 0.5rem;
     white-space: nowrap;
@@ -1156,23 +1191,24 @@ textarea.form-control {
     padding: 0.4rem 0.85rem;
     font-size: 0.82rem;
     font-weight: 500;
-    color: #ffffff;
-    background: #6c757d;
-    border: none;
+    color: var(--gray-700);
+    background: transparent;
+    border: 1px solid var(--gray-300);
     border-radius: 6px;
     cursor: pointer;
     margin-right: 0.5rem;
-    transition: background 0.15s ease;
+    transition: background 0.15s ease, color 0.15s ease;
     font-family: inherit;
 }
 
 .auth-logout-button:hover:not(:disabled) {
-    background: #5a6268;
+    background: var(--gray-100);
+    color: var(--primary-dark);
 }
 
 .auth-logout-button:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 3px rgba(108, 117, 125, 0.35);
+    box-shadow: 0 0 0 3px rgba(139, 115, 85, 0.25);
 }
 
 .auth-logout-button[hidden] {
@@ -1221,6 +1257,7 @@ textarea.form-control {
     box-shadow: var(--shadow-sm);
     margin-bottom: 20px;
     overflow: hidden;
+    border: 1px solid var(--border-color);
 }
 
 .member-mgmt-card-header {
@@ -1278,28 +1315,28 @@ textarea.form-control {
 }
 
 .status-badge.status-active {
-    background: rgba(40, 167, 69, 0.1);
+    background: rgba(107, 142, 90, 0.12);
     color: var(--success);
 }
 
 .status-badge.status-inactive {
-    background: rgba(220, 53, 69, 0.1);
+    background: rgba(160, 86, 60, 0.12);
     color: var(--danger);
 }
 
 .status-badge.status-revoked {
-    background: rgba(108, 117, 125, 0.1);
+    background: rgba(138, 130, 117, 0.14);
     color: var(--secondary);
 }
 
 .status-badge.status-used {
-    background: rgba(23, 162, 184, 0.1);
+    background: rgba(123, 140, 154, 0.14);
     color: var(--info);
 }
 
 .status-badge.status-expired {
-    background: rgba(255, 193, 7, 0.1);
-    color: #856404;
+    background: rgba(201, 163, 106, 0.14);
+    color: #8A6A3A;
 }
 
 .invite-generate-form {
@@ -1393,7 +1430,7 @@ textarea.form-control {
 
 .btn-danger {
     background: var(--danger);
-    color: white;
+    color: var(--white);
     border: none;
     border-radius: 4px;
     cursor: pointer;
@@ -1405,7 +1442,7 @@ textarea.form-control {
 
 .btn-warning {
     background: var(--warning);
-    color: #212529;
+    color: var(--gray-900);
     border: none;
     border-radius: 4px;
     cursor: pointer;
@@ -1417,7 +1454,7 @@ textarea.form-control {
 
 .btn-secondary {
     background: var(--gray-500);
-    color: white;
+    color: var(--white);
     border: none;
     border-radius: 4px;
     cursor: pointer;
@@ -1429,7 +1466,7 @@ textarea.form-control {
 
 .btn-primary {
     background: var(--primary);
-    color: white;
+    color: var(--white);
     border: none;
     border-radius: 4px;
     padding: 8px 16px;
