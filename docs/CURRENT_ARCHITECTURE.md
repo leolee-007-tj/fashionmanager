@@ -6533,7 +6533,290 @@ Orders 기능을 Supabase remote data source로 전환하기 전에 현재 local
 - **3-8A.2**: OrdersSupabaseDataSource 인터페이스 설계 + mapping contract
 - **3-8A.3**: feature flag 기반 read-only remote orders list 구현
 
+## 61. 3-8A.1: Orders Schema/RLS/RPC Audit (2026-07-25)
 
+### 목적
+Orders remote 전환 전에 기존 Supabase SQL migration 안에 구현된 orders schema, RLS, RPC, inventory_logs, trigger, 권한 구조를 정적 분석하고 contract test로 검증한다.
+**이번 단계는 audit + tests + docs 작업이다. 실제 DB 작업, migration 생성/수정, supabase db push, SQL Editor 작업, 실제 데이터 생성은 금지한다.**
 
+### 감사 대상 파일
 
+| 파일 | 감사 내용 |
+|---|---|
+| `supabase/migrations/20260711000100_extensions_and_types.sql` | order_status, inventory_change_type enum |
+| `supabase/migrations/20260711000200_initial_schema.sql` | orders, inventory_logs table schema |
+| `supabase/migrations/20260711000300_constraints_and_indexes.sql` | orders constraints, unique indexes |
+| `supabase/migrations/20260711000400_triggers.sql` | orders trigger (updated_at, audit metadata, cross-store validation) |
+| `supabase/migrations/20260711000500_private_helpers.sql` | private.is_store_member, current_store_role, has_store_role |
+| `supabase/migrations/20260711000600_rls_policies.sql` | orders/inventory_logs RLS policies, GRANT/REVOKE |
+| `supabase/migrations/20260711000900_order_inventory_rpc.sql` | create_order, update_pending_order, ship_order, cancel_order, complete_order, private helpers |
+| `supabase/migrations/20260711000950_order_inventory_hardening.sql` | update_pending_order, ship_order hardened 버전 (NULL defense, soft-delete check, integer rounding) |
+
+### Orders Schema Audit 결과
+
+| 항목 | 결과 | 비고 |
+|---|---|---|
+| `id uuid primary key` | ✅ PASS | gen_random_uuid() |
+| `legacy_id bigint` | ✅ PASS | 기존 numeric id 매핑 |
+| `store_id uuid NOT NULL FK → stores` | ✅ PASS | 매장 소속 필수 |
+| `order_number text NOT NULL` | ✅ PASS | ORD-xxxx 형식 |
+| `customer_id uuid FK → customers (nullable)` | ✅ PASS | 고객 참조 nullable |
+| `product_id uuid FK → products (nullable)` | ✅ PASS | 상품 참조 nullable |
+| `legacy_customer_id / legacy_product_id` | ✅ PASS | 기존 id 매핑 |
+| `customer_name_snapshot` | ✅ PASS | 고객명 스냅샷 |
+| `product_title_snapshot` | ✅ PASS | 상품명 스냅샷 |
+| `brand_snapshot / category_snapshot / color_snapshot / size_snapshot` | ✅ PASS | 스냅샷 필드 |
+| `quantity integer NOT NULL` | ✅ PASS | 수량 |
+| `selling_price numeric NOT NULL` | ✅ PASS | 판매가 |
+| `actual_converted_cost_at_sale / china_cost_at_sale` | ✅ PASS | 판매 시점 원가 스냅샷 |
+| `actual_profit / actual_profit_margin / actual_cost_ratio` | ✅ PASS | 출고 시 계산 |
+| `status order_status NOT NULL DEFAULT 'PENDING'` | ✅ PASS | enum 사용 |
+| `order_date / ship_date` | ✅ PASS | 날짜 |
+| `shipping_company / tracking_number` | ✅ PASS | RPC migration에서 ADD COLUMN |
+| `notes` | ✅ PASS | 메모 |
+| `created_by / updated_by` | ✅ PASS | 작성자/수정자 |
+| `created_at / updated_at` | ✅ PASS | 시간스탬프 |
+| `deleted_at` | ✅ PASS | soft delete |
+| `version` | ✅ PASS | 버전 관리 |
+
+### order_status Enum Audit 결과
+
+| 값 | 결과 |
+|---|---|
+| `PENDING` | ✅ 존재 |
+| `SHIPPED` | ✅ 존재 |
+| `COMPLETED` | ✅ 존재 |
+| `CANCELLED` | ✅ 존재 |
+
+### inventory_logs Audit 결과
+
+| 항목 | 결과 | 비고 |
+|---|---|---|
+| `order_id uuid FK → orders` | ✅ PASS | 주문 참조 |
+| `product_id uuid FK → products` | ✅ PASS | 상품 참조 |
+| `store_id uuid NOT NULL FK → stores` | ✅ PASS | 매장 소속 |
+| `change_type inventory_change_type NOT NULL` | ✅ PASS | RESERVE/RELEASE/SHIP/RETURN/ADJUSTMENT 등 |
+| `quantity_change integer NOT NULL` | ✅ PASS | 수량 변화 |
+| `stock_before / stock_after` | ✅ PASS | 재고 before/after |
+| `reserved_before / reserved_after` | ✅ PASS | 예약 재고 before/after |
+| append-only 설계 | ✅ PASS | updated_at, deleted_at 컬럼 없음 |
+| 직접 client write 제한 | ✅ PASS | SELECT만 GRANT, INSERT/UPDATE/DELETE policy 없음 |
+
+### RLS Audit 결과
+
+| 항목 | 결과 | 비고 |
+|---|---|---|
+| orders RLS enabled | ✅ PASS | `ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY` |
+| owner/manager active SELECT policy | ✅ PASS | `deleted_at IS NULL` 조건 |
+| owner deleted SELECT policy | ✅ PASS | owner만, `deleted_at IS NOT NULL` |
+| owner/manager INSERT policy (초기) | ✅ PASS | migration 006에 존재 |
+| owner/manager UPDATE policy (초기) | ✅ PASS | migration 006에 존재 |
+| INSERT/UPDATE policy는 migration 009에서 DROP | ✅ PASS | RPC 통해서만 write 가능 |
+| INSERT/UPDATE 권한은 migration 009에서 REVOKE | ✅ PASS | `REVOKE INSERT, UPDATE ON public.orders FROM authenticated` |
+| DELETE 직접 허용 없음 | ✅ PASS | `REVOKE DELETE ON public.orders FROM authenticated` |
+| staff base access 제한 | ✅ PASS | `has_store_role(store_id, ARRAY['owner','manager'])`만 허용, staff 미포함 |
+| no-membership 차단 | ✅ PASS | `is_store_member` / `has_store_role`가 `is_active = true` 확인 |
+| cross-store access 차단 | ✅ PASS | policy가 `store_id` 컬럼 기반 |
+
+### Direct DML Hardening Audit 결과
+
+| 항목 | 결과 | 비고 |
+|---|---|---|
+| orders 직접 INSERT 제한 | ✅ PASS | `REVOKE INSERT, UPDATE ON public.orders FROM authenticated` |
+| orders INSERT/UPDATE policy DROP | ✅ PASS | migration 009에서 DROP POLICY |
+| inventory_logs 직접 INSERT/UPDATE/DELETE 제한 | ✅ PASS | SELECT만 GRANT, write policy 없음 |
+| PUBLIC/anon revoke | ✅ PASS | `REVOKE ALL ON public.orders FROM anon`, `REVOKE ALL ON public.inventory_logs FROM anon` |
+| orders writes through RPC only | ✅ PASS | create_order, update_pending_order, ship_order, cancel_order, complete_order |
+| products column-level UPDATE (안전 필드만) | ✅ PASS | current_stock, reserved_stock, store_id 등 제외 |
+| customers column-level UPDATE (안전 필드만) | ✅ PASS | total_amount, total_profit 등 집계 필드 제외 |
+
+### RPC Audit 결과
+
+#### public.create_order
+
+| 항목 | 결과 |
+|---|---|
+| SECURITY DEFINER | ✅ PASS |
+| `SET search_path = ''` | ✅ PASS |
+| `auth.uid()` 확인 | ✅ PASS |
+| owner/manager 권한 확인 | ✅ PASS (`NOT IN ('owner', 'manager')`) |
+| staff 차단 | ✅ PASS |
+| store membership 확인 | ✅ PASS (`private.current_store_role(p_store_id)`) |
+| store deleted_at 확인 | ✅ PASS |
+| customer deleted_at 확인 | ✅ PASS (same store + `deleted_at IS NULL`) |
+| product deleted_at 확인 | ✅ PASS (same store + `deleted_at IS NULL`) |
+| cross-store validation | ✅ PASS (`store_id = p_store_id` 조건) |
+| FOR UPDATE (product lock) | ✅ PASS |
+| 재고 검증 (available stock) | ✅ PASS (`current_stock - reserved_stock`) |
+| inventory_logs RESERVE 생성 | ✅ PASS |
+| explicit column list | ✅ PASS |
+| no dynamic SQL | ✅ PASS |
+| GRANT EXECUTE TO authenticated | ✅ PASS |
+| REVOKE ALL FROM PUBLIC/anon | ✅ PASS |
+
+#### public.update_pending_order (hardening 버전 적용)
+
+| 항목 | 결과 |
+|---|---|
+| SECURITY DEFINER | ✅ PASS |
+| `SET search_path = ''` | ✅ PASS |
+| `auth.uid()` 확인 | ✅ PASS |
+| owner/manager 권한 확인 | ✅ PASS |
+| staff 차단 | ✅ PASS |
+| PENDING 상태 검증 | ✅ PASS (`status != 'PENDING'` 차단) |
+| NULL input defense | ✅ PASS (p_customer_id, p_product_id, p_order_date NULL 체크) |
+| customer deleted_at 확인 | ✅ PASS |
+| product deleted_at 확인 (same-product path) | ✅ PASS (hardening 추가) |
+| legacy order product_id NULL 처리 | ✅ PASS (hardening 추가) |
+| product swap: ordered locking (deadlock 방지) | ✅ PASS (`v_old_product_id < p_product_id`) |
+| 재고 조정: release old + reserve new | ✅ PASS |
+| inventory_logs RELEASE/RESERVE 생성 | ✅ PASS |
+| 음수 reserved_stock 방지 | ✅ PASS |
+| GRANT/REVOKE | ✅ PASS |
+
+#### public.ship_order (hardening 버전 적용)
+
+| 항목 | 결과 |
+|---|---|
+| SECURITY DEFINER | ✅ PASS |
+| `SET search_path = ''` | ✅ PASS |
+| `auth.uid()` 확인 | ✅ PASS |
+| owner/manager 권한 확인 | ✅ PASS |
+| PENDING → SHIPPED 전환만 허용 | ✅ PASS |
+| product deleted_at 확인 | ✅ PASS (hardening 추가) |
+| FOR UPDATE (order + product) | ✅ PASS |
+| current_stock 검증 | ✅ PASS |
+| reserved_stock 검증 | ✅ PASS |
+| current_stock 차감 + reserved_stock 차감 | ✅ PASS |
+| profit 계산 (integer rounding) | ✅ PASS (`round()`) |
+| inventory_logs SHIP 생성 | ✅ PASS |
+| customer aggregate recalc | ✅ PASS |
+| GRANT/REVOKE | ✅ PASS |
+
+#### public.cancel_order
+
+| 항목 | 결과 |
+|---|---|
+| SECURITY DEFINER | ✅ PASS |
+| `SET search_path = ''` | ✅ PASS |
+| `auth.uid()` 확인 | ✅ PASS |
+| owner/manager 권한 확인 | ✅ PASS |
+| PENDING → CANCELLED 전환만 허용 | ✅ PASS |
+| FOR UPDATE (order + product) | ✅ PASS |
+| reserved_stock 복구 | ✅ PASS |
+| 음수 reserved_stock 방지 | ✅ PASS |
+| inventory_logs RELEASE 생성 | ✅ PASS |
+| GRANT/REVOKE | ✅ PASS |
+
+#### public.complete_order
+
+| 항목 | 결과 |
+|---|---|
+| SECURITY DEFINER | ✅ PASS |
+| `SET search_path = ''` | ✅ PASS |
+| `auth.uid()` 확인 | ✅ PASS |
+| owner/manager 권한 확인 | ✅ PASS |
+| SHIPPED → COMPLETED 전환만 허용 | ✅ PASS |
+| customer aggregate recalc | ✅ PASS |
+| GRANT/REVOKE | ✅ PASS |
+
+#### private.recalculate_customer_aggregates (hardening 버전)
+
+| 항목 | 결과 |
+|---|---|
+| SECURITY DEFINER | ✅ PASS |
+| `SET search_path = ''` | ✅ PASS |
+| customer deleted_at 확인 | ✅ PASS (hardening 추가) |
+| SHIPPED + COMPLETED 주문만 집계 | ✅ PASS |
+| store_id 일치 확인 | ✅ PASS |
+| REVOKE ALL FROM authenticated | ✅ PASS (RPC-only) |
+
+#### private.generate_order_number
+
+| 항목 | 결과 |
+|---|---|
+| SECURITY DEFINER | ✅ PASS |
+| `SET search_path = ''` | ✅ PASS |
+| per-store advisory lock | ✅ PASS (`pg_advisory_xact_lock`) |
+| deleted orders 포함 max 계산 (번호 재사용 방지) | ✅ PASS |
+| REVOKE ALL FROM authenticated | ✅ PASS (RPC-only) |
+
+### Trigger/Constraint Audit 결과
+
+| 항목 | 결과 | 비고 |
+|---|---|---|
+| orders updated_at/version trigger | ✅ PASS | `trg_orders_updated_at` → `handle_store_data_update()` |
+| orders audit metadata trigger | ✅ PASS | `trg_orders_audit_metadata` → created_by/updated_by 자동 설정 |
+| orders cross-store validation trigger | ✅ PASS | `trg_orders_validate_store` → customer/product same-store + active 검증 |
+| trigger functions revoked from PUBLIC/anon/authenticated | ✅ PASS | 직접 호출 방지 |
+| orders constraints | ✅ PASS | quantity > 0, selling_price >= 0, cost >= 0 |
+| unique index (store_id, order_number) active | ✅ PASS | `WHERE deleted_at IS NULL` |
+| unique index (store_id, legacy_id) | ✅ PASS | `WHERE legacy_id IS NOT NULL` |
+| inventory_logs cross-store validation trigger | ✅ PASS | `trg_inventory_logs_validate_store` |
+
+### Client Compatibility Risk Audit 결과
+
+| # | 위험 | 현재 상태 | 전환 시 영향 |
+|---|---|---|---|
+| 1 | local numeric id ↔ remote uuid/legacy_id 매핑 | local: `getNextId('orders')` (numeric), remote: `gen_random_uuid()` + `legacy_id` | mapping layer 필수. id (uuid) ↔ legacy_id (bigint) 구분 |
+| 2 | analytics `DB.getOrders()` 의존 | analytics.js가 `DB.getOrders()` 직접 호출 | remote 전환 시 analytics도 연동 필요 |
+| 3 | `Customers.recalculateAll()` 의존 | customers.js가 `DB.getOrders()` 호출 | remote에서는 RPC가 자동 recalc하므로 client recalc 중복 가능 |
+| 4 | product/customer snapshot mismatch | local은 snapshot 없음, remote는 snapshot 필드 사용 | remote 전환 시 snapshot 매핑 필요 |
+| 5 | local hard delete vs remote soft delete | local: `DB.deleteOrder()` (hard delete), remote: DELETE 권한 없음 (status='CANCELLED'만) | delete flow 재설계 필요 (hard delete → cancel) |
+| 6 | local status edit 유연성 vs remote RPC 엄격성 | local: `DB.updateOrder(id, {status: ...})` 자유롭게, remote: RPC가 PENDING→SHIPPED→COMPLETED, PENDING→CANCELLED만 허용 | status 전환 로직 client에서 RPC 호출로 변경 필요 |
+| 7 | local inventory log type='OUT' vs remote 'SHIP' | local: `type: 'OUT'`, remote: `change_type: 'SHIP'` | field name + value 매핑 필요 |
+
+### 발견된 Gaps 또는 확인 필요 항목
+
+| # | Gap | 설명 | 권장 사항 |
+|---|---|---|---|
+| 1 | `list_orders` RPC 없음 | 페이지네이션/필터/정렬을 지원하는 전용 조회 RPC가 없음. 현재는 RLS SELECT로 직접 조회 | 3-8A.3에서 list_orders RPC 추가 또는 RLS SELECT + client-side filter 조합 검토 |
+| 2 | `get_order_detail` RPC 없음 | 단일 주문 상세 (product/customer 조인, inventory_logs 포함) 조회 RPC 없음 | 3-8A.3에서 추가 검토 |
+| 3 | `batch_delete_orders` RPC 없음 | 배치 삭제 기능 없음. local의 `batchDelete()`는 hard delete | remote에서는 batch cancel 또는 개별 cancel_order 호출로 대체 |
+| 4 | staff 주문 조회 권한 | RLS가 owner/manager만 허용. staff는 주문 조회 불가 | staff 조회 권한 정책 필요 시 별도 검토 (현재는 의도적 제한) |
+| 5 | order hard delete (PENDING만) | remote에는 PENDING 주문 hard delete RPC 없음. cancel_order만 존재 | local delete → remote cancel 매핑 권장 |
+| 6 | Excel upload와 remote orders 연동 | Excel 업로드가 local DB.addOrder 직접 호출 | 향후 Excel → RPC 기반 전환 필요 (3-8A.8) |
+| 7 | local inventory_logs 생성 시점 차이 | local: 주문 생성 시 로그 생성 안 함 (출고 시만), remote: create_order에서 RESERVE 로그 생성 | remote 전환 시 로그 생성 시점 차이 인식 필요 |
+
+### Contract Tests 추가
+
+| 파일 | 테스트 수 | 내용 |
+|---|---|---|
+| `tests/orders-remote-rpc-contract.test.mjs` | 50 tests | orders schema, enum, inventory_logs, RLS, DML hardening, RPC (SECURITY DEFINER, search_path, auth, role, inventory log, status transition, atomicity, stock safety), trigger/constraint, private helpers, GRANT/REVOKE, client compatibility risk |
+
+테스트 카테고리:
+- OR1-OR18: 핵심 audit (schema, enum, inventory_logs, RPC 존재/보안/로그/상태검증, DML hardening, dynamic SQL/secret safety, JS 변경 없음)
+- OR-RLS1~5: RLS 정책 검증
+- OR-TR1~7: trigger/constraint 검증
+- OR-PH1~3: private helpers 검증
+- OR-GR1~3: GRANT/REVOKE 검증
+- OR-AT1~8: RPC atomicity 및 stock safety 검증
+- OR-CC1~6: client compatibility risk 검증
+
+### 다음 단계 권장
+
+- **3-8A.2**: OrdersSupabaseDataSource 인터페이스 설계 + mapping contract (local ↔ remote shape 매핑, feature flag, async boundary)
+- **3-8A.3**: list_orders / get_order_detail read-only 구현 (RPC 또는 RLS SELECT 기반)
+- **3-8A.4**: create_order RPC 연결 (OrdersDataSource.createOrder → public.create_order)
+- **3-8A.5**: status update RPC 연결 (ship_order, cancel_order, complete_order)
+- **3-8A.6**: browser owner smoke
+- **3-8A.7**: analytics compatibility review
+
+### 이번 단계 검증 결과
+
+| 항목 | 결과 |
+|---|---|
+| audit-only 작업 | ✅ 확인 |
+| JS 변경 | ❌ 없음 |
+| CSS 변경 | ❌ 없음 |
+| HTML 변경 | ❌ 없음 |
+| Migration 변경 | ❌ 없음 |
+| DB push | ❌ 없음 |
+| 실제 order/customer/product/inventory action | ❌ 없음 |
+| Service role 사용 | ❌ 없음 |
+| token/key/password 출력 | ❌ 없음 |
+| 실제 데이터 생성 | ❌ 없음 |
+| 신규 contract tests | ✅ 50 tests 추가 |
+| 기존 737 tests | PENDING (이후 실행) |
+| preflight | PENDING (이후 실행) |
 
