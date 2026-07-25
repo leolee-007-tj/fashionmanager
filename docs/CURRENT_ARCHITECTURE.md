@@ -5487,5 +5487,162 @@ scope: **legacy/local visual smoke** (SUPABASE_ENABLED=false, owner authenticate
 - local server cleanup 완료
 - 향후 3-7D 이후 단계에서 추가 UI polish 예정
 
+---
+
+## 3-7D: Products List/Table Premium Polish
+
+### 목적
+
+Products 화면의 상품 목록, 테이블, 상품 thumb, 필터/검색 영역, 분류 badge, 다중 선택 checkbox를 LESOUL premium boutique admin tone에 맞게 polish.
+3-7B/C에서 정의한 global theme tokens와 dashboard tone을 기반으로 products-specific CSS 보강.
+CSS-first 작업으로 JS 동작, HTML 구조, DB/Supabase 작업, product CRUD logic은 일절 금지.
+
+### 수정 파일
+
+- `css/style.css` (table, product-thumb, classification-badge, checkbox accent, tab-btn, empty-state, products 보강 규칙)
+- `tests/products-theme-contract.test.mjs` (신규 추가: 31개 테스트)
+- `docs/CURRENT_ARCHITECTURE.md` (본 섹션)
+
+### Product list/table polish 요약
+
+- `.table th`: padding 11px 12px, letter-spacing 0.2px (refined header)
+- `.table td`: padding 11px 12px, vertical-align middle (이미지/텍스트 정렬 안정화)
+- `.table tbody tr`: transition 0.12s ease 추가 (부드러운 hover)
+- `.table tbody tr:hover`: `var(--gray-50)` → `rgba(139, 115, 85, 0.05)` (subtle beige hover)
+- `.table td.font-bold`: `var(--gray-800)` + font-weight 600 (가격/숫자 셀 강조)
+- `.table td.text-warning/danger/success`: font-weight 500 (상태 셀 가독성)
+
+### Product card/thumb polish 요약
+
+- `.product-thumb`: 50px → 48px, border-radius 4px → 6px (refined)
+- `.product-thumb` border: `var(--gray-200)` → `var(--border-color)` (soft beige gray)
+- `.product-thumb` background: `var(--gray-100)` 추가 (빈 이미지 영역 warm tone)
+
+### Product action button visual polish 요약
+
+- `.action-bar .btn + .btn`: margin-left 2px (다중 선택 액션 버튼 간격 정리)
+- `.action-bar h2` / `.action-bar h2 i`: refined font-size, var(--primary) icon
+- 기존 btn-primary/secondary/danger/info tone은 3-7B에서 이미 premium 적용됨
+- onclick/data binding, title 속성 변경 없음
+
+### Filter/search/form visual polish 요약
+
+- `.filter-row .form-group label`: font-size 12px, `var(--gray-600)`, letter-spacing 0.2px
+- `.form-control` focus ring은 3-7B에서 muted brown rgba 적용됨
+- input/select 자체 구조 변경 없음
+
+### Classification badge polish 요약
+
+- `.classification-badge`: border-radius 12px → 10px, letter-spacing 0.1px (refined)
+- category/color/size/unclassified tone은 3-7B에서 premium rgba 적용됨 (brown/terracotta/sage/warm gray)
+- 상태 의미 유지: category=muted brown, color=terracotta, size=sage, unclassified=warm gray
+
+### Checkbox premium accent
+
+- `.checkbox-wrapper input[type="checkbox"]`: width/height 15px, `accent-color: var(--primary)`
+- `.row-checkbox` / `.select-all-cb` 신규 규칙: 15px, `accent-color: var(--primary)` (muted brown checkbox)
+
+### 기타 premium tone 보강
+
+- `.tab-btn`: letter-spacing 0.1px, hover `var(--primary-dark)`, active font-weight 600
+- `.tab-btn.active`: border-bottom-color `var(--primary)`, color `var(--primary-dark)`
+- `.empty-state`: font-size 14px, `.empty-state i` font-size 44px, opacity 0.25, `var(--primary)` color
+- `.card .info-box h4`: `var(--gray-800)`, font-weight 600 (product form 분류 결과)
+- `.card h3.mb-3`: border-bottom 추가, `var(--primary)` icon (가격 정보 / 분류 정보 섹션)
+
+### 변경 금지 항목 준수
+
+| 항목 | 상태 |
+|---|---|
+| JS 동작 변경 | ❌ 없음 (products.js/app.js/db.js/supabase-client.js 미수정) |
+| HTML 구조 변경 | ❌ 없음 (index.html 미수정) |
+| DB/Supabase 작업 | ❌ 없음 |
+| migration 파일 | ❌ 미수정/미생성 |
+| product CRUD logic 변경 | ❌ 없음 |
+| 기존 selector/id/class | ✅ 모두 유지 |
+| 기존 route/hash 동작 | ✅ 유지 |
+| auth/bootstrap 동작 | ✅ 유지 |
+| onclick/data binding | ✅ 유지 |
+| modal/form submit 동작 | ✅ 유지 |
+| image upload 동작 | ✅ 유지 |
+| table column 구조 | ✅ 유지 |
+| `js/config.js` | ❌ 미생성/미커밋 |
+| `data_export.json` | ❌ 미생성/미커밋 |
+| service_role/token/key/password | ❌ 미출력 |
+| supabase db push/reset/pull | ❌ 없음 |
+
+### Tests 결과
+
+| 항목 | 결과 |
+|---|---|
+| 전체 tests | **647 tests, 0 fail** |
+| 기존 tests | 616 → all pass |
+| 신규 tests (products-theme-contract) | 31 → all pass |
+| PC1~PC4 | product thumb premium tone 검증 ✅ |
+| PC5~PC9 | table premium tone 검증 ✅ |
+| PC10~PC14 | classification badge premium tone 검증 ✅ |
+| PC15~PC17 | badge status premium tone 검증 ✅ |
+| PC18~PC19 | checkbox premium accent 검증 ✅ |
+| PC20 | empty-state premium tone 검증 ✅ |
+| PC21~PC22 | tab-btn premium tone 검증 ✅ |
+| PC23~PC26 | legacy blue/purple purge 검증 ✅ |
+| PC27~PC29 | products HTML contract 검증 ✅ |
+| PC30~PC31 | sensitive data safety 검증 ✅ |
+| B9.1 (기존) | batch-related CSS 금지 규칙 준수 ✅ |
+
+### Preflight 결과
+
+| 항목 | 결과 |
+|---|---|
+| Branch check | ✅ PASS |
+| Staged files check | ✅ PASS |
+| Tracked forbidden files check | ✅ PASS |
+| service_role / sb_secret_ scan | ✅ PASS |
+| token/session/key console.log scan | ✅ PASS |
+| config.example.js default flags | ✅ PASS |
+| .gitignore check | ✅ PASS |
+| supabase migrations/tests check | ✅ PASS |
+| **전체** | ✅ **PASS** |
+
+### Browser Visual Smoke 결과
+
+scope: **legacy/local products visual smoke** (SUPABASE_ENABLED=false, owner authenticated products smoke PENDING)
+상품 생성/수정/삭제 실행 여부: **no** (visual 확인만)
+
+| 항목 | 결과 |
+|---|---|
+| products 화면 표시 | ✅ 정상 렌더링 |
+| table 존재 | ✅ 확인 (헤더/데이터 행 표시) |
+| product-thumb 렌더링 | ✅ 정상 |
+| classification-badge 렌더링 | ✅ 정상 |
+| table th warm gray 색상 | ✅ 확인 |
+| filter-row 표시 | ✅ 정상 노출 |
+| sidebar/header 3-7B tone 유지 | ✅ 확인 |
+| dashboard 3-7C tone 유지 | ✅ 확인 (복귀 후 정상) |
+| console error | ✅ 없음 |
+| layout 깨짐 | ✅ 없음 |
+
+### Local Server Hygiene 결과
+
+| 항목 | 결과 |
+|---|---|
+| 작업 전 check | ✅ no listeners, no http.server |
+| 서버 실행 | python3 -m http.server 8080 |
+| 서버 종료 | `--kill` 모드로 정리 |
+| 작업 후 check | ✅ no listeners on 8080-8089, no http.server processes |
+
+### 최종 판정
+
+- **PASS** (Products List/Table Premium Polish 완료)
+- CSS-only 변경, JS/HTML/DB/migration/product CRUD logic 변경 없음
+- 기존 616 + 신규 31 = 647 tests all pass
+- preflight PASS
+- legacy/local products visual smoke PASS (premium tone, no error, no layout break)
+- 상품 생성/수정/삭제 실행 없음 (visual 확인만)
+- authenticated owner products smoke: PENDING (별도 세션에서 진행 권장)
+- local server cleanup 완료
+- 향후 3-7E 이후 단계에서 추가 UI polish 예정
+
+
 
 

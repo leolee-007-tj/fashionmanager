@@ -372,7 +372,7 @@ textarea.form-control {
 }
 
 .table th {
-    padding: 12px;
+    padding: 11px 12px;
     text-align: left;
     font-weight: 600;
     color: var(--gray-700);
@@ -380,6 +380,7 @@ textarea.form-control {
     white-space: nowrap;
     cursor: pointer;
     user-select: none;
+    letter-spacing: 0.2px;
 }
 
 .table th:hover {
@@ -398,13 +399,18 @@ textarea.form-control {
 }
 
 .table td {
-    padding: 12px;
+    padding: 11px 12px;
     border-bottom: 1px solid var(--gray-200);
     color: var(--gray-700);
+    vertical-align: middle;
+}
+
+.table tbody tr {
+    transition: background-color 0.12s ease;
 }
 
 .table tbody tr:hover {
-    background: var(--gray-50);
+    background: rgba(139, 115, 85, 0.05);
 }
 
 .badge {
@@ -620,11 +626,94 @@ textarea.form-control {
 .flash-info { background: rgba(123, 140, 154, 0.14); color: #4A5A66; border: 1px solid rgba(123, 140, 154, 0.30); }
 
 .product-thumb {
-    width: 50px;
-    height: 50px;
+    width: 48px;
+    height: 48px;
     object-fit: cover;
-    border-radius: 4px;
-    border: 1px solid var(--gray-200);
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: var(--gray-100);
+}
+
+/* ============================================================
+   3-7D: Products List/Table Premium Polish
+   - quiet luxury admin tone for products screen
+   - table / thumb / filter / button / badge 보강
+   - 기존 selector/id/class 유지, JS 동작 영향 없음
+   ============================================================ */
+
+/* Products 화면의 action-bar에 있는 h2 refined */
+.action-bar h2 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--gray-800);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    letter-spacing: 0.1px;
+}
+
+.action-bar h2 i {
+    color: var(--primary);
+    font-size: 16px;
+}
+
+/* Products filter-row 내 form-group label 정돈 */
+.filter-row .form-group label {
+    font-size: 12px;
+    color: var(--gray-600);
+    font-weight: 500;
+    letter-spacing: 0.2px;
+}
+
+/* Products table 내 font-bold 셀 톤 정리 */
+.table td.font-bold {
+    color: var(--gray-800);
+    font-weight: 600;
+}
+
+/* Products table 내 재고 상태 셀 색상 hierarchy */
+.table td.text-warning,
+.table td.text-danger,
+.table td.text-success {
+    font-weight: 500;
+}
+
+/* Products 다중 선택 액션 버튼 간격 정리 */
+.action-bar .btn + .btn {
+    margin-left: 2px;
+}
+
+/* Products table이 card 안에 있을 때 상단 여백 정리 */
+.card > .table,
+.card > div > .table {
+    margin-top: 4px;
+}
+
+/* Product form 내 info-box premium 보강 (JS inline color는 건드리지 않음) */
+.card .info-box h4 {
+    color: var(--gray-800);
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+/* Product form h3 (가격 정보 / 분류 정보) refined */
+.card h3.mb-3 {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--gray-700);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--gray-200);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.card h3.mb-3 i {
+    color: var(--primary);
+    font-size: 14px;
 }
 
 .color-explanation {
@@ -669,15 +758,17 @@ textarea.form-control {
     border-bottom: 2px solid transparent;
     margin-bottom: -2px;
     transition: var(--transition);
+    letter-spacing: 0.1px;
 }
 
 .tab-btn:hover {
-    color: var(--primary);
+    color: var(--primary-dark);
 }
 
 .tab-btn.active {
-    color: var(--primary);
+    color: var(--primary-dark);
     border-bottom-color: var(--primary);
+    font-weight: 600;
 }
 
 .upload-area {
@@ -757,12 +848,14 @@ textarea.form-control {
     text-align: center;
     padding: 60px 20px;
     color: var(--gray-500);
+    font-size: 14px;
 }
 
 .empty-state i {
-    font-size: 48px;
+    font-size: 44px;
     margin-bottom: 16px;
-    opacity: 0.3;
+    opacity: 0.25;
+    color: var(--primary);
 }
 
 .d-flex { display: flex; }
@@ -937,22 +1030,35 @@ textarea.form-control {
     gap: 8px;
     font-size: 13px;
     cursor: pointer;
+    color: var(--gray-700);
 }
 
 .checkbox-wrapper input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
+    width: 15px;
+    height: 15px;
     cursor: pointer;
+    accent-color: var(--primary);
+}
+
+/* Products table row checkbox / select-all checkbox premium accent */
+.row-checkbox,
+.select-all-cb {
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+    accent-color: var(--primary);
+    vertical-align: middle;
 }
 
 .classification-badge {
     display: inline-block;
     padding: 3px 10px;
-    border-radius: 12px;
+    border-radius: 10px;
     font-size: 11px;
     font-weight: 600;
     white-space: nowrap;
     border: 1px solid transparent;
+    letter-spacing: 0.1px;
 }
 
 .classification-badge.category {
