@@ -1450,40 +1450,48 @@ textarea.form-control {
 
 /* ============================================================
    3-6E.6: Member Management UI Styles
+   3-7F: Member/Invite Management Premium Polish
    ============================================================ */
 
 .member-mgmt-container {
-    max-width: 900px;
+    max-width: 960px;
     margin: 0 auto;
-    padding: 20px;
+    padding: 1.75rem 1.25rem;
 }
 
 .member-mgmt-card {
     background: var(--white);
     border-radius: var(--border-radius);
-    box-shadow: var(--shadow-sm);
-    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(74, 69, 64, 0.05), 0 2px 8px rgba(74, 69, 64, 0.04);
+    margin-bottom: 1.25rem;
     overflow: hidden;
     border: 1px solid var(--border-color);
+    transition: box-shadow 0.2s ease;
 }
 
 .member-mgmt-card-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px 20px;
+    padding: 1rem 1.5rem;
     border-bottom: 1px solid var(--gray-200);
+    background: linear-gradient(180deg, rgba(245, 241, 235, 0.5) 0%, var(--white) 100%);
 }
 
 .member-mgmt-card-header h3 {
     margin: 0;
-    font-size: 16px;
+    font-size: 0.95rem;
+    font-weight: 600;
     color: var(--gray-800);
+    letter-spacing: 0.2px;
+    display: flex;
+    align-items: center;
 }
 
 .member-mgmt-card-header i {
-    margin-right: 8px;
+    margin-right: 0.5rem;
     color: var(--primary);
+    font-size: 0.9rem;
 }
 
 .member-mgmt-table {
@@ -1493,182 +1501,246 @@ textarea.form-control {
 
 .member-mgmt-table th,
 .member-mgmt-table td {
-    padding: 10px 16px;
+    padding: 0.75rem 1.25rem;
     text-align: left;
     border-bottom: 1px solid var(--gray-200);
-    font-size: 13px;
+    font-size: 0.85rem;
 }
 
 .member-mgmt-table th {
-    background: var(--gray-50);
+    background: var(--gray-100);
     font-weight: 600;
     color: var(--gray-600);
     text-transform: uppercase;
-    font-size: 11px;
-    letter-spacing: 0.5px;
+    font-size: 0.7rem;
+    letter-spacing: 0.6px;
+    border-bottom: 1px solid var(--gray-300);
 }
 
 .member-mgmt-table tbody tr:hover {
-    background: var(--gray-50);
+    background: rgba(245, 241, 235, 0.6);
 }
 
 .status-badge {
     display: inline-block;
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-size: 11px;
-    font-weight: 600;
+    padding: 0.2rem 0.7rem;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    font-weight: 500;
     text-transform: uppercase;
+    letter-spacing: 0.4px;
+    border: 1px solid transparent;
 }
 
 .status-badge.status-active {
     background: rgba(107, 142, 90, 0.12);
-    color: var(--success);
+    color: #5A7A4A;
+    border-color: rgba(107, 142, 90, 0.25);
 }
 
 .status-badge.status-inactive {
-    background: rgba(160, 86, 60, 0.12);
-    color: var(--danger);
+    background: rgba(160, 86, 60, 0.10);
+    color: #8A4A32;
+    border-color: rgba(160, 86, 60, 0.22);
 }
 
 .status-badge.status-revoked {
     background: rgba(138, 130, 117, 0.14);
-    color: var(--secondary);
+    color: #6B6358;
+    border-color: rgba(138, 130, 117, 0.28);
 }
 
 .status-badge.status-used {
     background: rgba(123, 140, 154, 0.14);
-    color: var(--info);
+    color: #63737F;
+    border-color: rgba(123, 140, 154, 0.28);
 }
 
 .status-badge.status-expired {
     background: rgba(201, 163, 106, 0.14);
     color: #8A6A3A;
+    border-color: rgba(201, 163, 106, 0.28);
 }
 
 .invite-generate-form {
-    padding: 20px;
+    padding: 1.5rem;
 }
 
 .invite-generate-form .form-row {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin-bottom: 12px;
+    gap: 0.85rem;
+    margin-bottom: 1rem;
 }
 
 .invite-generate-form label {
     min-width: 120px;
-    font-size: 13px;
+    font-size: 0.85rem;
     color: var(--gray-700);
+    font-weight: 500;
+    letter-spacing: 0.2px;
 }
 
 .invite-generate-form select,
 .invite-generate-form input {
     flex: 1;
-    padding: 8px 12px;
+    padding: 0.6rem 0.9rem;
     border: 1px solid var(--gray-300);
-    border-radius: 4px;
-    font-size: 13px;
+    border-radius: 10px;
+    font-size: 0.88rem;
+    background: var(--white);
+    color: var(--gray-800);
+    font-family: inherit;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.invite-generate-form select:focus,
+.invite-generate-form input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(139, 115, 85, 0.12);
 }
 
 .invite-code-result {
-    margin-top: 16px;
-    padding: 16px;
-    background: var(--gray-50);
+    margin-top: 1.25rem;
+    padding: 1.25rem;
+    background: var(--gray-100);
     border-radius: var(--border-radius);
+    border: 1px solid var(--gray-200);
 }
 
 .invite-code-box {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin: 8px 0;
+    gap: 0.85rem;
+    margin: 0.6rem 0;
 }
 
 .invite-code-box code {
-    padding: 8px 16px;
+    padding: 0.65rem 1.25rem;
     background: var(--white);
     border: 1px solid var(--gray-300);
-    border-radius: 4px;
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--primary);
-    letter-spacing: 1px;
+    border-radius: 10px;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--primary-dark);
+    letter-spacing: 1.5px;
+    font-family: "SF Mono", "Menlo", "Monaco", "Courier New", monospace;
+    box-shadow: 0 1px 2px rgba(74, 69, 64, 0.05);
 }
 
 .invite-code-display {
-    padding: 2px 6px;
+    padding: 0.15rem 0.55rem;
     background: var(--gray-100);
-    border-radius: 3px;
-    font-size: 12px;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    color: var(--gray-700);
+    border: 1px solid var(--gray-200);
+    font-family: "SF Mono", "Menlo", "Monaco", "Courier New", monospace;
 }
 
 .member-mgmt-access-denied {
     text-align: center;
-    padding: 60px 20px;
+    padding: 4rem 1.25rem;
 }
 
 .member-mgmt-access-denied h2 {
-    color: var(--danger);
-    margin-bottom: 12px;
+    color: var(--gray-700);
+    margin-bottom: 0.75rem;
+    font-size: 1.15rem;
+    font-weight: 600;
+    letter-spacing: 0.2px;
 }
 
 .member-mgmt-access-denied i {
-    font-size: 48px;
-    margin-bottom: 16px;
+    font-size: 3rem;
+    margin-bottom: 1rem;
     display: block;
+    color: var(--gray-400);
 }
 
 .muted-text {
     color: var(--gray-500);
-    font-size: 13px;
+    font-size: 0.85rem;
 }
 
 .error-text {
     color: var(--danger);
-    font-size: 13px;
+    font-size: 0.85rem;
 }
 
 .btn-sm {
-    padding: 4px 10px;
-    font-size: 12px;
+    padding: 0.35rem 0.85rem;
+    font-size: 0.78rem;
+    border-radius: 8px;
+    font-weight: 500;
+    letter-spacing: 0.2px;
+    transition: all 0.15s ease;
+    cursor: pointer;
+    font-family: inherit;
+    border: 1px solid transparent;
 }
 
 .btn-danger {
     background: var(--danger);
     color: var(--white);
-    border: none;
-    border-radius: 4px;
+    border: 1px solid var(--danger);
+    border-radius: 8px;
     cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+    font-family: inherit;
 }
 
 .btn-danger:hover {
-    opacity: 0.9;
+    background: #8A4A32;
+    border-color: #8A4A32;
+}
+
+.btn-danger:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(160, 86, 60, 0.25);
 }
 
 .btn-warning {
     background: var(--warning);
-    color: var(--gray-900);
-    border: none;
-    border-radius: 4px;
+    color: var(--white);
+    border: 1px solid var(--warning);
+    border-radius: 8px;
     cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+    font-family: inherit;
+    font-weight: 500;
 }
 
 .btn-warning:hover {
-    opacity: 0.9;
+    background: #B89058;
+    border-color: #B89058;
+}
+
+.btn-warning:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(201, 163, 106, 0.30);
 }
 
 .btn-secondary {
     background: var(--gray-500);
     color: var(--white);
-    border: none;
-    border-radius: 4px;
+    border: 1px solid var(--gray-500);
+    border-radius: 8px;
     cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+    font-family: inherit;
+    font-weight: 500;
 }
 
 .btn-secondary:hover {
-    opacity: 0.9;
+    background: #6B6358;
+    border-color: #6B6358;
+}
+
+.btn-secondary:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(138, 130, 117, 0.25);
 }
 
 .btn-primary {

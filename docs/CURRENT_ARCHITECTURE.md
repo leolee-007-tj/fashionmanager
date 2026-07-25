@@ -5792,6 +5792,180 @@ login/signup/invite join 실행 여부: **no**
 - local server cleanup 완료
 - 향후 3-7F 이후 단계에서 추가 UI polish 예정
 
+---
+
+## 3-7F: Member/Invite Management Premium Polish
+
+### 목적
+
+직원/초대 관리 화면(`#/members`)의 카드, 테이블, 초대 코드 박스, 상태 배지, 위험 액션 버튼을 LESOUL premium boutique admin tone에 맞게 polish.
+owner/admin management 화면이므로 차분하고 신뢰감 있는 tone 유지.
+CSS-first 작업으로 JS 동작, HTML 구조, member/invite RPC 호출 로직, DB/Supabase 작업은 일절 금지.
+실제 invite 생성/취소, member deactivate 실행 금지.
+
+### 수정 파일
+
+- `css/style.css` (member management card/table/badge/invite-code/buttons 보강)
+- `tests/member-management-theme-contract.test.mjs` (신규 추가: 33개 테스트)
+- `docs/CURRENT_ARCHITECTURE.md` (본 섹션)
+
+### Member management card polish 요약
+
+- `.member-mgmt-container`: max-width 900px → 960px, padding 20px → 1.75rem/1.25rem
+- `.member-mgmt-card`: var(--shadow-sm) → layered subtle shadow (2-stop rgba warm charcoal)
+- `.member-mgmt-card`: transition: box-shadow 0.2s ease 추가
+- `.member-mgmt-card-header`: 16px/20px → 1rem/1.5rem, subtle warm ivory gradient header (180deg)
+- `.member-mgmt-card-header h3`: 16px → 0.95rem, letter-spacing 0.2px, flex align
+- `.member-mgmt-card-header i`: font-size 0.9rem, mr 0.5rem
+
+### Member table polish 요약
+
+- `.member-mgmt-table th/td`: padding 10px/16px → 0.75rem/1.25rem, font-size 13px → 0.85rem
+- `.member-mgmt-table th`: var(--gray-50) → var(--gray-100) (warm ivory), border-bottom 추가 (var(--gray-300))
+- `.member-mgmt-table th`: font-size 11px → 0.7rem, letter-spacing 0.5px → 0.6px
+- `tbody tr:hover`: var(--gray-50) → rgba(245, 241, 235, 0.6) (subtle beige tint)
+
+### Invite code box polish 요약
+
+- `.invite-code-result`: var(--gray-50) → var(--gray-100), border 1px var(--gray-200) 추가
+- `.invite-code-box code`: padding 8px/16px → 0.65rem/1.25rem, border-radius 4px → 10px
+- `.invite-code-box code`: font-size 16px → 1.05rem, weight 700 → 600, color var(--primary) → var(--primary-dark)
+- `.invite-code-box code`: letter-spacing 1px → 1.5px, monospace font stack 추가, subtle shadow
+- `.invite-code-display`: padding 2px/6px → 0.15rem/0.55rem, border-radius 3px → 6px, font-size 12px → 0.78rem
+- `.invite-code-display`: border 1px var(--gray-200) 추가, monospace font stack
+- `.invite-generate-form select/input`: border-radius 4px → 10px, padding 8px/12px → 0.6rem/0.9rem
+- `.invite-generate-form select/input:focus`: brown focus ring (var(--primary) border + 3px rgba ring)
+- `.invite-generate-form label`: font-weight 500, letter-spacing 0.2px
+
+### Status badge polish 요약
+
+- `.status-badge`: padding 2px/8px → 0.2rem/0.7rem, border-radius 12px → 10px, font-size 11px → 0.7rem
+- `.status-badge`: weight 600 → 500, letter-spacing 0.4px, border 1px solid transparent 추가
+- `.status-active`: rgba(107, 142, 90, 0.12) bg + #5A7A4A text + border-color rgba(25% opacity)
+- `.status-inactive`: rgba(160, 86, 60, 0.10) bg + #8A4A32 text + border-color (muted terracotta)
+- `.status-revoked`: rgba(138, 130, 117, 0.14) bg + #6B6358 text + border-color (warm gray)
+- `.status-used`: rgba(123, 140, 154, 0.14) bg + #63737F text + border-color (muted slate)
+- `.status-expired`: rgba(201, 163, 106, 0.14) bg + #8A6A3A text + border-color (warm camel)
+
+### Danger action visual polish 요약
+
+- `.btn-danger`: border 1px solid var(--danger) 추가, border-radius 4px → 8px
+- `.btn-danger:hover`: opacity 0.9 → background #8A4A32 + border-color #8A4A32 (deep terracotta)
+- `.btn-danger:focus-visible`: 3px rgba ring (muted terracotta 25% opacity)
+- `.btn-warning`: color var(--gray-900) → var(--white), border 1px solid 추가
+- `.btn-warning:hover`: opacity 0.9 → background #B89058 + border-color #B89058
+- `.btn-warning:focus-visible`: 3px rgba ring (warm camel 30% opacity)
+- `.btn-secondary`: border 1px solid 추가, border-radius 4px → 8px, weight 500
+- `.btn-secondary:hover`: background #6B6358 + border-color #6B6358 (deep warm gray)
+- `.btn-secondary:focus-visible`: 3px rgba ring (warm gray 25% opacity)
+- `.btn-sm`: padding 4px/10px → 0.35rem/0.85rem, font-size 12px → 0.78rem
+- `.btn-sm`: border-radius 8px, weight 500, letter-spacing 0.2px, transition all 0.15s ease
+
+### Access denied / owner-only notice 보완 여부
+
+- `.member-mgmt-access-denied`: padding 60px/20px → 4rem/1.25rem
+- `.member-mgmt-access-denied h2`: color var(--danger) → var(--gray-700) (neutral tone, not harsh red)
+- `.member-mgmt-access-denied h2`: font-size 1.15rem, weight 600, letter-spacing 0.2px
+- `.member-mgmt-access-denied i`: font-size 48px → 3rem, color var(--gray-400) (muted neutral)
+- owner gate JS 로직 변경 없음
+
+### 변경 금지 항목 준수
+
+| 항목 | 상태 |
+|---|---|
+| JS 동작 변경 | ❌ 없음 (member-management.js/app.js/app-bootstrap.js/auth-service.js 미수정) |
+| HTML 구조 변경 | ❌ 없음 (index.html 미수정) |
+| owner gate 변경 | ❌ 없음 |
+| member/invite RPC logic 변경 | ❌ 없음 |
+| 실제 invite 생성 | ❌ 없음 |
+| 실제 invite revoke | ❌ 없음 |
+| 실제 member deactivate | ❌ 없음 |
+| Supabase migration 생성/수정 | ❌ 없음 |
+| supabase db push/reset/pull | ❌ 없음 |
+| 기존 selector/id/class | ✅ 모두 유지 |
+| `js/config.js` | ❌ 미생성/미커밋 |
+| `data_export.json` | ❌ 미생성/미커밋 |
+| service_role/token/key/password | ❌ 미출력 |
+| email/user_id/store_id/member_id/invite_code 전체값 | ❌ 미출력/미기록 |
+
+### Tests 결과
+
+| 항목 | 결과 |
+|---|---|
+| 전체 tests | **708 tests, 0 fail** |
+| 기존 tests | 675 → all pass |
+| 신규 tests (member-management-theme-contract) | 33 → all pass |
+| MM1~MM4 | member container/card premium tone 검증 ✅ |
+| MM5~MM7 | member table premium tone 검증 ✅ |
+| MM8~MM13 | status badge premium muted tone 검증 ✅ |
+| MM14~MM17 | invite code box premium tone 검증 ✅ |
+| MM18~MM22 | danger/action buttons premium tone 검증 ✅ |
+| MM23~MM24 | access denied neutral tone 검증 ✅ |
+| MM25~MM28 | legacy blue/purple purge 검증 ✅ |
+| MM29~MM30 | JS/HTML contract 검증 ✅ |
+| MM31~MM33 | sensitive data safety 검증 ✅ |
+
+### Preflight 결과
+
+| 항목 | 결과 |
+|---|---|
+| Branch check | ✅ PASS |
+| Staged files check | ✅ PASS |
+| Tracked forbidden files check | ✅ PASS |
+| service_role / sb_secret_ scan | ✅ PASS |
+| token/session/key console.log scan | ✅ PASS |
+| config.example.js default flags | ✅ PASS |
+| .gitignore check | ✅ PASS |
+| supabase migrations/tests check | ✅ PASS |
+| **전체** | ✅ **PASS** |
+
+### Browser Visual Smoke 결과
+
+scope: **legacy/local members visual smoke** (Supabase Cloud 연동 상태에서 실제 owner 로그인 후 기능 테스트는 별도 세션에서 진행)
+real invite/member actions executed: **no**
+
+| 항목 | 결과 |
+|---|---|
+| #/members route 정상 이동 | ✅ 확인 |
+| member list card 표시 | ✅ 정상 (warm white card, subtle beige border) |
+| invite generate card 표시 | ✅ 정상 (warm ivory header gradient) |
+| invite list card 표시 | ✅ 정상 |
+| table header warm ivory | ✅ 확인 (var(--gray-100)) |
+| status badge muted tone | ✅ 확인 (활성: sage, 비활성: terracotta) |
+| member-mgmt-access-denied | 📋 해당 세션에서 미노출 (owner 권한으로 접속됨) |
+| console error | ✅ 없음 |
+| layout 깨짐 | ✅ 없음 |
+| 3-7B header/sidebar tone 유지 | ✅ 확인 |
+| 3-7C dashboard tone 유지 | ✅ 확인 |
+| 3-7D products tone 유지 | ✅ 확인 |
+| 3-7E auth/onboarding tone 유지 | ✅ 확인 (DOM 기반) |
+
+- 실제 owner 권한으로 members 화면이 표시되어 visual 확인 완료
+- invite 생성 버튼 클릭하지 않음 (CSS-only 단계)
+- revoke/deactivate 버튼 클릭하지 않음
+- copy 버튼 클릭하지 않음
+- email/user_id/store_id/member_id/invite_code 전체값 로그/문서에 기록하지 않음
+
+### Local Server Hygiene 결과
+
+| 항목 | 결과 |
+|---|---|
+| 작업 전 check | ✅ no listeners, no http.server |
+| 서버 실행 | python3 -m http.server 8080 |
+| 서버 종료 | `--kill` 모드로 정리 |
+| 작업 후 check | ✅ no listeners on 8080-8089, no http.server processes |
+
+### 최종 판정
+
+- **PASS** (Member/Invite Management Premium Polish 완료)
+- CSS-only 변경, JS/HTML/owner gate/member RPC/invite RPC/DB/migration 변경 없음
+- 기존 675 + 신규 33 = 708 tests all pass
+- preflight PASS
+- legacy/local members visual smoke PASS (premium boutique admin tone 확인, no error, no layout break)
+- real invite/member actions executed: no
+- local server cleanup 완료
+- 향후 3-7G 이후 단계에서 추가 UI polish 예정
+
 
 
 
