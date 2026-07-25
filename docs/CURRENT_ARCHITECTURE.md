@@ -5064,3 +5064,136 @@ local server 포트 누적 방지를 위한 운영 규칙과 정리 스크립트
 - hygiene script 도입으로 향후 포트 누적 방지
 - app 코드/DB/UI 변경 없음
 
+---
+
+## 59. 3-7A: Premium Boutique UI Polish Plan (2026-07-24)
+
+### 목적
+
+LESOUL의 실제 브랜드 톤에 맞는 고급 여성복 편집샵/프라이빗 피팅샵 UI 방향을 정의한다.
+현재 기능을 깨지 않고 CSS-first로 점진 개선하기 위한 계획만 문서화한다.
+**이번 단계에서는 실제 UI 구현을 하지 않는다.**
+
+### 브랜드 톤
+
+- **quiet luxury**
+- **premium boutique**
+- Korean niche designer select shop
+- elegant, calm, refined
+- 색상 팔레트 후보:
+  - beige
+  - ivory
+  - warm white
+  - muted brown
+  - soft charcoal
+- 금지 톤:
+  - 지나친 쇼핑몰 느낌
+  - 과도한 원색
+  - 저가 할인몰 느낌
+
+### UI 원칙
+
+1. 기존 JS selector와 DOM id/class를 깨지 않음
+2. 기능 구현보다 시각 polish 우선
+3. CSS 변수 기반으로 색상/spacing 정리
+4. dashboard/products/settings/members 화면부터 점진 적용
+5. 모바일/데스크톱 모두 고려
+6. readability 우선
+7. 버튼/카드/테이블/폼을 boutique admin tone으로 통일
+
+### 적용 우선순위
+
+| 순서 | 항목 |
+|---|---|
+| 1 | Global theme tokens (colors, radius, shadow, spacing, typography) |
+| 2 | Header / sidebar polish |
+| 3 | Dashboard cards polish |
+| 4 | Product list/table/card polish |
+| 5 | Member/invite management UI polish |
+| 6 | Forms/buttons/modal/flash polish |
+| 7 | Empty state / loading state polish |
+| 8 | Mobile responsive polish |
+
+### 화면별 개선 방향
+
+#### Dashboard
+
+- KPI card를 더 고급스럽고 조용한 톤으로
+- 수치 가독성 강화
+- chart/card 여백 정리
+
+#### Products
+
+- 테이블/상품 카드 정돈
+- 상품명/가격/상태/재고 가독성 강화
+- 삭제/편집 버튼은 과격하지 않게
+
+#### Members
+
+- owner/admin 기능이므로 차분하고 신뢰감 있는 톤
+- danger action은 명확하지만 과하지 않게
+
+#### Settings
+
+- 브랜드 설정, 언어 설정, billing placeholder와 연결될 가능성 고려
+
+#### Auth/Onboarding
+
+- LESOUL 브랜드 첫인상 개선
+- invite code 입력 UI를 premium하게 정리
+
+### 금지사항
+
+- ❌ JS 동작 변경 금지
+- ❌ DB/RPC 변경 금지
+- ❌ selector 파괴 금지
+- ❌ 기능 이름 변경 금지
+- ❌ routes 변경 금지
+- ❌ 인증/권한 로직 변경 금지
+- ❌ 실험적인 큰 리디자인 금지
+- ❌ 한번에 전체를 갈아엎기 금지
+
+### 구현 단계 후보
+
+| 단계 | 제목 |
+|---|---|
+| 3-7B | Global Theme Tokens + Header/Sidebar CSS Polish |
+| 3-7C | Dashboard Premium Cards Polish |
+| 3-7D | Products List/Table Premium Polish |
+| 3-7E | Auth/Onboarding Premium Polish |
+| 3-7F | Member/Invite Management Premium Polish |
+| 3-7G | Mobile Responsive Polish |
+
+### 검증 기준
+
+- tests pass
+- preflight pass
+- browser smoke for owner dashboard/products
+- no app logic changes unless explicitly planned
+- no auth regression
+- no route regression
+- no product CRUD regression
+- no config leak
+
+### 현재 단계 검증 결과
+
+| 항목 | 결과 |
+|---|---|
+| docs-only | ✅ yes |
+| app code changes | ❌ no |
+| migration | ❌ no |
+| db push | ❌ no |
+| tests | ✅ **543 tests, 0 fail** |
+| preflight | ✅ **PASS** |
+| local server hygiene check | ✅ no listeners, no http.server processes |
+| 실제 token/key/password 값 | ❌ no |
+| js/config.js commit | ❌ no |
+| migration 변경 | ❌ no |
+| data_export.json | ❌ no |
+
+### 최종 판정
+
+- **PASS** (Premium Boutique UI Polish Plan 문서화 완료)
+- UI 구현 없음, 코드/DB 변경 없음
+- 향후 3-7B ~ 3-7G 단계에서 CSS-first 점진 적용 예정
+
