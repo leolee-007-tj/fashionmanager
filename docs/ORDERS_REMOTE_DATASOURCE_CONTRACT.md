@@ -1,8 +1,8 @@
 # Orders Remote DataSource Contract
 
-> 문서 버전: 1.4 (3-8A.6)
+> 문서 버전: 1.5 (3-8A.7-Prep)
 > 작성일: 2026-07-26
-> 상태: **STATUS RPC ADAPTERS IMPLEMENTED (3-8A.6)** — updatePendingOrder/shipOrder/cancelOrder/completeOrder adapters added, not remote-smoked; setOrders/updateOrder/deleteOrder/findDuplicateOrder still disabled
+> 상태: **BROWSER SMOKE READINESS CHECK (3-8A.7-Prep)** — dev-console adapter smoke only; UI smoke blocked (orders.js uses sync local API)
 
 ---
 
@@ -328,7 +328,8 @@ recalculateAll() {
 | **3-8A.4** | Normalized Mapping Tests | field mapping, status transition, shape contract 단위 테스트 | ✅ NEXT |
 | **3-8A.5** | createOrder RPC Adapter | `createOrder()` → `public.create_order` 연결 | ✅ GO (adapter implemented, not remote-smoked) |
 | **3-8A.6** | ship/cancel/complete RPC Adapters | `updatePendingOrder`, `shipOrder`, `cancelOrder`, `completeOrder` RPC 연결 | ✅ GO (adapters implemented, not remote-smoked) |
-| **3-8A.7** | Browser Owner Smoke | owner 계정으로 read + create + ship + cancel + complete smoke test | NO-GO until 3-8A.6 pass |
+| **3-8A.7-Prep** | Browser Smoke Readiness Check | runtime flag / client / auth / UI integration / smoke strategy 점검 | ✅ GO (dev-console adapter smoke 전략) |
+| **3-8A.7** | Browser Owner Smoke | owner 계정으로 read + create + ship + cancel + complete smoke test | NO-GO until 3-8A.7-Prep pass |
 | **3-8A.8** | Analytics/Customers Compatibility | analytics + customers recalculateAll remote 연동 검증 | NO-GO until 3-8A.7 pass |
 | **3-8A.9** | Staff/No-Membership Negative Smoke | staff 차단, no-membership 차단 smoke test | NO-GO |
 | **3-8A.10** | Cleanup and Go/No-Go | 임시 코드 제거, 최종 검증, production go/no-go | NO-GO |
@@ -829,5 +830,90 @@ RETURNS public.orders
 
 ### P.14 다음 단계
 
+- **3-8A.7-Prep**: Browser Smoke Readiness Check (runtime flag / client / auth / UI integration 점검)
 - **3-8A.7**: Browser Owner Smoke (owner 계정으로 read + create + ship + cancel + complete smoke test)
 - **3-8A.8**: Analytics/Customers Compatibility 검증
+
+---
+
+## Q. 3-8A.7-Prep Browser Smoke Readiness Check
+
+### Q.1 목적
+
+3-8A.7 Browser Owner Smoke 실행 전에 현재 아키텍처의 준비 상태를 점검한다.
+이번 단계는 readiness check + docs-only 작업이다. 코드 수정은 없다.
+
+### Q.2 Readiness Summary
+
+| 항목 | 상태 | 판정 |
+|---|---|---|
+| Runtime flag readiness | `ORDERS_SUPABASE_ENABLED: false` 기본, `js/config.js` override 가능 | ✅ GO |
+| Supabase client readiness | `isInitialized()` / `getClient()` / `service_role` 차단 / remote URL guardrail | ✅ GO |
+| Owner auth readiness | `activeMembership.role === 'owner'` + `storeId` context | ✅ GO |
+| Orders UI integration | `orders.js`가 sync local DB API 사용, remote adapter 호출 안 함 | ❌ UI smoke 불가 |
+| Dev-console adapter smoke | `DB.getOrdersDataSource()` → adapter 직접 호출 가능 | ✅ GO |
+
+### Q.3 UI Smoke 불가능 판정 근거
+
+`js/orders.js`의 모든 주문 관련 함수는 `DB.getOrders()` / `DB.addOrder()` / `DB.updateOrder()` /
+`DB.updateProduct()` / `DB.addInventoryLog()` 등 sync local DB API를 직접 호출한다.
+`DB.getOrdersDataSource()` 또는 `DB.getOrdersAsync()`를 호출하지 않으며,
+`DB._resolveRuntimeOrdersDataSource()`는 `getOrdersDataSource()` 내부에서만 호출된다.
+
+`orders.js`가 remote adapter를 호출하려면 `DB.getOrders()` → `DB.getOrdersDataSource().listOrders()` 등의
+전환이 필요하지만, 이는 `orders.js` 수정이 필요하고 현재 단계에서는 금지된다.
+
+따라서 3-8A.7는 **Dev-Console Adapter Smoke** 방식으로 진행한다.
+
+### Q.4 Dev-Console Adapter Smoke 흐름
+
+```
+1. js/config.js 설정 (ORDERS_SUPABASE_ENABLED: true, localhost URL)
+2. supabase start (local Supabase)
+3. 브라우저에서 owner 계정 로그인 + active store 선택
+4. Browser Dev Console에서:
+   const ds = DB.getOrdersDataSource();
+   // ds.name === 'SupabaseOrdersDataSource' 확인
+5. smoke sequence:
+   a. ds.listOrders() → read 확인
+   b. ds.createOrder({customer_uuid, product_uuid, quantity:1, selling_price, order_date, notes: '[SMOKE TEST 3-8A.7]'})
+   c. ds.updatePendingOrder(orderId, {...}) → 수정 확인
+   d. ds.shipOrder(orderId, {ship_date, shipping_company, tracking_number}) → 출고 확인
+   e. ds.completeOrder(orderId) → 완료 확인
+   f. 별도 order: ds.createOrder(...) → ds.cancelOrder(orderId) → 취소 확인
+   g. stock / reserved_stock / inventory_logs / customer aggregate 확인
+```
+
+### Q.5 Actual Mutation 승인 필요 조건
+
+- 실제 order 생성 전 사용자에게 명시적 승인 요청
+- `notes` 필드에 `[SMOKE TEST 3-8A.7]` 표시
+- smoke quantity는 최소(1)로 설정
+- ship 후에는 재고가 실제 차감되므로 주의
+- cancel 가능한 PENDING order와 ship/complete용 order 분리
+
+### Q.6 Smoke Data Policy
+
+| 항목 | 정책 |
+|---|---|
+| Smoke order 식별 | `notes` 필드에 `[SMOKE TEST 3-8A.7]` 표시 |
+| 실제 ID 기록 | 문서/commit/log에 customer/product/order ID 전체값 기록 금지 |
+| Cleanup | smoke 완료 후 cancel 가능한 order는 cancel, ship된 order는 `[SMOKE]` notes로 구분 |
+| Stock 복구 | cancel된 order는 reserved_stock 자동 복구, ship된 order는 stock 차감 상태 유지 |
+| Service role | smoke 중에도 service_role key 사용 금지, publishable key만 사용 |
+
+### Q.7 Go/No-Go
+
+| 항목 | 판정 |
+|---|---|
+| 3-8A.7-Prep readiness check | ✅ GO |
+| 3-8A.7 진입 (dev-console adapter smoke) | ✅ GO |
+| 3-8A.7 진입 (UI smoke) | ❌ NO-GO |
+
+### Q.8 다음 단계
+
+- **3-8A.7**: Browser Owner Smoke — dev-console adapter smoke
+  - Owner 계정으로 로그인 후 `DB.getOrdersDataSource()` adapter 직접 호출
+  - `createOrder` / `updatePendingOrder` / `shipOrder` / `cancelOrder` / `completeOrder` 검증
+  - `listOrders` read 확인
+  - stock / inventory_logs / customer aggregate side effect 확인

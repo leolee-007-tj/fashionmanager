@@ -7613,6 +7613,164 @@ RETURNS public.orders
 
 ### 다음 단계
 
+- **3-8A.7-Prep**: Orders Remote Browser Smoke Readiness Check (이번 단계)
 - **3-8A.7**: Browser Owner Smoke (owner 계정으로 read + create + ship + cancel + complete smoke test)
+- **3-8A.8**: Analytics/Customers Compatibility 검증
+
+---
+
+## 67. 3-8A.7-Prep: Orders Remote Browser Smoke Readiness Check (2026-07-26)
+
+### 목적
+
+3-8A.7 Browser Owner Smoke를 실행하기 전에 현재 아키텍처의 준비 상태를 점검한다.
+이번 단계는 readiness check + docs-only 작업이다. 코드 수정은 없다.
+
+### 수정 파일
+
+| 파일 | 변경 내용 |
+|---|---|
+| `docs/CURRENT_ARCHITECTURE.md` | 본 섹션 (67) 추가 |
+| `docs/ORDERS_REMOTE_DATASOURCE_CONTRACT.md` | 3-8A.7-Prep readiness status 업데이트 |
+
+### A. Runtime Flag Readiness
+
+| 항목 | 상태 | 비고 |
+|---|---|---|
+| `ORDERS_SUPABASE_ENABLED` 기본값 `false` | ✅ | `js/config.example.js` L27 |
+| `ORDERS_SUPABASE_REMOTE_ENABLED` 기본값 `false` | ✅ | `js/config.example.js` L30 |
+| `js/config.js`로 local-only override 가능 | ✅ | `js/config.js`는 git ignored |
+| `js/config.js` commit 금지 | ✅ | `.gitignore`에 등록됨 |
+| `SUPABASE_ENABLED` 기본값 `false` | ✅ | `js/config.example.js` L7 |
+
+**smoke 실행 시 필요 설정:**
+```javascript
+// js/config.js (local-only, git ignored)
+window.LESOUL_CONFIG = {
+    SUPABASE_ENABLED: true,
+    SUPABASE_URL: 'http://127.0.0.1:54321',
+    SUPABASE_CLIENT_KEY: '<publishable-anon-key-only>',
+    APP_BRAND_NAME: 'LESOUL',
+    PRODUCTS_SUPABASE_ENABLED: true,
+    PRODUCTS_SUPABASE_REMOTE_ENABLED: false,
+    ORDERS_SUPABASE_ENABLED: true,
+    ORDERS_SUPABASE_REMOTE_ENABLED: false
+};
+```
+
+### B. Supabase Client Readiness
+
+| 항목 | 상태 | 위치 |
+|---|---|---|
+| `LESOULSupabase.isInitialized()` 체크 | ✅ | `db.js` L905 |
+| `getClient()` → non-null 확인 | ✅ | `db.js` L911-917 |
+| `service_role` key 차단 (문자열) | ✅ | `db.js` L931-933 |
+| `service_role` JWT role 차단 | ✅ | `db.js` L935-945 |
+| Remote URL guardrail (`localhost`/`127.0.0.1`만 허용) | ✅ | `db.js` L920-927 |
+| `activeMembership.storeId` 확인 | ✅ | `db.js` L948-966 |
+| Guest 모드 → LocalOrdersDataSource fallback | ✅ | `db.js` L962-964 |
+| `ORDERS_SUPABASE_REMOTE_ENABLED` 없으면 remote URL 차단 | ✅ | `db.js` L924-926 |
+
+### C. Owner Auth Readiness
+
+| 항목 | 상태 | 위치 |
+|---|---|---|
+| Owner 로그인 → `activeMembership.role === 'owner'` | ✅ | `app-bootstrap.js` L243 |
+| `activeMembership.storeId` context 제공 | ✅ | `app-bootstrap.js` L743-760 |
+| `LESOULAppBootstrap.getContext()` 노출 | ✅ | `app-bootstrap.js` L766-773 |
+| Staff RPC 차단 (SECURITY DEFINER + role check) | ✅ | migration RPC 정의 |
+| No-membership → `_enterApp()` 차단 | ✅ | `app-bootstrap.js` L224 |
+| Guest → `showStoreOnboarding()` | ✅ | `app-bootstrap.js` |
+
+### D. Orders UI Integration Readiness
+
+**현재 `js/orders.js`는 여전히 sync local DB API를 직접 사용한다.**
+
+| 함수 | 사용 API | Remote Adapter 호출 |
+|---|---|---|
+| `submitAdd()` | `DB.addOrder()`, `DB.updateProduct()`, `DB.getOrders()` | ❌ 호출 안 함 |
+| `submitEdit()` | `DB.updateOrder()`, `DB.updateProduct()` | ❌ 호출 안 함 |
+| `submitShip()` | `DB.updateOrder()`, `DB.updateProduct()`, `DB.addInventoryLog()` | ❌ 호출 안 함 |
+| `cancel()` | `DB.updateOrder()`, `DB.updateProduct()` | ❌ 호출 안 함 |
+| `complete()` | `DB.updateOrder()` | ❌ 호출 안 함 |
+
+`DB.getOrdersDataSource()` 또는 `DB.getOrdersAsync()`를 호출하지 않는다.
+`DB._resolveRuntimeOrdersDataSource()`는 `getOrdersDataSource()`에서만 호출되며,
+`orders.js`는 `getOrdersDataSource()`를 호출하지 않는다.
+
+### E. Smoke Strategy 판정
+
+**판정: Strategy 2 — Dev-Console Adapter Smoke만 가능**
+
+| 전략 | 가능 여부 | 이유 |
+|---|---|---|
+| 1. UI Smoke | ❌ 불가능 | `orders.js`가 sync local DB API만 사용 |
+| 2. Dev-Console Adapter Smoke | ✅ 가능 | authenticated owner 상태에서 `DB.getOrdersDataSource().createOrder(...)` 등 직접 호출 |
+| 3. Smoke NO-GO | ❌ 해당 없음 | adapter smoke로 충분히 검증 가능 |
+
+**3-8A.7에서 Dev-Console Adapter Smoke 시 필요 작업:**
+1. `js/config.js`에 `ORDERS_SUPABASE_ENABLED: true` 설정
+2. Local Supabase 실행 (`supabase start`)
+3. Owner 계정으로 로그인 + active store 선택
+4. Browser console에서 adapter 직접 호출:
+   ```javascript
+   const ds = DB.getOrdersDataSource();
+   // ds.name === 'SupabaseOrdersDataSource' 확인
+   const result = await ds.createOrder({...});
+   ```
+
+### F. Test Data Readiness
+
+3-8A.7 smoke에 필요한 데이터 조건:
+
+| 항목 | 필요 조건 | 확보 방법 |
+|---|---|---|
+| Owner 계정 | email/password 인증 | `supabase start` 후 auth sign-up 또는 seed |
+| Active store | `store_members`에 owner role | `create_initial_store` RPC 또는 seed |
+| Active customer | `customers` table에 uuid | `LESOULAuthService.listStoreCustomers()` 또는 seed |
+| Active product | `products` table에 uuid + `current_stock > 0` | `LESOULAuthService.listStoreProducts()` 또는 seed |
+| Sufficient stock | `current_stock - reserved_stock >= smoke quantity` | 제품 재고 확인 |
+| Dummy order policy | `notes`에 `[SMOKE TEST 3-8A.7]` 표시 | adapter 호출 시 notes 필드에 포함 |
+| Cleanup/cancel policy | smoke 후 모든 order를 cancel 또는 별도 표시 | cancelOrder adapter 호출 |
+
+**금지사항:**
+- 실제 customer/product/order ID 전체값을 문서/commit/log에 기록 금지
+- `service_role` key 사용 금지
+- Production data 사용 금지
+
+### G. Safety Checklist
+
+| 항목 | 요구사항 |
+|---|---|
+| 사용자 승인 | 실제 order 생성 전 사용자에게 명시적 승인 요청 |
+| Smoke order 식별 | `notes` 필드에 `[SMOKE TEST 3-8A.7]` 표시 |
+| Ship path | 하나의 PENDING order → ship → complete (cancel 불가) |
+| Cancel path | 별도 PENDING order 필요 (ship된 order는 cancel 불가) |
+| 상태 전이 순서 | create → (updatePending → cancel) 또는 create → ship → complete |
+| Stock 영향 | create → `reserved_stock` 증가, ship → `current_stock` 차감, cancel → `reserved_stock` 복구 |
+| Inventory logs | create → RESERVE, ship → SHIP, cancel → RELEASE |
+| Customer aggregate | complete 후 `customers.recalculateAll()` 호출 확인 |
+| Smoke 후 정리 | cancel 미완료 order, complete된 order는 상태 표시로 남김 |
+| 복구 불가능 경고 | ship 후에는 재고가 실제 차감되므로, smoke quantity는 최소(1)로 설정 |
+
+### Go/No-Go
+
+| 항목 | 판정 |
+|---|---|
+| 3-8A.7-Prep readiness check | ✅ GO |
+| Runtime flag readiness | ✅ GO |
+| Supabase client readiness | ✅ GO |
+| Owner auth readiness | ✅ GO |
+| UI smoke | ❌ NO-GO (orders.js가 sync local API 사용) |
+| Dev-console adapter smoke | ✅ GO (3-8A.7에서 진행) |
+| 3-8A.7 진입 | ✅ GO (전제조건 충족, dev-console 방식으로 진행) |
+
+### 다음 단계
+
+- **3-8A.7**: Browser Owner Smoke — dev-console adapter smoke로 진행
+  - `js/config.js`로 `ORDERS_SUPABASE_ENABLED: true` 설정
+  - `DB.getOrdersDataSource().createOrder()` / `shipOrder()` / `cancelOrder()` / `completeOrder()` adapter smoke
+  - `listOrders()` read 확인
+  - stock / inventory_logs / customer aggregate side effect 확인
 - **3-8A.8**: Analytics/Customers Compatibility 검증
 
