@@ -8088,9 +8088,148 @@ Browser owner dev-console에서 createOrder 후 cancelOrder까지의 Path A muta
 
 ### 다음 단계
 
-- **3-8A.7B-B**: Path B — createOrder → shipOrder → completeOrder ✅
-  - Path B: createOrder → shipOrder → completeOrder
-  - createOrder → PENDING, reserved_stock +1, inventory_log RESERVE 1건
-  - shipOrder → SHIPPED, current_stock -1, reserved_stock 복구, inventory_log SHIP 1건
-  - completeOrder → COMPLETED, customer order_count +1, total_quantity +1
+- **3-8A.8**: updatePendingOrder RPC Adapter
+
+---
+
+## 72. 3-8A.7B-B: Orders Mutation Smoke Path B - createOrder to shipOrder to completeOrder (2026-07-26)
+
+### 목적
+
+Browser owner dev-console에서 createOrder → shipOrder → completeOrder까지의 Path B mutation smoke를 수행한다. PENDING → SHIPPED → COMPLETED 상태 전환, stock 차감/복구, inventory_logs, customer aggregate 변화를 검증한다.
+
+### 사용자 승인
+
+"3-8A.7B-B 승인. createOrder 후 shipOrder, completeOrder smoke 진행해도 됩니다" (2026-07-26)
+
+### 실행 방식
+
+- Dev-console adapter smoke (`DB.getOrdersDataSource()`)
+- publishable/anon key only, service_role 사용 안 함
+- createOrder 1회, shipOrder 1회, completeOrder 1회
+- quantity는 1만 사용
+
+### Selected Customer/Product Readiness
+
+| 항목 | 결과 |
+|---|---|
+| hasCustomerUuid | true (smoke customer) |
+| hasProductUuid | true |
+| availableStockGte1 | true |
+| errors | null |
+
+### Customer Aggregate Before
+
+| 항목 | before 값 |
+|---|---|
+| order_count | 0 |
+| total_quantity | 0 |
+
+### createOrder Result
+
+| 항목 | 결과 |
+|---|---|
+| created | true |
+| hasOrderUuid | true |
+| status | PENDING |
+| quantity | 1 |
+| hasCustomerUuid | true |
+| hasProductUuid | true |
+
+### After-Create Side Effects
+
+| 항목 | 결과 |
+|---|---|
+| reservedStockIncreasedBy1 | true |
+| productReadOk | true |
+| productError | null |
+
+### shipOrder Result
+
+| 항목 | 결과 |
+|---|---|
+| shipped | true |
+| hasOrderUuid | true |
+| status | SHIPPED |
+
+### After-Ship Side Effects
+
+| 항목 | 결과 |
+|---|---|
+| currentStockDecreasedBy1 | true |
+| reservedStockRestored | true |
+| hasReserveLog | true |
+| hasShipLog | true |
+| productReadOk | true |
+| logsReadOk | true |
+| orderReadOk | true |
+| all errors | null |
+
+### completeOrder Result
+
+| 항목 | 결과 |
+|---|---|
+| completed | true |
+| hasOrderUuid | true |
+| status | COMPLETED |
+
+### After-Complete Side Effects
+
+| 항목 | 결과 |
+|---|---|
+| customerOrderCountIncreased | true (+1) |
+| customerQuantityIncreased | true (+1) |
+| orderStatus | COMPLETED |
+| orderReadOk | true |
+| customerReadOk | true |
+| all errors | null |
+
+### Forbidden Methods Not Called
+
+| 항목 | 호출 여부 |
+|---|---|
+| cancelOrder | ❌ 호출 안 함 |
+| updatePendingOrder | ❌ 호출 안 함 |
+| createOrder 중복 | ❌ 1회만 |
+| shipOrder 중복 | ❌ 1회만 |
+| completeOrder 중복 | ❌ 1회만 |
+| products direct update | ❌ 없음 |
+| inventory_logs direct insert | ❌ 없음 |
+| SQL Editor | ❌ 없음 |
+| service_role | ❌ 없음 |
+
+### UUID 전체값 미기록
+
+UUID 전체값은 기록하지 않음. 존재 여부(true/false)만 확인.
+
+### Actual Mutations Summary
+
+| 항목 | 건수 |
+|---|---|
+| createOrder | 1 |
+| shipOrder | 1 |
+| completeOrder | 1 |
+| Order 최종 상태 | COMPLETED |
+| current_stock | -1 (ship 시 차감) |
+| reserved_stock | 0 (ship 시 복구) |
+| inventory_logs | 2건 (RESERVE + SHIP) |
+| customer order_count | +1 |
+| customer total_quantity | +1 |
+| UUID 전체값 기록 | 기록하지 않음 |
+
+### Go/No-Go
+
+| 항목 | 판정 |
+|---|---|
+| Path B: create → ship → complete | ✅ GO |
+| createOrder adapter | ✅ 정상 동작 |
+| shipOrder adapter | ✅ 정상 동작 |
+| completeOrder adapter | ✅ 정상 동작 |
+| stock 차감/복구 | ✅ 정상 |
+| inventory logs | ✅ 2건 (RESERVE + SHIP) |
+| customer aggregate | ✅ 정상 증가 |
+
+### 다음 단계
+
+- **3-8A.8**: updatePendingOrder RPC Adapter
 

@@ -1103,9 +1103,72 @@ RETURNS public.orders
 
 ### Next Step
 
-- **3-8A.7B-B**: Path B — createOrder → shipOrder → completeOrder ✅
-  - createOrder → PENDING, reservedStockIncreasedBy1
-  - shipOrder → SHIPPED, currentStockDecreasedBy1, reservedStockRestored
-  - completeOrder → COMPLETED, customerOrderCountIncreased, customerQuantityIncreased
-  - Stock: current_stock -1, reserved_stock 0
-  - Customer Aggregate: order_count +1, total_quantity +1
+- **3-8A.8**: updatePendingOrder RPC Adapter
+
+---
+
+## V. 3-8A.7B-B Path B Result (2026-07-26)
+
+### create → ship → complete Path Status
+
+| 단계 | 결과 |
+|---|---|
+| createOrder | ✅ PENDING, reservedStockIncreasedBy1 |
+| After-create | ✅ productReadOk, no errors |
+| shipOrder | ✅ SHIPPED, currentStockDecreasedBy1, reservedStockRestored |
+| After-ship | ✅ hasReserveLog, hasShipLog, productReadOk, no errors |
+| completeOrder | ✅ COMPLETED, customerOrderCountIncreased, customerQuantityIncreased |
+| After-complete | ✅ orderReadOk, customerReadOk, no errors |
+
+### Current/Reserved Stock Result
+
+| 항목 | 결과 |
+|---|---|
+| create 시 reserved_stock | +1 |
+| ship 시 current_stock | -1 |
+| ship 시 reserved_stock | 복구 (0으로) |
+| 최종 current_stock 영향 | -1 (실제 차감) |
+| 최종 reserved_stock 영향 | 0 (복구 완료) |
+
+### Inventory Log Result
+
+| 항목 | 결과 |
+|---|---|
+| RESERVE log | ✅ 1건 |
+| SHIP log | ✅ 1건 |
+| 총 log 수 | 2건 |
+| RELEASE/CANCEL log | ❌ 없음 (Path B이므로) |
+
+### Customer Aggregate Result
+
+| 항목 | before | after | 증가 |
+|---|---|---|---|
+| order_count | 0 | 1 | +1 |
+| total_quantity | 0 | 1 | +1 |
+
+### Mutation Smoke Path B Status
+
+| 항목 | 상태 |
+|---|---|
+| createOrder adapter | ✅ 정상 동작 확인 |
+| shipOrder adapter | ✅ 정상 동작 확인 |
+| completeOrder adapter | ✅ 정상 동작 확인 |
+| current_stock 차감 | ✅ 정상 |
+| reserved_stock 복구 | ✅ 정상 |
+| inventory logs | ✅ 2건 기록 (RESERVE + SHIP) |
+| customer aggregate | ✅ 증가 확인 |
+| cancelOrder | ❌ 호출 안 함 |
+| updatePendingOrder | ❌ 호출 안 함 |
+| UUID 전체값 기록 | 기록하지 않음 |
+
+### Remaining Risks
+
+| 위험 | 상태 |
+|---|---|
+| updatePendingOrder 미검증 | ⚠️ 3-8A.8에서 별도 검증 예정 |
+| multi-quantity smoke | ⚠️ quantity=1만 검증, N>1 별도 필요 |
+| UI integration | ⚠️ dev-console only, UI smoke 미수행 |
+
+### Next Step
+
+- **3-8A.8**: updatePendingOrder RPC Adapter
