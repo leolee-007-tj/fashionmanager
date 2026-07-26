@@ -7984,3 +7984,110 @@ customer 확보 후 3-8A.7B는 두 경로로 분리:
   - Path A: createOrder → cancelOrder
   - Path B: createOrder → shipOrder → completeOrder
 
+---
+
+## 71. 3-8A.7B-A: Orders Mutation Smoke Path A - createOrder to cancelOrder (2026-07-26)
+
+### 목적
+
+Browser owner dev-console에서 createOrder 후 cancelOrder까지의 Path A mutation smoke를 수행한다. reserved_stock 증가/복구 및 inventory_logs를 검증한다.
+
+### 사용자 승인
+
+"3-8A.7B-A 승인. createOrder 후 cancelOrder smoke 진행해도 됩니다." (2026-07-26)
+
+### 실행 방식
+
+- Dev-console adapter smoke (`DB.getOrdersDataSource()`)
+- publishable/anon key only, service_role 사용 안 함
+- createOrder 1회, cancelOrder 1회
+
+### Selected Candidates
+
+| 항목 | 결과 |
+|---|---|
+| hasCustomerUuid | true |
+| hasProductUuid | true |
+| availableStockGte1 | true |
+| errors | null |
+
+### createOrder Result
+
+| 항목 | 결과 |
+|---|---|
+| created | true |
+| hasOrderUuid | true |
+| status | PENDING |
+| quantity | 1 |
+| hasCustomerUuid | true |
+| hasProductUuid | true |
+
+### After-Create Side Effects
+
+| 항목 | 결과 |
+|---|---|
+| reservedStockIncreasedBy1 | true |
+| productReadOk | true |
+| productError | null |
+
+### cancelOrder Result
+
+| 항목 | 결과 |
+|---|---|
+| cancelled | true |
+| hasOrderUuid | true |
+| status | CANCELLED |
+
+### After-Cancel Side Effects
+
+| 항목 | 결과 |
+|---|---|
+| reservedStockRestored | true |
+| orderStatus | CANCELLED |
+| hasReserveLog | true |
+| hasReleaseOrCancelLog | true |
+| logCount | 2 |
+| productReadOk | true |
+| logsReadOk | true |
+| orderReadOk | true |
+| all errors | null |
+
+### Forbidden Methods Not Called
+
+| 항목 | 호출 여부 |
+|---|---|
+| updatePendingOrder | ❌ 호출 안 함 |
+| shipOrder | ❌ 호출 안 함 |
+| completeOrder | ❌ 호출 안 함 |
+| createOrder 중복 | ❌ 1회만 |
+| cancelOrder 중복 | ❌ 1회만 |
+| products direct update | ❌ 없음 |
+| inventory_logs direct insert | ❌ 없음 |
+| SQL Editor | ❌ 없음 |
+| service_role | ❌ 없음 |
+
+### Mutation Summary
+
+| 항목 | 건수 |
+|---|---|
+| createOrder | 1 |
+| cancelOrder | 1 |
+| Order 최종 상태 | CANCELLED |
+| Reserved stock | 생성 시 +1, cancel 시 복구 (최종 영향 없음) |
+| UUID 전체값 기록 | 기록하지 않음 |
+
+### Go/No-Go
+
+| 항목 | 판정 |
+|---|---|
+| Path A: create → cancel | ✅ GO |
+| createOrder adapter | ✅ 정상 동작 |
+| cancelOrder adapter | ✅ 정상 동작 |
+| reserved stock restore | ✅ 정상 |
+| inventory logs | ✅ 2건 (RESERVE + RELEASE/CANCEL) |
+
+### 다음 단계
+
+- **3-8A.7B-B**: Path B — createOrder → shipOrder → completeOrder
+  - Path B: createOrder → shipOrder → completeOrder
+

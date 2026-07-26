@@ -1058,3 +1058,49 @@ RETURNS public.orders
 ### Next Step
 
 - **3-8A.7B**: Browser Owner Mutation Smoke
+
+---
+
+## U. 3-8A.7B-A Path A Result (2026-07-26)
+
+### create → cancel Path Status
+
+| 단계 | 결과 |
+|---|---|
+| createOrder | ✅ created, status=PENDING, quantity=1 |
+| After-create | ✅ reservedStockIncreasedBy1 |
+| cancelOrder | ✅ cancelled, status=CANCELLED |
+| After-cancel | ✅ reservedStockRestored, hasReserveLog=true, hasReleaseOrCancelLog=true, logCount=2 |
+
+### Reserved Stock Restore
+
+| 항목 | 결과 |
+|---|---|
+| 생성 시 reserved_stock | +1 |
+| cancel 시 reserved_stock | 복구 (원래 값으로) |
+| 최종 영향 | 없음 |
+
+### Inventory Log Result
+
+| 항목 | 결과 |
+|---|---|
+| RESERVE log | ✅ 있음 |
+| RELEASE/CANCEL log | ✅ 있음 |
+| 총 log 수 | 2 |
+
+### Mutation Smoke Path A Status
+
+| 항목 | 상태 |
+|---|---|
+| createOrder adapter | ✅ 정상 동작 확인 |
+| cancelOrder adapter | ✅ 정상 동작 확인 |
+| reserved stock | ✅ 증가/복구 정상 |
+| inventory logs | ✅ 2건 기록 |
+| updatePendingOrder | ❌ 호출 안 함 |
+| shipOrder | ❌ 호출 안 함 |
+| completeOrder | ❌ 호출 안 함 |
+| UUID 전체값 기록 | 기록하지 않음 |
+
+### Next Step
+
+- **3-8A.7B-B**: Path B — createOrder → shipOrder → completeOrder
