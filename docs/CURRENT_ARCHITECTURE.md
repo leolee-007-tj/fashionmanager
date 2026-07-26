@@ -8440,3 +8440,87 @@ orders.js의 모든 local sync API 의존성을 audit하고, remote SupabaseOrde
 
 - **3-8A.9-A**: Orders UI read-only remote list rendering
 
+---
+
+## 75. 3-8A.9-A: Orders UI read-only remote list rendering (2026-07-26)
+
+### 목적
+
+Orders UI의 목록 조회/load/renderList 경로를 remote mode에서 read-only async로 연결한다.
+이번 단계는 읽기 전용 UI 연결만 한다. order create/update/cancel/ship/complete UI action 구현은 하지 않는다.
+
+### 구현 범위
+
+| 항목 | 내용 |
+|---|---|
+| 수정 파일 | `js/orders.js`, `js/app.js` |
+| 신규 파일 | `tests/orders-ui-remote-readonly-contract.test.mjs` |
+| 핵심 변경 | `renderList()` async 전환, `isRemoteOrdersMode()` 분기, `_loadRemoteDataForRender()` async 데이터 로드, `_renderListBody()` 공통 렌더링 |
+
+### Local Mode 유지 방식
+
+- `isRemoteOrdersMode()`: `DB.getOrdersDataSource().name === 'SupabaseOrdersDataSource'` 확인
+- local mode: 기존 sync `DB.getOrders()` + `DB.getProducts()` + `DB.getCustomers()` 그대로 사용
+- remote mode: `DB.getOrdersAsync()` + `DB.getProductsAsync()` + Supabase customers read-only SELECT 사용
+- 기본 DataSource = `LocalOrdersDataSource` (ORDERS_SUPABASE_ENABLED=false)
+
+### Remote Mode Read-only Path
+
+`isRemoteOrdersMode()` → `_loadRemoteDataForRender()` → `_renderListBody(products, customers)`
+
+- `_loadRemoteDataForRender()`: `Promise.all`로 orders + products + customers 동시 로드
+- customers: `client.from('customers').select('*').eq('store_id', storeId).is('deleted_at', null)` read-only SELECT
+- products: `DB.getProductsAsync()` (기존 구현)
+- orders: `DB.getOrdersAsync()` (기존 구현)
+- 에러 시: `App.flash('주문 데이터를 불러오지 못했습니다.', 'error')` 표시, 빈 배열 fallback
+
+### Customers/Products Dependency 처리
+
+- remote mode: `_renderListBody(products, customers)`로 products/customers를 인자로 전달
+- local mode: `_renderListBody(DB.getProducts(), DB.getCustomers())` 기존 sync 호출
+- `_renderListBody`는 공통 렌더링 함수로, products/customers를 외부에서 주입받아 rendering
+- product/customer uuid 기반과 legacy id 기반 모두 안전 처리
+
+### Forbidden Mutation 미구현
+
+| 금지 작업 | 상태 |
+|---|---|
+| createOrder UI submit | ❌ 미구현 |
+| updatePendingOrder UI submit | ❌ 미구현 |
+| cancelOrder UI submit | ❌ 미구현 |
+| shipOrder UI submit | ❌ 미구현 |
+| completeOrder UI submit | ❌ 미구현 |
+| DB.updateProduct direct | ❌ 미사용 |
+| DB.addInventoryLog direct | ❌ 미사용 |
+| DB.setOrders remote | ❌ 미사용 |
+| DB.setProducts remote | ❌ 미사용 |
+
+### Tests/Preflight 결과
+
+| 항목 | 결과 |
+|---|---|
+| 전체 tests | 952 tests, 0 fail |
+| 신규 contract tests | 22 tests (UR1-UR22), 0 fail |
+| preflight | PASS |
+| migration 변경 | 없음 |
+| supabase config 변경 | 없음 |
+| service_role 사용 | 없음 |
+
+### Go/No-Go
+
+| 항목 | 판정 |
+|---|---|
+| remote read-only list rendering | ✅ GO |
+| local mode sync 흐름 유지 | ✅ GO |
+| forbidden mutation 미구현 | ✅ GO |
+| tests 통과 | ✅ GO (952 tests, 0 fail) |
+| preflight PASS | ✅ GO |
+| js/config.js staged | ❌ 없음 |
+| data_export.json | ❌ 없음 |
+| migration 변경 | ❌ 없음 |
+| supabase db push | ❌ 없음 |
+
+### 다음 단계
+
+- **3-8A.9-B**: Orders UI create form remote submit
+

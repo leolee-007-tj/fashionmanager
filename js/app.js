@@ -143,7 +143,7 @@ const App = {
                 case 'orders':
                     if (args[0] === 'add') content = Orders.renderAdd();
                     else if (args[1] === 'ship') content = Orders.renderShip(args[0]);
-                    else content = Orders.renderList();
+                    else content = await Orders.renderList();
                     break;
                 case 'customers':
                     if (args[0] === 'add') content = Customers.renderAdd();

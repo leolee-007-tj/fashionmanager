@@ -103,12 +103,14 @@ remote mode에서는 다음 작업이 절대 금지된다:
 
 ## Implementation Split
 
-### 3-8A.9-A: Orders UI read-only remote list rendering
+### 3-8A.9-A: Orders UI read-only remote list rendering ✅ 완료 (2026-07-26)
 
-- renderList() / load() async 전환
-- DB.getOrdersAsync() + DB.getProductsAsync() + customer async list
-- loading/error handling 추가
-- local mode와 remote mode 분기
+- renderList() / load() async 전환 ✅
+- DB.getOrdersAsync() + DB.getProductsAsync() + customer async list ✅
+- loading/error handling 추가 ✅
+- local mode와 remote mode 분기 ✅
+- tests: 22 contract tests, 0 fail ✅
+- preflight: PASS ✅
 
 ### 3-8A.9-B: Orders UI create form remote submit
 

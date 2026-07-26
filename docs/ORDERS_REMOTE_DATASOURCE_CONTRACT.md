@@ -1279,3 +1279,50 @@ orders.js는 현재 모든 주문 화면에서 sync localStorage API만 사용�
 | 3-8A.9-F | Legacy local mode regression smoke |
 
 상세 전환 계획은 [docs/ORDERS_UI_REMOTE_CONVERSION_PLAN.md](docs/ORDERS_UI_REMOTE_CONVERSION_PLAN.md) 참조.
+
+---
+
+## Y. 3-8A.9-A UI Read-only Integration Status (2026-07-26)
+
+### 목적
+
+Orders UI의 목록 조회/load/renderList 경로를 remote mode에서 read-only async로 연결.
+
+### UI Read-only Integration Status
+
+| 항목 | 상태 |
+|---|---|
+| `isRemoteOrdersMode()` helper | ✅ 구현됨 |
+| `_loadRemoteDataForRender()` async loader | ✅ 구현됨 |
+| `_renderListBody(products, customers)` 공통 렌더링 | ✅ 구현됨 |
+| `renderList()` async 전환 | ✅ 구현됨 |
+| `app.js` await Orders.renderList() | ✅ 구현됨 |
+| remote mode: DB.getOrdersAsync() 사용 | ✅ |
+| remote mode: DB.getProductsAsync() 사용 | ✅ |
+| remote mode: Supabase customers read-only SELECT | ✅ |
+| local mode: 기존 sync API 유지 | ✅ |
+| error handling (try/catch + App.flash) | ✅ |
+| contract tests | ✅ 22 tests, 0 fail |
+
+### Remote List Rendering Status
+
+| 항목 | 상태 |
+|---|---|
+| orders 목록 remote 조회 | ✅ read-only |
+| products display dependency | ✅ DB.getProductsAsync() |
+| customers display dependency | ✅ Supabase read-only SELECT |
+| loading/error 상태 | ✅ 구현됨 |
+
+### Mutation UI Pending
+
+| 항목 | 상태 |
+|---|---|
+| createOrder UI submit | ❌ 미구현 (3-8A.9-B) |
+| updatePendingOrder UI submit | ❌ 미구현 (3-8A.9-C) |
+| cancelOrder UI submit | ❌ 미구현 (3-8A.9-C) |
+| shipOrder UI submit | ❌ 미구현 (3-8A.9-D) |
+| completeOrder UI submit | ❌ 미구현 (3-8A.9-D) |
+
+### Next Step
+
+- **3-8A.9-B**: Orders UI create form remote submit

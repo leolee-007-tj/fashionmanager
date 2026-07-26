@@ -10,6 +10,50 @@ const Orders = {
         editingOrderId: null
     },
 
+    /**
+     * 3-8A.9-A: remote read-only mode 판별.
+     * SupabaseOrdersDataSource가 활성화된 경우 true.
+     */
+    isRemoteOrdersMode() {
+        try {
+            const ds = DB.getOrdersDataSource();
+            return ds && ds.name === 'SupabaseOrdersDataSource';
+        } catch (e) {
+            return false;
+        }
+    },
+
+    /**
+     * 3-8A.9-A: remote read-only 데이터 로드.
+     * orders, products, customers를 async로 가져와 state에 저장한다.
+     * mutation 없음.
+     */
+    async _loadRemoteDataForRender() {
+        try {
+            const client = LESOULSupabase.getClient();
+            const ctx = LESOULAppBootstrap.getContext();
+            const storeId = ctx.activeMembership && (ctx.activeMembership.storeId || ctx.activeMembership.store_id);
+
+            const [orders, products, custResult] = await Promise.all([
+                DB.getOrdersAsync(),
+                DB.getProductsAsync(),
+                client.from('customers').select('*').eq('store_id', storeId).is('deleted_at', null)
+            ]);
+
+            this.state.orders = orders || [];
+            this.state._remoteProducts = products || [];
+            this.state._remoteCustomers = (custResult && custResult.data) || [];
+            this.applyFilters();
+        } catch (e) {
+            console.error('Orders remote load failed:', e);
+            this.state.orders = [];
+            this.state._remoteProducts = [];
+            this.state._remoteCustomers = [];
+            this.state.filtered = [];
+            App.flash('주문 데이터를 불러오지 못했습니다.', 'error');
+        }
+    },
+
     load() {
         this.state.orders = DB.getOrders();
         this.applyFilters();
@@ -91,8 +135,25 @@ const Orders = {
         this.state.filtered = list;
     },
 
-    renderList() {
+    /**
+     * 3-8A.9-A: read-only list rendering. remote mode에서는 async로 데이터를 로드한 후
+     * _renderListBody를 호출한다. local mode는 기존 sync 흐름 유지.
+     */
+    async renderList() {
+        if (this.isRemoteOrdersMode()) {
+            await this._loadRemoteDataForRender();
+            return this._renderListBody(this.state._remoteProducts || [], this.state._remoteCustomers || []);
+        }
+        // local mode — 기존 sync 흐름
         this.load();
+        return this._renderListBody(DB.getProducts(), DB.getCustomers());
+    },
+
+    /**
+     * 3-8A.9-A: renderList의 HTML 생성 로직을 products/customers를 인자로 받도록 분리.
+     * mutation 없음. DB.write API 호출 금지.
+     */
+    _renderListBody(products, customers) {
         const list = this.state.filtered;
         const totalQty = list.reduce((s, o) => s + (o.quantity || 0), 0);
         const totalAmt = list.reduce((s, o) => s + ((o.selling_price || 0) * (o.quantity || 0)), 0);
@@ -178,8 +239,6 @@ const Orders = {
                     </thead>
                     <tbody>
             `;
-            const products = DB.getProducts();
-            const customers = DB.getCustomers();
             list.forEach(o => {
                 const product = products.find(p => p.id === o.product_id);
                 const customer = customers.find(c => c.id === o.customer_id);

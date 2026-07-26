@@ -274,15 +274,15 @@ describe('Orders Remote Schema/RLS/RPC Audit (OR1-OR18)', function () {
 
     // ============================================================
     // J. JS/CSS/HTML scope guard (runtime check via git status)
-    // 3-8A.3 implementation phase: js/db.js, js/config.example.js are allowed.
-    // Other JS files (orders.js, products.js, customers.js, analytics.js, app.js,
+    // 3-8A.9-A: js/db.js, js/config.example.js, js/orders.js, js/app.js are allowed.
+    // Other JS files (products.js, customers.js, analytics.js,
     // supabase-client.js), css/, index.html, and supabase/migrations/ remain forbidden.
     // ============================================================
 
-    it('OR18: only allowed JS files changed (db.js, config.example.js); other JS/CSS/HTML/migration untouched', function () {
+    it('OR18: only allowed JS files changed (db.js, orders.js, app.js, config.example.js); other JS/CSS/HTML/migration untouched (3-8A.9-A)', function () {
         const changed = execSync('git diff --name-only HEAD', { cwd: REPO_ROOT, encoding: 'utf-8' }).trim();
         const lines = changed ? changed.split('\n') : [];
-        const allowedJs = new Set(['js/db.js', 'js/config.example.js']);
+        const allowedJs = new Set(['js/db.js', 'js/config.example.js', 'js/orders.js', 'js/app.js']);
         const forbidden = lines.filter(f =>
             (f.startsWith('js/') && !allowedJs.has(f)) ||
             f.startsWith('css/') ||
@@ -290,7 +290,7 @@ describe('Orders Remote Schema/RLS/RPC Audit (OR1-OR18)', function () {
             f.startsWith('supabase/migrations/')
         );
         assert.strictEqual(forbidden.length, 0,
-            `Only js/db.js and js/config.example.js may change in 3-8A.3. Forbidden changes: ${forbidden.join(', ')}`);
+            `Only js/db.js, js/config.example.js, js/orders.js, js/app.js may change in 3-8A.9-A. Forbidden changes: ${forbidden.join(', ')}`);
     });
 
     // ============================================================
