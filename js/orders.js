@@ -576,7 +576,6 @@ const Orders = {
                             <option value="">${t('common', 'please_select')}</option>
                             ${customers.map(c => `<option value="${c.remote_id || c.id}">${c.name || c.customer_name_snapshot || ''}</option>`).join('')}
                         </select>
-                        <p class="text-muted mt-2"><i class="fas fa-info-circle"></i> ${t('common', 'auto_register')}</p>
                     </div>
                     <div class="form-row">
                         <div class="form-group">

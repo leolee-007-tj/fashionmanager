@@ -124,6 +124,13 @@ remote mode에서는 다음 작업이 절대 금지된다:
 - contract tests: 28 tests, 0 fail ✅
 - preflight: PASS ✅
 
+### 3-8A.9-B.1: Orders UI remote create customer copy cleanup ✅ 완료 (2026-07-26)
+
+- _renderAddRemote(): auto_register 문구 제거 ✅
+- local renderAdd(): 기존 auto_register 유지 ✅
+- 기능 로직 변경 없음 ✅
+- DB mutation 없음 ✅
+
 ### 3-8A.9-C: Orders UI cancel/edit pending remote actions
 
 - cancel() / delete() → ds.cancelOrder()

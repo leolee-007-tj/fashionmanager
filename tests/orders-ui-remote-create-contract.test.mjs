@@ -158,6 +158,24 @@ describe('3-8A.9-B Orders UI Remote Create Contract', function () {
     });
 
     // ============================================================
+    // UC19a-UC19b: 3-8A.9-B.1 auto_register copy cleanup
+    // ============================================================
+
+    it('UC19a: _renderAddRemote does not contain auto_register copy', function () {
+        const renderRemoteStart = ORDERS_JS.indexOf('_renderAddRemote() {');
+        const toggleStart = ORDERS_JS.indexOf('toggleNewCustomer() {');
+        const renderRemoteSection = toggleStart > renderRemoteStart ? ORDERS_JS.slice(renderRemoteStart, toggleStart) : ORDERS_JS.slice(renderRemoteStart);
+        assert.doesNotMatch(renderRemoteSection, /auto_register/, '_renderAddRemote should not contain auto_register copy');
+    });
+
+    it('UC19b: local renderAdd still contains auto_register copy', function () {
+        const renderAddStart = ORDERS_JS.indexOf('renderAdd()');
+        const renderRemoteStart = ORDERS_JS.indexOf('_renderAddRemote() {');
+        const renderLocalSection = renderRemoteStart > renderAddStart ? ORDERS_JS.slice(renderAddStart, renderRemoteStart) : ORDERS_JS.slice(renderAddStart);
+        assert.match(renderLocalSection, /auto_register/, 'local renderAdd should still contain auto_register copy');
+    });
+
+    // ============================================================
     // UC20-UC23: local mode compatibility
     // ============================================================
 

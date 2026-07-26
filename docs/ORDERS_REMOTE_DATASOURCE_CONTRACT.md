@@ -1348,6 +1348,7 @@ Orders UI의 주문 등록 submitAdd 경로를 remote mode에서 SupabaseOrdersD
 | customer_uuid 검증 | ✅ |
 | product_uuid 검증 | ✅ |
 | 신규 customer 자동 생성 금지 | ✅ |
+| auto_register copy cleanup (3-8A.9-B.1) | ✅ |
 | local mode: 기존 submitAdd sync API 유지 | ✅ |
 | error handling (try/catch + App.flash) | ✅ |
 | contract tests | ✅ 28 tests, 0 fail |

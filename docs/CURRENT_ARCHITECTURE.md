@@ -8582,5 +8582,23 @@ local mode는 기존 sync 흐름을 유지하며, remote mode에서만 async cre
 
 #### 다음 단계
 
+- **3-8A.9-B.1**: Orders UI remote create customer copy cleanup
+
+### 3-8A.9-B.1: Orders UI remote create customer copy cleanup (2026-07-26)
+
+#### 목적
+
+`_renderAddRemote()`의 고객 선택 영역에 있던 `t('common', 'auto_register')` 문구 제거.
+remote mode에서는 신규 고객 자동 생성이 금지되어 있으므로, auto_register 문구가 오해를 줄 수 있어 제거한다.
+
+#### 변경 내용
+
+- `_renderAddRemote()`: auto_register 안내 문구 제거
+- local `renderAdd()`: 기존 auto_register 문구 유지
+- 기능 로직 변경 없음
+- DB mutation 없음
+
+#### 다음 단계
+
 - **3-8A.9-C**: Orders UI cancel/edit pending remote actions
 
