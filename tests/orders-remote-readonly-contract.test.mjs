@@ -120,28 +120,41 @@ describe('Orders Remote Read-only Prototype Contract (RO1-RO18)', function () {
     // RO12-RO14: Write methods disabled
     // ============================================================
 
-    it('RO12: write methods throw "not enabled yet" or equivalent (except createOrder — implemented in 3-8A.5)', function () {
+    it('RO12: only setOrders/updateOrder/deleteOrder/findDuplicateOrder still throw (3-8A.6: status RPCs implemented)', function () {
         const supabaseSection = DB_JS.match(/_createControlledSupabaseOrdersDataSource\(client,\s*context\)\s*\{[\s\S]*?(?=\n    \},\n\n    \/\*\*)/);
         assert.ok(supabaseSection, 'SupabaseOrdersDataSource section should exist');
         // Check that write methods throw
         assert.match(supabaseSection[0], /_writeDisabledMsg/, 'write disabled message variable should exist');
-        // 3-8A.5: createOrder is now implemented; remaining write methods must still throw.
-        const writeMethods = ['setOrders', 'updatePendingOrder', 'shipOrder', 'cancelOrder', 'completeOrder', 'updateOrder', 'deleteOrder', 'findDuplicateOrder'];
-        for (const method of writeMethods) {
+        // 3-8A.5: createOrder implemented. 3-8A.6: updatePendingOrder/shipOrder/cancelOrder/completeOrder implemented.
+        // Only setOrders/updateOrder/deleteOrder/findDuplicateOrder still throw.
+        const disabledMethods = ['setOrders', 'updateOrder', 'deleteOrder', 'findDuplicateOrder'];
+        for (const method of disabledMethods) {
             const methodPattern = new RegExp(`${method}\\([^)]*\\)\\s*\\{[\\s\\S]*?throw`);
-            assert.match(supabaseSection[0], methodPattern, `${method} should throw`);
+            assert.match(supabaseSection[0], methodPattern, `${method} should still throw`);
+        }
+        // 3-8A.6: status RPC methods should NOT throw _writeDisabledMsg (they are implemented)
+        const implementedMethods = ['updatePendingOrder', 'shipOrder', 'cancelOrder', 'completeOrder'];
+        for (const method of implementedMethods) {
+            const methodBlock = supabaseSection[0].match(new RegExp(`${method}\\([^)]*\\)\\s*\\{([\\s\\S]*?)\\n        \\},`));
+            if (methodBlock) {
+                assert.doesNotMatch(methodBlock[1], /_writeDisabledMsg/, `${method} should NOT throw _writeDisabledMsg (3-8A.6 implemented)`);
+            }
         }
     });
 
-    it('RO13: db.js only calls create_order RPC (3-8A.5); other write RPCs still forbidden', function () {
+    it('RO13: db.js calls allowed write RPCs (3-8A.6); other write RPCs still forbidden', function () {
         const supabaseSection = DB_JS.match(/_createControlledSupabaseOrdersDataSource\(client,\s*context\)\s*\{[\s\S]*?(?=\n    \},\n\n    \/\*\*)/);
         assert.ok(supabaseSection, 'SupabaseOrdersDataSource section should exist');
-        // 3-8A.5: create_order RPC is now allowed (exactly once, inside createOrder).
-        // Other write RPCs remain forbidden.
-        assert.doesNotMatch(supabaseSection[0], /\.rpc\('update_pending_order'/, 'should not call update_pending_order RPC');
-        assert.doesNotMatch(supabaseSection[0], /\.rpc\('ship_order'/, 'should not call ship_order RPC');
-        assert.doesNotMatch(supabaseSection[0], /\.rpc\('cancel_order'/, 'should not call cancel_order RPC');
-        assert.doesNotMatch(supabaseSection[0], /\.rpc\('complete_order'/, 'should not call complete_order RPC');
+        // 3-8A.5: create_order RPC is now allowed.
+        // 3-8A.6: update_pending_order/ship_order/cancel_order/complete_order RPCs are now allowed.
+        // Check RPC name strings exist in the source (they are called via _callOrderRpcAndMap with variable).
+        assert.match(supabaseSection[0], /['\"]create_order['\"]/, 'should reference create_order RPC');
+        assert.match(supabaseSection[0], /['\"]update_pending_order['\"]/, 'should reference update_pending_order RPC (3-8A.6)');
+        assert.match(supabaseSection[0], /['\"]ship_order['\"]/, 'should reference ship_order RPC (3-8A.6)');
+        assert.match(supabaseSection[0], /['\"]cancel_order['\"]/, 'should reference cancel_order RPC (3-8A.6)');
+        assert.match(supabaseSection[0], /['\"]complete_order['\"]/, 'should reference complete_order RPC (3-8A.6)');
+        // Other write RPCs remain forbidden
+        assert.doesNotMatch(supabaseSection[0], /['\"]delete_order['\"]/, 'should not reference delete_order RPC');
     });
 
     it('RO14: db.js does not use insert/update/delete for orders remote writes', function () {

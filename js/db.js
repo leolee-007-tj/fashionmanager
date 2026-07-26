@@ -1123,6 +1123,10 @@ const DB = {
                 err.message.indexOf('requires ') === 0 ||
                 err.message.indexOf('createOrder') === 0 ||
                 err.message.indexOf('SupabaseOrdersDataSource.createOrder') === 0 ||
+                err.message.indexOf('SupabaseOrdersDataSource.updatePendingOrder') === 0 ||
+                err.message.indexOf('SupabaseOrdersDataSource.shipOrder') === 0 ||
+                err.message.indexOf('SupabaseOrdersDataSource.cancelOrder') === 0 ||
+                err.message.indexOf('SupabaseOrdersDataSource.completeOrder') === 0 ||
                 err.message.indexOf('Invalid') === 0 ||
                 err.message.indexOf('Missing') === 0
             )) {
@@ -1134,7 +1138,7 @@ const DB = {
             throw wrapped;
         }
 
-        const _writeDisabledMsg = 'SupabaseOrdersDataSource write is not enabled yet (3-8A.5: only createOrder implemented)';
+        const _writeDisabledMsg = 'SupabaseOrdersDataSource write is not enabled yet (3-8A.6: status RPC adapters implemented; setOrders/updateOrder/deleteOrder/findDuplicateOrder still disabled)';
 
         /**
          * 3-8A.5: createOrder payload를 create_order RPC parameter로 변환.
@@ -1232,6 +1236,188 @@ const DB = {
             };
         }
 
+        /**
+         * 3-8A.6: 공통 RPC 호출 + 매핑 helper.
+         * RPC 호출 후 response 검증 및 mapSupabaseRowToLegacyOrder 매핑을 수행한다.
+         *
+         * @param {string} rpcName - RPC function name
+         * @param {Object} rpcPayload - RPC parameters
+         * @param {string} methodName - 호출 메서드명 (에러 메시지용)
+         * @returns {Promise<Object>} normalized legacy-compatible order
+         */
+        function _callOrderRpcAndMap(rpcName, rpcPayload, methodName) {
+            return client.rpc(rpcName, rpcPayload)
+                .then(response => {
+                    if (response.error) {
+                        throw new Error('SupabaseOrdersDataSource.' + methodName + ' RPC failed');
+                    }
+                    if (!response.data) {
+                        throw new Error('SupabaseOrdersDataSource.' + methodName + ' returned no data');
+                    }
+                    return db.mapSupabaseRowToLegacyOrder(response.data);
+                })
+                .catch(err => _wrapCreateOrderError(err));
+        }
+
+        /**
+         * 3-8A.6: orderId가 remote uuid인지 검증한다.
+         * legacy numeric id만 있는 경우 throw.
+         *
+         * @param {*} orderId - 검증할 orderId
+         * @param {string} methodName - 호출 메서드명 (에러 메시지용)
+         * @returns {string} 검증된 uuid
+         */
+        function _validateOrderUuid(orderId, methodName) {
+            if (!orderId || typeof orderId !== 'string' ||
+                !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderId)) {
+                throw new Error(methodName + ' requires valid order remote uuid. Legacy numeric order id is not accepted in remote mode.');
+            }
+            return orderId;
+        }
+
+        /**
+         * 3-8A.6: update_pending_order RPC payload 빌더.
+         *
+         * RPC signature (hardened):
+         *   update_pending_order(
+         *     p_order_id uuid,
+         *     p_customer_id uuid,
+         *     p_product_id uuid,
+         *     p_quantity integer,
+         *     p_selling_price numeric,
+         *     p_order_date date,
+         *     p_color text DEFAULT NULL,
+         *     p_size text DEFAULT NULL,
+         *     p_notes text DEFAULT NULL
+         *   )
+         *   RETURNS public.orders
+         */
+        function _buildUpdatePendingOrderRpcPayload(orderId, payload) {
+            if (!payload || typeof payload !== 'object') {
+                throw new Error('updatePendingOrder requires non-null payload object');
+            }
+
+            // customer uuid
+            let customerUuid = null;
+            if (payload.customer_uuid && typeof payload.customer_uuid === 'string' &&
+                /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.customer_uuid)) {
+                customerUuid = payload.customer_uuid;
+            } else if (payload.customer_id && typeof payload.customer_id === 'string' &&
+                /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.customer_id)) {
+                customerUuid = payload.customer_id;
+            }
+            if (!customerUuid) {
+                throw new Error('updatePendingOrder requires valid customer_uuid (remote uuid). Legacy numeric customer_id is not accepted in remote mode.');
+            }
+
+            // product uuid
+            let productUuid = null;
+            if (payload.product_uuid && typeof payload.product_uuid === 'string' &&
+                /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.product_uuid)) {
+                productUuid = payload.product_uuid;
+            } else if (payload.product_id && typeof payload.product_id === 'string' &&
+                /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.product_id)) {
+                productUuid = payload.product_id;
+            }
+            if (!productUuid) {
+                throw new Error('updatePendingOrder requires valid product_uuid (remote uuid). Legacy numeric product_id is not accepted in remote mode.');
+            }
+
+            // quantity: positive integer
+            const quantity = Number(payload.quantity);
+            if (!Number.isInteger(quantity) || quantity < 1) {
+                throw new Error('updatePendingOrder requires quantity to be a positive integer');
+            }
+
+            // selling_price: number >= 0
+            const sellingPrice = Number(payload.selling_price);
+            if (!Number.isFinite(sellingPrice) || sellingPrice < 0) {
+                throw new Error('updatePendingOrder requires selling_price to be a non-negative number');
+            }
+
+            // order_date: 필수
+            const orderDate = payload.order_date;
+            if (!orderDate || (typeof orderDate !== 'string' && !(orderDate instanceof Date))) {
+                throw new Error('updatePendingOrder requires order_date');
+            }
+            const orderDateStr = orderDate instanceof Date
+                ? orderDate.toISOString().slice(0, 10)
+                : String(orderDate);
+
+            // optional fields
+            const color = (payload.color != null && typeof payload.color === 'string') ? payload.color : null;
+            const size = (payload.size != null && typeof payload.size === 'string') ? payload.size : null;
+            const notes = (payload.notes != null && typeof payload.notes === 'string') ? payload.notes : null;
+
+            return {
+                p_order_id: orderId,
+                p_customer_id: customerUuid,
+                p_product_id: productUuid,
+                p_quantity: quantity,
+                p_selling_price: sellingPrice,
+                p_order_date: orderDateStr,
+                p_color: color,
+                p_size: size,
+                p_notes: notes
+            };
+        }
+
+        /**
+         * 3-8A.6: ship_order RPC payload 빌더.
+         *
+         * RPC signature (hardened):
+         *   ship_order(
+         *     p_order_id uuid,
+         *     p_ship_date date DEFAULT current_date,
+         *     p_shipping_company text DEFAULT NULL,
+         *     p_tracking_number text DEFAULT NULL
+         *   )
+         *   RETURNS public.orders
+         */
+        function _buildShipOrderRpcPayload(orderId, payload) {
+            const rpcPayload = { p_order_id: orderId };
+
+            if (payload && typeof payload === 'object') {
+                // ship_date
+                if (payload.ship_date) {
+                    rpcPayload.p_ship_date = payload.ship_date instanceof Date
+                        ? payload.ship_date.toISOString().slice(0, 10)
+                        : String(payload.ship_date);
+                }
+                // shipping_company (optional)
+                if (payload.shipping_company != null && typeof payload.shipping_company === 'string') {
+                    rpcPayload.p_shipping_company = payload.shipping_company;
+                }
+                // tracking_number (optional)
+                if (payload.tracking_number != null && typeof payload.tracking_number === 'string') {
+                    rpcPayload.p_tracking_number = payload.tracking_number;
+                }
+            }
+
+            return rpcPayload;
+        }
+
+        /**
+         * 3-8A.6: cancel_order RPC payload 빌더.
+         *
+         * RPC signature:
+         *   cancel_order(
+         *     p_order_id uuid,
+         *     p_notes text DEFAULT NULL
+         *   )
+         *   RETURNS public.orders
+         */
+        function _buildCancelOrderRpcPayload(orderId, payload) {
+            const rpcPayload = { p_order_id: orderId };
+
+            if (payload && typeof payload === 'object' &&
+                payload.notes != null && typeof payload.notes === 'string') {
+                rpcPayload.p_notes = payload.notes;
+            }
+
+            return rpcPayload;
+        }
+
         return {
             name: 'SupabaseOrdersDataSource',
 
@@ -1319,7 +1505,9 @@ const DB = {
             },
 
             // ==================== Write methods ====================
-            // 3-8A.5: createOrder only is implemented. Others remain disabled.
+            // 3-8A.5: createOrder implemented.
+            // 3-8A.6: updatePendingOrder, shipOrder, cancelOrder, completeOrder implemented.
+            // setOrders/updateOrder/deleteOrder/findDuplicateOrder still disabled.
 
             setOrders(orders) {
                 throw new Error(_writeDisabledMsg);
@@ -1368,19 +1556,86 @@ const DB = {
             },
 
             updatePendingOrder(orderId, payload) {
-                throw new Error(_writeDisabledMsg);
+                _validateWriteContext('updatePendingOrder');
+                const uuid = _validateOrderUuid(orderId, 'updatePendingOrder');
+
+                let rpcPayload;
+                try {
+                    rpcPayload = _buildUpdatePendingOrderRpcPayload(uuid, payload);
+                } catch (e) {
+                    return Promise.reject(e);
+                }
+
+                return _callOrderRpcAndMap('update_pending_order', rpcPayload, 'updatePendingOrder');
             },
 
+            /**
+             * 3-8A.6: shipOrder RPC Adapter.
+             *
+             * remote mode에서 출고는 public.ship_order RPC만 사용한다.
+             * product stock 직접 update, inventory_logs 직접 insert 금지
+             * — ship_order RPC가 atomic하게 처리한다.
+             *
+             * @param {string} orderId - remote uuid (필수)
+             * @param {Object} [payload] - { ship_date?, shipping_company?, tracking_number? }
+             * @returns {Promise<Object>} normalized legacy-compatible order
+             */
             shipOrder(orderId, payload) {
-                throw new Error(_writeDisabledMsg);
+                _validateWriteContext('shipOrder');
+                const uuid = _validateOrderUuid(orderId, 'shipOrder');
+
+                let rpcPayload;
+                try {
+                    rpcPayload = _buildShipOrderRpcPayload(uuid, payload);
+                } catch (e) {
+                    return Promise.reject(e);
+                }
+
+                return _callOrderRpcAndMap('ship_order', rpcPayload, 'shipOrder');
             },
 
-            cancelOrder(orderId) {
-                throw new Error(_writeDisabledMsg);
+            /**
+             * 3-8A.6: cancelOrder RPC Adapter.
+             *
+             * remote mode에서 취소는 public.cancel_order RPC만 사용한다.
+             * product stock 직접 update, inventory_logs 직접 insert 금지
+             * — cancel_order RPC가 RESERVE 해제 및 RELEASE log를 담당한다.
+             *
+             * @param {string} orderId - remote uuid (필수)
+             * @param {Object} [payload] - { notes? }
+             * @returns {Promise<Object>} normalized legacy-compatible order
+             */
+            cancelOrder(orderId, payload) {
+                _validateWriteContext('cancelOrder');
+                const uuid = _validateOrderUuid(orderId, 'cancelOrder');
+
+                let rpcPayload;
+                try {
+                    rpcPayload = _buildCancelOrderRpcPayload(uuid, payload);
+                } catch (e) {
+                    return Promise.reject(e);
+                }
+
+                return _callOrderRpcAndMap('cancel_order', rpcPayload, 'cancelOrder');
             },
 
+            /**
+             * 3-8A.6: completeOrder RPC Adapter.
+             *
+             * remote mode에서 완료는 public.complete_order RPC만 사용한다.
+             * complete_order는 SHIPPED → COMPLETED 상태 전이만 수행하며,
+             * customer aggregate 재계산을 포함한다.
+             *
+             * @param {string} orderId - remote uuid (필수)
+             * @returns {Promise<Object>} normalized legacy-compatible order
+             */
             completeOrder(orderId) {
-                throw new Error(_writeDisabledMsg);
+                _validateWriteContext('completeOrder');
+                const uuid = _validateOrderUuid(orderId, 'completeOrder');
+
+                const rpcPayload = { p_order_id: uuid };
+
+                return _callOrderRpcAndMap('complete_order', rpcPayload, 'completeOrder');
             },
 
             updateOrder(id, updates) {

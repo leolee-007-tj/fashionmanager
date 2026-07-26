@@ -6495,7 +6495,7 @@ Orders 기능을 Supabase remote data source로 전환하기 전에 현재 local
 | 3-8A.2 | OrdersSupabaseDataSource contract design (인터페이스, feature flag, mapping) | PENDING |
 | 3-8A.3 | read-only remote orders list (list_orders + get_order_detail) | PENDING |
 | 3-8A.4 | order create RPC 연결 (create_order → OrdersDataSource.createOrder) | PENDING |
-| 3-8A.5 | order status update RPC 연결 (ship_order, cancel_order, complete_order) | PENDING |
+| 3-8A.5 | order status update RPC 연결 (ship_order, cancel_order, complete_order) | ✅ GO |
 | 3-8A.6 | browser owner smoke (local-only flag-on orders CRUD) | PENDING |
 | 3-8A.7 | analytics compatibility review (analytics → remote orders 연동) | PENDING |
 | 3-8A.8 | Excel upload orders migration (Excel → RPC 기반 전환) | PENDING |
@@ -7414,6 +7414,205 @@ createOrder adapter는 다음을 수행하지 **않는다**:
 ### 다음 단계
 
 - **3-8A.6**: ship/cancel/complete RPC Adapters (`shipOrder`, `cancelOrder`, `completeOrder` RPC 연결)
+- **3-8A.7**: Browser Owner Smoke (owner 계정으로 read + create + ship + cancel + complete smoke test)
+- **3-8A.8**: Analytics/Customers Compatibility 검증
+
+---
+
+## 66. 3-8A.6: ship/cancel/complete RPC Adapters (2026-07-26)
+
+### 목적
+
+`SupabaseOrdersDataSource`에 상태 전환 RPC adapter 4개를 추가한다:
+- `updatePendingOrder` → `public.update_pending_order`
+- `shipOrder` → `public.ship_order`
+- `cancelOrder` → `public.cancel_order`
+- `completeOrder` → `public.complete_order`
+
+이번 단계에서도 실제 remote DB에 주문 생성/수정/출고/취소/완료 실행 금지.
+테스트는 mock/static 중심으로만 진행한다.
+
+### 수정 파일
+
+| 파일 | 변경 내용 |
+|---|---|
+| `js/db.js` | `updatePendingOrder`, `shipOrder`, `cancelOrder`, `completeOrder` adapter 구현, helper 함수(`_callOrderRpcAndMap`, `_validateOrderUuid`, `_buildUpdatePendingOrderRpcPayload`, `_buildShipOrderRpcPayload`, `_buildCancelOrderRpcPayload`) 추가, `_wrapCreateOrderError` 확장 |
+| `docs/ORDERS_REMOTE_DATASOURCE_CONTRACT.md` | 섹션 P (3-8A.6) 추가, phase table 업데이트 |
+| `docs/CURRENT_ARCHITECTURE.md` | 본 섹션 (66) 추가 |
+| `tests/orders-status-rpc-adapter-contract.test.mjs` | 신규 추가 (S1-S27 + S-extra-1~6, 총 33 tests) |
+| `tests/orders-create-rpc-adapter-contract.test.mjs` | C15, C16 stage-aware 보정 (3-8A.6) |
+
+### RPC Signature 확인 결과
+
+Migration `supabase/migrations/20260711000950_order_inventory_hardening.sql`에서 확인:
+
+**update_pending_order:**
+```sql
+CREATE OR REPLACE FUNCTION public.update_pending_order(
+    p_order_id uuid,
+    p_customer_id uuid,
+    p_product_id uuid,
+    p_quantity integer,
+    p_selling_price numeric,
+    p_order_date date,
+    p_color text DEFAULT NULL,
+    p_size text DEFAULT NULL,
+    p_notes text DEFAULT NULL
+)
+RETURNS public.orders
+```
+
+**ship_order:**
+```sql
+CREATE OR REPLACE FUNCTION public.ship_order(
+    p_order_id uuid,
+    p_ship_date date DEFAULT current_date,
+    p_shipping_company text DEFAULT NULL,
+    p_tracking_number text DEFAULT NULL
+)
+RETURNS public.orders
+```
+
+**cancel_order:**
+```sql
+CREATE OR REPLACE FUNCTION public.cancel_order(
+    p_order_id uuid,
+    p_notes text DEFAULT NULL
+)
+RETURNS public.orders
+```
+
+**complete_order:**
+```sql
+CREATE OR REPLACE FUNCTION public.complete_order(
+    p_order_id uuid
+)
+RETURNS public.orders
+```
+
+- 반환값: 모두 단일 `public.orders` row
+- `shipping_company` / `tracking_number`는 `ship_order`에서만 처리
+- hardening migration에서 signature 변경 없음 (integer rounding, NULL defense 추가)
+
+### updatePendingOrder Adapter 요약
+
+1. `_validateWriteContext('updatePendingOrder')` 호출
+2. `_validateOrderUuid(orderId)` 로 orderId 검증 (remote uuid 필수)
+3. `_buildUpdatePendingOrderRpcPayload(orderId, payload)` 로 payload 검증 및 매핑
+4. `_callOrderRpcAndMap('update_pending_order', rpcPayload, 'updatePendingOrder')` 호출
+5. 결과를 `mapSupabaseRowToLegacyOrder`로 정규화
+
+### shipOrder Adapter 요약
+
+1. `_validateWriteContext('shipOrder')` 호출
+2. `_validateOrderUuid(orderId)` 로 orderId 검증
+3. `_buildShipOrderRpcPayload(orderId, payload)` 로 payload 매핑
+   - `ship_date` → `p_ship_date` (선택, 없으면 RPC 기본값 `current_date` 사용)
+   - `shipping_company` → `p_shipping_company` (선택)
+   - `tracking_number` → `p_tracking_number` (선택)
+4. `_callOrderRpcAndMap('ship_order', rpcPayload, 'shipOrder')` 호출
+
+### cancelOrder Adapter 요약
+
+1. `_validateWriteContext('cancelOrder')` 호출
+2. `_validateOrderUuid(orderId)` 로 orderId 검증
+3. `_buildCancelOrderRpcPayload(orderId, payload)` 로 payload 매핑
+   - `notes` → `p_notes` (선택)
+4. `_callOrderRpcAndMap('cancel_order', rpcPayload, 'cancelOrder')` 호출
+
+### completeOrder Adapter 요약
+
+1. `_validateWriteContext('completeOrder')` 호출
+2. `_validateOrderUuid(orderId)` 로 orderId 검증
+3. `{ p_order_id: orderId }` payload 구성
+4. `_callOrderRpcAndMap('complete_order', rpcPayload, 'completeOrder')` 호출
+
+### Payload Validation Policy
+
+| 필드 | 검증 규칙 | 적용 Adapter |
+|---|---|---|
+| `orderId` | remote uuid 필수, legacy numeric id 거부 | all |
+| `customer_uuid` | UUID 형식 문자열 (customer_uuid 우선, customer_id fallback) | updatePendingOrder |
+| `product_uuid` | UUID 형식 문자열 (product_uuid 우선, product_id fallback) | updatePendingOrder |
+| `quantity` | positive integer (>= 1) | updatePendingOrder |
+| `selling_price` | number >= 0 (finite) | updatePendingOrder |
+| `order_date` | string 또는 Date 객체 (필수) | updatePendingOrder |
+| `color` / `size` / `notes` | optional string | updatePendingOrder |
+| `ship_date` | optional string 또는 Date | shipOrder |
+| `shipping_company` / `tracking_number` | optional string | shipOrder |
+
+### Direct Write 금지 준수
+
+모든 adapter는 다음을 수행하지 **않는다**:
+- `from('orders').insert/update/delete` 직접 호출 금지
+- `from('products').update` 직접 호출 금지 (재고 변경은 RPC가 담당)
+- `from('inventory_logs').insert` 직접 호출 금지 (재고 로그는 RPC가 담당)
+
+### Remaining Disabled Methods
+
+다음 write 메서드는 여전히 `throw new Error(_writeDisabledMsg)` 유지:
+- `setOrders(orders)`
+- `updateOrder(id, updates)`
+- `deleteOrder(id)`
+- `findDuplicateOrder(customerId, productId, color, size)`
+
+### Local Mode Compatibility
+
+- `ORDERS_SUPABASE_ENABLED` 기본값 `false` 유지
+- 기본 DataSource = `LocalOrdersDataSource` 유지
+- 기존 sync API 변경 없음
+- runtime feature flag gate에서 `ORDERS_SUPABASE_ENABLED !== true`이면 조용히 LocalOrdersDataSource 유지
+
+### Tests 결과
+
+- **33 tests 신규 추가** (orders-status-rpc-adapter-contract.test.mjs: S1-S27 + S-extra-1~6)
+- **기존 orders-create-rpc-adapter-contract.test.mjs** C15, C16 stage-aware 보정
+- **전체 930 tests, 0 fail**
+- S1: updatePendingOrder calls client.rpc('update_pending_order')
+- S2: shipOrder calls client.rpc('ship_order')
+- S3: cancelOrder calls client.rpc('cancel_order')
+- S4: completeOrder calls client.rpc('complete_order')
+- S5-S9: UUID validation for all adapters
+- S10-S12: updatePendingOrder payload validation (quantity, selling_price, uuid mapping)
+- S13: shipOrder maps shipping fields
+- S14: all RPC adapters normalize response through mapSupabaseRowToLegacyOrder
+- S15-S16: error handling (RPC error, no data)
+- S17-S19: no direct table insert/update/delete
+- S20: createOrder adapter still works
+- S21: setOrders/updateOrder/deleteOrder/findDuplicateOrder still disabled
+- S22: ORDERS_SUPABASE_ENABLED default false
+- S23: no migration changes
+- S24: no secrets/token/key/service_role actual values
+- S25: local DB sync APIs unchanged
+- S26: tests use mock clients only
+- S27: only allowed JS files changed
+
+### Preflight 결과
+
+- **PASS**
+
+### Go/No-Go
+
+| 항목 | 판정 |
+|---|---|
+| updatePendingOrder adapter 구현 | ✅ GO |
+| shipOrder adapter 구현 | ✅ GO |
+| cancelOrder adapter 구현 | ✅ GO |
+| completeOrder adapter 구현 | ✅ GO |
+| contract tests 통과 | ✅ GO (33 tests, 0 fail) |
+| 전체 tests 통과 | ✅ GO (930 tests, 0 fail) |
+| local mode regression 없음 | ✅ GO |
+| no migration | ✅ GO |
+| no db push | ✅ GO |
+| no actual order/customer/product/inventory action | ✅ GO |
+| no direct insert/update/delete | ✅ GO |
+| no service_role / secrets | ✅ GO |
+| preflight PASS | ✅ GO |
+| setOrders/updateOrder/deleteOrder/findDuplicateOrder | ✅ GO (여전히 disabled) |
+| remote browser smoke | **NO-GO** (3-8A.7 예정) |
+
+### 다음 단계
+
 - **3-8A.7**: Browser Owner Smoke (owner 계정으로 read + create + ship + cancel + complete smoke test)
 - **3-8A.8**: Analytics/Customers Compatibility 검증
 

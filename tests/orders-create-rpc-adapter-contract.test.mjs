@@ -398,9 +398,9 @@ describe('Orders createOrder RPC Adapter Contract (C1-C20)', function () {
     // C15-C16: remaining disabled methods & forbidden RPCs
     // ============================================================
 
-    it('C15: updatePendingOrder/shipOrder/cancelOrder/completeOrder still disabled', function () {
+    it('C15: setOrders/updateOrder/deleteOrder/findDuplicateOrder still disabled (3-8A.6)', function () {
         const { ds } = createSupabaseOrdersDataSourceForTesting();
-        const disabledMethods = ['setOrders', 'updatePendingOrder', 'shipOrder', 'cancelOrder', 'completeOrder', 'updateOrder', 'deleteOrder', 'findDuplicateOrder'];
+        const disabledMethods = ['setOrders', 'updateOrder', 'deleteOrder', 'findDuplicateOrder'];
         for (const method of disabledMethods) {
             assert.throws(() => ds[method](),
                 /not enabled yet/i,
@@ -408,23 +408,21 @@ describe('Orders createOrder RPC Adapter Contract (C1-C20)', function () {
         }
     });
 
-    it('C16: db.js does not call ship_order/cancel_order/complete_order/update_pending_order RPCs', function () {
-        // createOrder section should only call create_order, not other write RPCs
-        const supabaseSection = DB_JS.match(/_createControlledSupabaseOrdersDataSource\(client,\s*context\)\s*\{[\s\S]*?\n    \},\n\n    \/\*\*/);
-        assert.ok(supabaseSection, 'SupabaseOrdersDataSource section should exist');
-        // Only create_order RPC is allowed; other write RPCs must not be called
-        assert.doesNotMatch(supabaseSection[0], /\.rpc\(\s*['"]ship_order['"]/,
-            'should not call ship_order RPC');
-        assert.doesNotMatch(supabaseSection[0], /\.rpc\(\s*['"]cancel_order['"]/,
-            'should not call cancel_order RPC');
-        assert.doesNotMatch(supabaseSection[0], /\.rpc\(\s*['"]complete_order['"]/,
-            'should not call complete_order RPC');
-        assert.doesNotMatch(supabaseSection[0], /\.rpc\(\s*['"]update_pending_order['"]/,
-            'should not call update_pending_order RPC');
-        // create_order RPC should be called exactly once (in createOrder)
-        const createOrderMatches = supabaseSection[0].match(/\.rpc\(\s*['"]create_order['"]/g);
-        assert.ok(createOrderMatches && createOrderMatches.length === 1,
-            'create_order RPC should be called exactly once');
+    it('C16: db.js calls status RPCs (3-8A.6) but not forbidden write RPCs', function () {
+        // 3-8A.6: status RPCs are now allowed (via _callOrderRpcAndMap)
+        assert.match(DB_JS, /['"]create_order['"]/,
+            'should reference create_order RPC');
+        assert.match(DB_JS, /['"]update_pending_order['"]/,
+            'should reference update_pending_order RPC');
+        assert.match(DB_JS, /['"]ship_order['"]/,
+            'should reference ship_order RPC');
+        assert.match(DB_JS, /['"]cancel_order['"]/,
+            'should reference cancel_order RPC');
+        assert.match(DB_JS, /['"]complete_order['"]/,
+            'should reference complete_order RPC');
+        // Other write RPCs still forbidden
+        assert.doesNotMatch(DB_JS, /['"]delete_order['"]/,
+            'should not reference delete_order RPC');
     });
 
     // ============================================================
