@@ -1171,4 +1171,70 @@ RETURNS public.orders
 
 ### Next Step
 
-- **3-8A.8**: updatePendingOrder RPC Adapter
+- **3-8A.9**: Real Browser UI Flow smoke
+
+---
+
+## W. 3-8A.8-A updatePendingOrder Result (2026-07-26)
+
+### create → update → cancel Path Status
+
+| 단계 | 결과 |
+|---|---|
+| createOrder | ✅ PENDING, quantity=1, reservedStockIncreasedBy1 |
+| After-create | ✅ productReadOk, hasReserveLog, no errors |
+| updatePendingOrder | ✅ PENDING, quantity=2 (1→2), reservedStockMatchesQuantity2 |
+| After-update | ✅ orderReadOk, productReadOk, logsReadOk, no errors |
+| cancelOrder | ✅ CANCELLED, reservedStockRestored |
+| After-cancel | ✅ hasReleaseOrCancelLog, productReadOk, no errors |
+
+### Reserved Stock Adjustment Result
+
+| 항목 | 결과 |
+|---|---|
+| create 시 reserved_stock | +1 |
+| update 시 reserved_stock | +2 (quantity 2로 조정) |
+| cancel 시 reserved_stock | 복구 (원래 값으로) |
+| 최종 영향 | 없음 |
+
+### Inventory Log Result
+
+| 항목 | 결과 |
+|---|---|
+| RESERVE log | ✅ 있음 |
+| Adjustment log | ✅ 있음 (quantity 1→2 변경) |
+| RELEASE/CANCEL log | ✅ 있음 |
+| 총 log 수 | 복수 건 |
+
+### Cleanup/Cancel Result
+
+| 항목 | 결과 |
+|---|---|
+| cancelOrder | ✅ 정상 동작 |
+| reserved_stock 복구 | ✅ 완료 |
+| order 최종 상태 | CANCELLED |
+
+### Mutation Smoke updatePendingOrder Status
+
+| 항목 | 상태 |
+|---|---|
+| createOrder adapter | ✅ 정상 동작 확인 |
+| updatePendingOrder adapter | ✅ 정상 동작 확인 (quantity 1→2) |
+| cancelOrder adapter | ✅ 정상 동작 확인 |
+| reserved_stock adjustment | ✅ 정상 (create +1 → update +2 → cancel 복구) |
+| inventory logs | ✅ 복수 건 기록 |
+| shipOrder | ❌ 호출 안 함 |
+| completeOrder | ❌ 호출 안 함 |
+| UUID 전체값 기록 | 기록하지 않음 |
+
+### Remaining Risks
+
+| 위험 | 상태 |
+|---|---|
+| multi-quantity N>2 | ⚠️ quantity=2만 검증, N>2 별도 필요 |
+| notes/color/size only update | ⚠️ quantity 변경만 검증 |
+| UI integration | ⚠️ dev-console only, UI smoke 미수행 |
+
+### Next Step
+
+- **3-8A.9**: Real Browser UI Flow smoke

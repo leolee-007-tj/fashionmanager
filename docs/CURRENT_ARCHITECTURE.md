@@ -8231,5 +8231,147 @@ UUID 전체값은 기록하지 않음. 존재 여부(true/false)만 확인.
 
 ### 다음 단계
 
-- **3-8A.8**: updatePendingOrder RPC Adapter
+- **3-8A.9**: Real Browser UI Flow smoke
+
+---
+
+## 73. 3-8A.8-A: updatePendingOrder Remote Smoke - create to update to cancel (2026-07-26)
+
+### 목적
+
+Browser owner dev-console에서 createOrder → updatePendingOrder → cancelOrder Path를 검증한다. updatePendingOrder RPC adapter가 quantity 변경 시 reserved_stock을 올바르게 조정하는지, PENDING 상태가 유지되는지, cancelOrder로 정리 가능한지 확인한다.
+
+### 사용자 승인
+
+"3-8A.8-A 승인. createOrder 후 updatePendingOrder, cancelOrder smoke 진행해도 됩니다." (2026-07-26)
+
+### 실행 방식
+
+- Dev-console adapter smoke (`DB.getOrdersDataSource()`)
+- publishable/anon key only, service_role 사용 안 함
+- createOrder 1회 (quantity=1) → updatePendingOrder 1회 (quantity=2) → cancelOrder 1회
+- shipOrder / completeOrder 호출 금지
+
+### Selected Customer/Product Readiness
+
+| 항목 | 결과 |
+|---|---|
+| hasCustomerUuid | true (smoke customer) |
+| hasProductUuid | true |
+| availableStockGte2 | true |
+| hasValidPrice | true |
+| errors | null |
+
+### createOrder Result
+
+| 항목 | 결과 |
+|---|---|
+| created | true |
+| hasOrderUuid | true |
+| status | PENDING |
+| quantity | 1 |
+| hasCustomerUuid | true |
+| hasProductUuid | true |
+
+### After-Create Side Effects
+
+| 항목 | 결과 |
+|---|---|
+| reservedStockIncreasedBy1 | true |
+| productReadOk | true |
+| hasReserveLog | true |
+| productError | null |
+
+### updatePendingOrder Result
+
+| 항목 | 결과 |
+|---|---|
+| updated | true |
+| hasOrderUuid | true |
+| status | PENDING |
+| quantity | 2 (1→2 변경) |
+| hasCustomerUuid | true |
+| hasProductUuid | true |
+
+### After-Update Side Effects
+
+| 항목 | 결과 |
+|---|---|
+| orderStatus | PENDING |
+| orderQuantity | 2 |
+| reservedStockMatchesQuantity2 | true |
+| hasReserveLog | true |
+| logCount 포함 | RESERVE + adjustment 로그 존재 |
+| productReadOk | true |
+| orderReadOk | true |
+| logsReadOk | true |
+| all errors | null |
+
+### cancelOrder Result
+
+| 항목 | 결과 |
+|---|---|
+| cancelled | true |
+| hasOrderUuid | true |
+| status | CANCELLED |
+
+### After-Cancel Side Effects
+
+| 항목 | 결과 |
+|---|---|
+| reservedStockRestored | true |
+| orderStatus | CANCELLED |
+| hasReserveLog | true |
+| hasReleaseOrCancelLog | true |
+| logCount | 복수 건 (RESERVE + adjustment + RELEASE/CANCEL) |
+| productReadOk | true |
+| orderReadOk | true |
+| logsReadOk | true |
+| all errors | null |
+
+### Forbidden Methods Not Called
+
+| 항목 | 호출 여부 |
+|---|---|
+| shipOrder | ❌ 호출 안 함 |
+| completeOrder | ❌ 호출 안 함 |
+| createOrder 중복 | ❌ 1회만 |
+| updatePendingOrder 중복 | ❌ 1회만 |
+| cancelOrder 중복 | ❌ 1회만 |
+| products direct update | ❌ 없음 |
+| inventory_logs direct insert | ❌ 없음 |
+| SQL Editor | ❌ 없음 |
+| service_role | ❌ 없음 |
+
+### UUID 전체값 미기록
+
+UUID 전체값은 기록하지 않음. 존재 여부(true/false)만 확인.
+
+### Actual Mutations Summary
+
+| 항목 | 건수 |
+|---|---|
+| createOrder | 1 |
+| updatePendingOrder | 1 |
+| cancelOrder | 1 |
+| Order 최종 상태 | CANCELLED |
+| reserved_stock | create +1 → update +2 → cancel 복구 (최종 영향 없음) |
+| inventory_logs | 복수 건 (RESERVE + adjustment + RELEASE/CANCEL) |
+| UUID 전체값 기록 | 기록하지 않음 |
+
+### Go/No-Go
+
+| 항목 | 판정 |
+|---|---|
+| create → update → cancel Path | ✅ GO |
+| createOrder adapter | ✅ 정상 동작 |
+| updatePendingOrder adapter | ✅ 정상 동작 (quantity 1→2, reserved_stock 조정 확인) |
+| cancelOrder adapter | ✅ 정상 동작 (reserved_stock 복구 확인) |
+| reserved stock adjustment | ✅ 정상 |
+| inventory logs | ✅ 복수 건 기록 |
+| forbidden methods | ✅ 호출 없음 |
+
+### 다음 단계
+
+- **3-8A.9**: Real Browser UI Flow smoke
 
