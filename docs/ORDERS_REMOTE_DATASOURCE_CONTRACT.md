@@ -1013,3 +1013,48 @@ RETURNS public.orders
 
 - **3-8A.7B-CustomerSeed**: 사용자 명시적 승인 필요
 - **3-8A.7B**: customer 확보 후 mutation smoke (조건부 GO)
+
+---
+
+## T. 3-8A.7B-CustomerSeed Result (2026-07-26)
+
+### Seed Execution
+
+| 항목 | 결과 |
+|---|---|
+| 사용자 승인 | "승인한다" (2026-07-26) |
+| 실행 방식 | dev-console `LESOULSupabase.getClient().from('customers').insert(...)` |
+| 키 | publishable/anon key only |
+| RLS | `"Customers: owner/manager can insert"` |
+
+### Result
+
+| 항목 | seed 전 | seed 후 |
+|---|---|---|
+| hasCustomerUuid | false | true |
+| count | 0 | 1 |
+| inserted | - | true |
+| nameOk | - | true |
+| notesOk | - | true |
+| error | null | null |
+
+### Customer Dependency Resolved
+
+| 항목 | 상태 |
+|---|---|
+| hasCustomerUuid | ✅ true |
+| 3-8A.7B mutation smoke prerequisite | ✅ 충족 |
+| UUID 전체값 기록 | 기록하지 않음 |
+
+### Mutation Smoke Prerequisite Status
+
+| 항목 | 상태 |
+|---|---|
+| Customer uuid 확보 | ✅ 완료 |
+| Product uuid 확보 | ✅ (3-8A.7A, 5개 상품) |
+| Available stock | ✅ (availableStockGte1) |
+| 3-8A.7B 진입 | ✅ GO |
+
+### Next Step
+
+- **3-8A.7B**: Browser Owner Mutation Smoke

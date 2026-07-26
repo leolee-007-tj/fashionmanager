@@ -7910,3 +7910,77 @@ customer 확보 후 3-8A.7B는 두 경로로 분리:
   - Path A: create → cancel
   - Path B: create → ship → complete
 
+---
+
+## 70. 3-8A.7B-CustomerSeed: Smoke Customer Seed via Owner Session (2026-07-26)
+
+### 목적
+
+3-8A.7B mutation smoke를 위해 smoke용 customer 1건을 remote customers table에 생성한다. 3-8A.7B-Prep에서 권장된 Strategy 3 (dev-console insert)를 실행한다.
+
+### 사용자 승인
+
+사용자 명시 승인 획득: "승인한다" (2026-07-26)
+
+### 실행 방식
+
+- 브라우저 owner 세션에서 `LESOULSupabase.getClient().from('customers').insert(...)` 1회 실행
+- publishable/anon key only, service_role 사용 안 함
+- RLS policy `"Customers: owner/manager can insert"`에 의해 허용
+
+### Seed 전 Customer Count
+
+| 항목 | 결과 |
+|---|---|
+| hasCustomerUuid | false |
+| count | 0 |
+| error | null |
+
+### Seed 결과
+
+| 항목 | 결과 |
+|---|---|
+| inserted | true |
+| hasCustomerUuid | true |
+| nameOk | true (`[SMOKE TEST 3-8A.7B]` 포함) |
+| notesOk | true (`[SMOKE TEST 3-8A.7B]` 포함) |
+| error | null |
+
+### Seed 후 Customer Count
+
+| 항목 | 결과 |
+|---|---|
+| hasCustomerUuid | true |
+| count | 1 |
+| error | null |
+
+### Mutation Summary
+
+| 항목 | 결과 |
+|---|---|
+| Customers insert | 1건 (smoke customer) |
+| Order mutation | 없음 |
+| create_order 호출 | 없음 |
+| update_pending_order 호출 | 없음 |
+| ship_order 호출 | 없음 |
+| cancel_order 호출 | 없음 |
+| complete_order 호출 | 없음 |
+| Products update | 없음 |
+| Inventory logs insert | 없음 |
+| Customer UUID 기록 | 전체값 기록하지 않음 |
+
+### Go/No-Go
+
+| 항목 | 판정 |
+|---|---|
+| Customer seed | ✅ GO (1건 생성 성공) |
+| hasCustomerUuid | ✅ true |
+| 3-8A.7B mutation smoke prerequisite | ✅ 충족 |
+
+### 다음 단계
+
+- **3-8A.7B**: Browser Owner Mutation Smoke
+  - customer uuid 확보 완료, mutation smoke 진행 가능
+  - Path A: createOrder → cancelOrder
+  - Path B: createOrder → shipOrder → completeOrder
+
