@@ -8373,5 +8373,70 @@ UUID 전체값은 기록하지 않음. 존재 여부(true/false)만 확인.
 
 ### 다음 단계
 
-- **3-8A.9**: Real Browser UI Flow smoke
+- **3-8A.9-A**: Orders UI read-only remote list rendering
+
+---
+
+## 74. 3-8A.9-Prep: Orders Real Browser UI Flow Readiness Audit (2026-07-26)
+
+### 목적
+
+orders.js의 모든 local sync API 의존성을 audit하고, remote SupabaseOrdersDataSource UI 전환에 필요한 작업을 식별한다. 이 단계는 docs-only audit이며 코드 수정은 없다.
+
+### Audit Result 요약
+
+| 항목 | 수량 |
+|---|---|
+| 사용 중인 local sync API | 11개 (getOrders, getProducts, getCustomers, addOrder, updateOrder, setOrders, updateProduct, setProducts, addInventoryLog, addCustomer, findCustomerByName) |
+| orders.js 내 함수 | 12개 (load, renderList, submitAdd, submitEdit, delete, cancel, complete, renderShip, submitShip, batchDelete, renderAdd, updateProductList) |
+| remote 전환 대상 RPC | 5개 (create_order, update_pending_order, ship_order, cancel_order, complete_order) |
+| remote forbidden 패턴 | 4개 (updateProduct 직접, addInventoryLog 직접, setOrders, setProducts) |
+| Async 전환 필요 함수 | 9개 |
+| 구현 단계 | 6단계 (3-8A.9-A ~ 3-8A.9-F) |
+
+### UI Remote 전환이 필요한 이유
+
+- orders.js는 현재 모든 데이터 접근에 sync localStorage API 사용
+- createOrder → updatePendingOrder → cancelOrder → shipOrder → completeOrder adapter smoke는 완료
+- dev-console에서는 adapter 검증 완료, 실제 UI flow에서는 사용되지 않음
+- UI 전환을 통해 사용자가 실제 화면에서 remote orders를 사용할 수 있도록 함
+
+### Major Local Dependency
+
+| API | 호출 위치 | 위험도 |
+|---|---|---|
+| DB.getOrders() | 8곳 (load, renderList, batchDelete, submitEdit, delete, submitAdd, renderShip, submitShip) | 높음 |
+| DB.getProducts() | 9곳 (renderList, batchDelete, delete, renderAdd, updateProductList, submitAdd, cancel, renderShip, submitShip) | 높음 |
+| DB.getCustomers() | 3곳 (renderList, renderAdd, renderShip) | 중간 |
+| DB.updateProduct() | 3곳 (submitAdd, cancel, submitShip) | 매우 높음 (remote forbidden) |
+| DB.addInventoryLog() | 1곳 (submitShip) | 매우 높음 (remote forbidden) |
+| DB.setOrders() | 3곳 (batchDelete, submitEdit, delete) | 매우 높음 (remote disabled) |
+
+### 구현 단계 분할
+
+| 단계 | 내용 | 난이도 |
+|---|---|---|
+| 3-8A.9-A | Orders UI read-only remote list rendering | 중간 |
+| 3-8A.9-B | Orders UI create form remote submit | 높음 |
+| 3-8A.9-C | Orders UI cancel/edit pending remote actions | 중간 |
+| 3-8A.9-D | Orders UI ship/complete remote actions | 낮음 |
+| 3-8A.9-E | Orders UI browser owner smoke | 중간 |
+| 3-8A.9-F | Legacy local mode regression smoke | 낮음 |
+
+상세 전환 계획은 [docs/ORDERS_UI_REMOTE_CONVERSION_PLAN.md](docs/ORDERS_UI_REMOTE_CONVERSION_PLAN.md) 참조.
+
+### Go/No-Go
+
+| 항목 | 판정 |
+|---|---|
+| orders.js audit 완료 | ✅ GO |
+| remote DataSource mapping 완료 | ✅ GO |
+| forbidden side effects 식별 | ✅ GO |
+| 구현 단계 분할 | ✅ GO |
+| 코드 수정 없음 | ✅ docs-only |
+| DB mutation 없음 | ✅ no |
+
+### 다음 단계
+
+- **3-8A.9-A**: Orders UI read-only remote list rendering
 

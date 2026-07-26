@@ -1237,4 +1237,45 @@ RETURNS public.orders
 
 ### Next Step
 
-- **3-8A.9**: Real Browser UI Flow smoke
+- **3-8A.9-A**: Orders UI read-only remote list rendering
+
+---
+
+## X. 3-8A.9-Prep Audit Result (2026-07-26)
+
+### Adapter Smoke Complete Status
+
+| adapter | smoke result |
+|---|---|
+| listOrders | ✅ verified (3-8A.7A) |
+| createOrder | ✅ verified (3-8A.7B-A, 3-8A.7B-B, 3-8A.8-A) |
+| updatePendingOrder | ✅ verified (3-8A.8-A) |
+| cancelOrder | ✅ verified (3-8A.7B-A, 3-8A.8-A) |
+| shipOrder | ✅ verified (3-8A.7B-B) |
+| completeOrder | ✅ verified (3-8A.7B-B) |
+
+### UI Integration Pending
+
+orders.js는 현재 모든 주문 화면에서 sync localStorage API만 사용하고 있다. dev-console adapter smoke는 완료되었으나, 실제 UI flow에서는 remote DataSource가 사용되지 않는다.
+
+### 3-8A.9-Prep Audit Result
+
+| 항목 | 결과 |
+|---|---|
+| orders.js local API 의존 | 11개 API, 12개 함수 |
+| remote forbidden 패턴 | 4개 (updateProduct, addInventoryLog, setOrders, setProducts) |
+| async 전환 필요 함수 | 9개 |
+| 구현 단계 | 6단계 (3-8A.9-A ~ 3-8A.9-F) |
+
+### Next Implementation Split
+
+| 단계 | 내용 |
+|---|---|
+| 3-8A.9-A | Orders UI read-only remote list rendering |
+| 3-8A.9-B | Orders UI create form remote submit |
+| 3-8A.9-C | Orders UI cancel/edit pending remote actions |
+| 3-8A.9-D | Orders UI ship/complete remote actions |
+| 3-8A.9-E | Orders UI browser owner smoke |
+| 3-8A.9-F | Legacy local mode regression smoke |
+
+상세 전환 계획은 [docs/ORDERS_UI_REMOTE_CONVERSION_PLAN.md](docs/ORDERS_UI_REMOTE_CONVERSION_PLAN.md) 참조.
