@@ -1377,11 +1377,71 @@ Orders UI의 주문 등록 submitAdd 경로를 remote mode에서 SupabaseOrdersD
 | 항목 | 상태 |
 |---|---|
 | createOrder UI submit | ✅ 완료 (3-8A.9-B) |
-| updatePendingOrder UI submit | ❌ 미구현 (3-8A.9-C) |
-| cancelOrder UI submit | ❌ 미구현 (3-8A.9-C) |
+| updatePendingOrder UI submit | ✅ 완료 (3-8A.9-C) |
+| cancelOrder UI submit | ✅ 완료 (3-8A.9-C) |
+| shipOrder UI submit | ❌ 미구현 (3-8A.9-D) |
+| completeOrder UI submit | ❌ 미구현 (3-8A.9-D) |
+
+---
+
+## AA. 3-8A.9-C UI Cancel/Edit Integration Status (2026-07-26)
+
+### 목적
+
+Orders UI의 PENDING 주문 취소/수정 경로를 remote mode에서 SupabaseOrdersDataSource로 연결.
+
+### UI Cancel/Edit Integration Status
+
+| 항목 | 상태 |
+|---|---|
+| `cancel(id)` remote branch | ✅ 구현됨 |
+| `delete(orderId)` remote branch (cancelOrder 위임) | ✅ 구현됨 |
+| `submitEdit(e, orderId)` remote branch | ✅ 구현됨 |
+| `batchDelete()` remote branch | ✅ 구현됨 |
+| `_cancelRemote(id)` helper | ✅ 구현됨 |
+| `_submitEditRemote(e, orderId)` helper | ✅ 구현됨 |
+| `_batchCancelRemote()` helper | ✅ 구현됨 |
+| `_refreshOrdersAfterRemoteMutation()` helper | ✅ 구현됨 |
+| remote mode: DB.updateProduct 금지 | ✅ |
+| remote mode: DB.updateOrder 금지 | ✅ |
+| remote mode: DB.setOrders 금지 | ✅ |
+| remote mode: DB.setProducts 금지 | ✅ |
+| remote mode: hard delete 금지 (cancelOrder로 대체) | ✅ |
+| PENDING only updatePendingOrder | ✅ |
+| customer_uuid / product_uuid 검증 | ✅ |
+| local mode: 기존 cancel/delete/submitEdit sync API 유지 | ✅ |
+| error handling (try/catch + App.flash) | ✅ |
+| contract tests | ✅ 30 tests, 1012 total, 0 fail |
+
+### CancelOrder UI Path Status
+
+| 항목 | 상태 |
+|---|---|
+| cancel_order RPC 호출 | ✅ cancelOrder(remoteId) |
+| product stock 복구 | ✅ RPC 내부 처리 |
+| 성공 flash | ✅ |
+| 실패 flash | ✅ |
+
+### UpdatePendingOrder UI Path Status
+
+| 항목 | 상태 |
+|---|---|
+| update_pending_order RPC 호출 | ✅ updatePendingOrder(remoteId, payload) |
+| PENDING 상태만 허용 | ✅ |
+| 안전 필드만 수정 | ✅ (date/price/color/size/quantity) |
+| customer/product 변경 보류 | ✅ |
+| 성공 후 refresh | ✅ |
+
+### Mutation UI Pending (Updated)
+
+| 항목 | 상태 |
+|---|---|
+| createOrder UI submit | ✅ 완료 (3-8A.9-B) |
+| updatePendingOrder UI submit | ✅ 완료 (3-8A.9-C) |
+| cancelOrder UI submit | ✅ 완료 (3-8A.9-C) |
 | shipOrder UI submit | ❌ 미구현 (3-8A.9-D) |
 | completeOrder UI submit | ❌ 미구현 (3-8A.9-D) |
 
 ### Next Step
 
-- **3-8A.9-C**: Orders UI cancel/edit pending remote actions
+- **3-8A.9-D**: Orders UI ship/complete remote actions

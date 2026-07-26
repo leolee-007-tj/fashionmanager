@@ -8602,3 +8602,73 @@ remote mode에서는 신규 고객 자동 생성이 금지되어 있으므로, a
 
 - **3-8A.9-C**: Orders UI cancel/edit pending remote actions
 
+### 3-8A.9-C: Orders UI cancel/edit pending remote actions (2026-07-26)
+
+#### 목적
+
+Orders UI의 PENDING 주문 취소/수정 경로를 remote mode에서 SupabaseOrdersDataSource로 연결한다.
+cancel/delete → cancelOrder, submitEdit → updatePendingOrder.
+ship/complete UI 연결은 다음 단계로 미룬다.
+
+#### 구현 범위
+
+- `cancel(id)`: remote mode에서 `ds.cancelOrder(remoteId)` 사용
+- `delete(orderId)`: remote mode에서 `_cancelRemote()`로 위임 (hard delete 금지)
+- `submitEdit(e, orderId)`: remote mode에서 `ds.updatePendingOrder(remoteId, payload)` 사용
+- `batchDelete()`: remote mode에서 각 PENDING 주문 cancelOrder 호출
+- `_cancelRemote(id)`, `_submitEditRemote(e, orderId)`, `_batchCancelRemote()` helper 추가
+- `_refreshOrdersAfterRemoteMutation()` 공통 refresh helper 추가
+- PENDING 상태만 updatePendingOrder 허용
+- customer_uuid / product_uuid 검증
+
+#### local mode 유지
+
+- cancel/delete/submitEdit/batchDelete local mode sync 흐름 보존
+- DB.updateProduct, DB.updateOrder, DB.setOrders, DB.setProducts local mode 사용 유지
+
+#### remote cancel path
+
+- `ds.cancelOrder(remoteId, { notes: '' })` 1회 호출
+- cancel_order RPC에서 product stock 복구 처리
+- DB.updateProduct, DB.updateOrder, DB.setOrders 금지
+
+#### remote delete-as-cancel policy
+
+- remote mode에서 hard delete 금지, cancelOrder로 대체
+- `delete(orderId)` → `_cancelRemote(orderId)` 위임
+- `batchDelete()` → 각 PENDING 주문 cancelOrder 순차 호출
+
+#### remote updatePendingOrder path
+
+- `ds.updatePendingOrder(remoteId, payload)` 1회 호출
+- PENDING 상태만 허용
+- 안전 필드만 수정 (date/price/color/size/quantity), customer/product 변경 보류
+- 기존 customer_uuid/product_uuid를 payload에 사용
+
+#### forbidden mutation - 미구현 범위
+
+- shipOrder UI 구현 ❌
+- completeOrder UI 구현 ❌
+- submitShip remote 구현 ❌
+- complete remote 구현 ❌
+
+#### Go/No-Go
+
+| 항목 | 판정 |
+|---|---|
+| remote cancel/edit 연결 | ✅ GO |
+| delete-as-cancel policy | ✅ GO |
+| local mode sync 흐름 유지 | ✅ GO |
+| forbidden mutation 미구현 | ✅ GO |
+| ship/complete 미구현 | ✅ GO |
+| tests 통과 | ✅ GO (1012 tests, 0 fail) |
+| preflight PASS | ✅ GO |
+| js/config.js staged | ❌ 없음 |
+| data_export.json | ❌ 없음 |
+| migration 변경 | ❌ 없음 |
+| supabase db push | ❌ 없음 |
+
+#### 다음 단계
+
+- **3-8A.9-D**: Orders UI ship/complete remote actions
+

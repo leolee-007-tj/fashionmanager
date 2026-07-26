@@ -131,11 +131,19 @@ remote mode에서는 다음 작업이 절대 금지된다:
 - 기능 로직 변경 없음 ✅
 - DB mutation 없음 ✅
 
-### 3-8A.9-C: Orders UI cancel/edit pending remote actions
+### 3-8A.9-C: Orders UI cancel/edit pending remote actions ✅ 완료 (2026-07-26)
 
-- cancel() / delete() → ds.cancelOrder()
-- submitEdit() → ds.updatePendingOrder()
-- batchDelete() → 다건 cancelOrder loop (선택적)
+- cancel(id): ds.cancelOrder(remoteId) 사용 ✅
+- delete(orderId): cancelOrder로 위임 (hard delete 금지) ✅
+- submitEdit(e, orderId): ds.updatePendingOrder(remoteId, payload) 사용 ✅
+- batchDelete(): 각 PENDING 주문 cancelOrder 호출 ✅
+- _cancelRemote / _submitEditRemote / _batchCancelRemote helper ✅
+- _refreshOrdersAfterRemoteMutation 공통 helper ✅
+- PENDING only updatePendingOrder ✅
+- customer_uuid / product_uuid 검증 ✅
+- DB.updateProduct / DB.updateOrder / DB.setOrders / DB.setProducts 금지 ✅
+- contract tests: 30 tests, 1012 total, 0 fail ✅
+- preflight: PASS ✅
 
 ### 3-8A.9-D: Orders UI ship/complete remote actions
 

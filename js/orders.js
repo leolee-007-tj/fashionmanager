@@ -367,6 +367,11 @@ const Orders = {
             return;
         }
         if (!confirm(this.state.selected.size + t('common', 'confirm_delete_items'))) return;
+        // 3-8A.9-C: remote mode batch delete → 각 주문 cancelOrder (hard delete 금지)
+        if (this.isRemoteOrdersMode()) {
+            return this._batchCancelRemote();
+        }
+        // local mode — 기존 sync 흐름
         const products = DB.getProducts();
         const orders = DB.getOrders();
         orders.forEach(o => {
@@ -383,6 +388,40 @@ const Orders = {
         this.state.selected.clear();
         App.flash(t('common', 'delete') + '!', 'success');
         App.render();
+    },
+
+    /**
+     * 3-8A.9-C: remote mode 일괄 취소.
+     * 선택된 각 PENDING 주문에 대해 ds.cancelOrder 호출.
+     * hard delete, DB.setOrders, DB.setProducts 금지.
+     */
+    async _batchCancelRemote() {
+        const orders = this.state.orders || [];
+        const selectedIds = [...this.state.selected];
+        let successCount = 0;
+        let failCount = 0;
+
+        for (const id of selectedIds) {
+            const order = orders.find(o => o.id === id || o.remote_id === id);
+            if (!order || order.status !== 'PENDING') continue;
+            const remoteId = order.remote_id;
+            if (!remoteId || typeof remoteId !== 'string') continue;
+            try {
+                const ds = DB.getOrdersDataSource();
+                await ds.cancelOrder(remoteId, { notes: '' });
+                successCount++;
+            } catch (e) {
+                console.error('Batch cancel order failed:', e);
+                failCount++;
+            }
+        }
+        this.state.selected.clear();
+        if (failCount > 0) {
+            App.flash(successCount + t('orders', 'cancelled') + ', ' + failCount + ' ' + t('common', 'fail'), successCount > 0 ? 'warning' : 'error');
+        } else {
+            App.flash(successCount + t('common', 'delete') + '!', 'success');
+        }
+        await this._refreshOrdersAfterRemoteMutation();
     },
 
     selectDuplicates() {
@@ -419,6 +458,11 @@ const Orders = {
 
     submitEdit(e, orderId) {
         e.preventDefault();
+        // 3-8A.9-C: remote mode edit → ds.updatePendingOrder
+        if (this.isRemoteOrdersMode()) {
+            return this._submitEditRemote(e, orderId);
+        }
+        // local mode — 기존 sync 흐름
         const form = e.target;
         const orders = DB.getOrders();
         const idx = orders.findIndex(o => String(o.id) === String(orderId));
@@ -435,8 +479,71 @@ const Orders = {
         App.render();
     },
 
+    /**
+     * 3-8A.9-C: remote mode PENDING 주문 수정.
+     * SupabaseOrdersDataSource.updatePendingOrder(remoteId, payload)만 사용한다.
+     * DB.setOrders, DB.updateOrder, DB.updateProduct 금지.
+     * 안전 필드(date/price/color/size/quantity)만 수정, customer/product 변경은 보류.
+     */
+    async _submitEditRemote(e, orderId) {
+        const form = e.target;
+        const order = (this.state.orders || []).find(o => o.id === orderId || o.remote_id === orderId);
+        if (!order) {
+            App.flash(t('orders', 'order_not_found'), 'error');
+            return;
+        }
+        if (order.status !== 'PENDING') {
+            App.flash(t('orders', 'only_pending_edit'), 'error');
+            return;
+        }
+        const remoteId = order.remote_id;
+        if (!remoteId || typeof remoteId !== 'string') {
+            App.flash(t('orders', 'order_not_found'), 'error');
+            return;
+        }
+
+        const customerUuid = order.customer_uuid;
+        const productUuid = order.product_uuid;
+        if (!customerUuid || !productUuid) {
+            App.flash('customer_uuid 또는 product_uuid가 없습니다.', 'error');
+            return;
+        }
+
+        const quantity = parseInt(form.quantity?.value) || order.quantity || 1;
+        const sellingPrice = parseFloat(form.selling_price?.value) || order.selling_price || 0;
+        if (quantity <= 0 || sellingPrice <= 0) {
+            App.flash(t('orders', 'enter_qty_price'), 'error');
+            return;
+        }
+
+        try {
+            const ds = DB.getOrdersDataSource();
+            await ds.updatePendingOrder(remoteId, {
+                customer_uuid: customerUuid,
+                product_uuid: productUuid,
+                quantity: quantity,
+                selling_price: sellingPrice,
+                order_date: form.order_date?.value || order.order_date || '',
+                color: form.color?.value || order.color || undefined,
+                size: form.size?.value || order.size || undefined,
+                notes: undefined
+            });
+            this.state.editingOrderId = null;
+            App.flash(t('common', 'save') + '!', 'success');
+            await this._refreshOrdersAfterRemoteMutation();
+        } catch (e) {
+            console.error('Remote update order failed:', e);
+            App.flash(t('common', 'save') + ' ' + t('common', 'fail') + ': ' + (e.message || ''), 'error');
+        }
+    },
+
     delete(orderId) {
         if (!confirm(t('common', 'confirm_delete'))) return;
+        // 3-8A.9-C: remote mode delete → cancelOrder (hard delete 금지)
+        if (this.isRemoteOrdersMode()) {
+            return this._cancelRemote(orderId);
+        }
+        // local mode — 기존 sync 흐름
         const orders = DB.getOrders();
         const order = orders.find(o => String(o.id) === String(orderId));
         if (order && order.status === 'PENDING') {
@@ -867,6 +974,11 @@ const Orders = {
 
     cancel(id) {
         if (!confirm(t('common', 'confirm_delete') + '?')) return;
+        // 3-8A.9-C: remote mode cancel → ds.cancelOrder
+        if (this.isRemoteOrdersMode()) {
+            return this._cancelRemote(id);
+        }
+        // local mode — 기존 sync 흐름
         const order = DB.getOrders().find(o => o.id === id);
         if (!order) return;
         const product = DB.getProducts().find(p => p.id === order.product_id);
@@ -876,6 +988,47 @@ const Orders = {
         DB.updateOrder(id, { status: 'CANCELLED' });
         App.flash(t('orders', 'cancelled') + '!', 'success');
         App.render();
+    },
+
+    /**
+     * 3-8A.9-C: remote mode 주문 취소.
+     * SupabaseOrdersDataSource.cancelOrder(remoteId)만 사용한다.
+     * DB.updateProduct, DB.updateOrder, DB.setOrders 금지.
+     * product stock side effect는 cancel_order RPC에 맡긴다.
+     */
+    async _cancelRemote(id) {
+        const order = (this.state.orders || []).find(o => o.id === id || o.remote_id === id);
+        if (!order) {
+            App.flash(t('orders', 'order_not_found'), 'error');
+            return;
+        }
+        const remoteId = order.remote_id;
+        if (!remoteId || typeof remoteId !== 'string') {
+            App.flash(t('orders', 'order_not_found'), 'error');
+            return;
+        }
+        try {
+            const ds = DB.getOrdersDataSource();
+            await ds.cancelOrder(remoteId, { notes: '' });
+            App.flash(t('orders', 'cancelled') + '!', 'success');
+            await this._refreshOrdersAfterRemoteMutation();
+        } catch (e) {
+            console.error('Remote cancel order failed:', e);
+            App.flash(t('common', 'fail') + ': ' + (e.message || ''), 'error');
+        }
+    },
+
+    /**
+     * 3-8A.9-C: remote mutation 후 orders 목록을 다시 불러와 렌더링한다.
+     */
+    async _refreshOrdersAfterRemoteMutation() {
+        try {
+            await this._loadRemoteDataForRender();
+            App.render();
+        } catch (e) {
+            console.error('Orders refresh after mutation failed:', e);
+            App.render();
+        }
     },
 
     complete(id) {
