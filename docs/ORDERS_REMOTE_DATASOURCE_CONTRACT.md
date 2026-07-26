@@ -1103,4 +1103,9 @@ RETURNS public.orders
 
 ### Next Step
 
-- **3-8A.7B-B**: Path B — createOrder → shipOrder → completeOrder
+- **3-8A.7B-B**: Path B — createOrder → shipOrder → completeOrder ✅
+  - createOrder → PENDING, reservedStockIncreasedBy1
+  - shipOrder → SHIPPED, currentStockDecreasedBy1, reservedStockRestored
+  - completeOrder → COMPLETED, customerOrderCountIncreased, customerQuantityIncreased
+  - Stock: current_stock -1, reserved_stock 0
+  - Customer Aggregate: order_count +1, total_quantity +1

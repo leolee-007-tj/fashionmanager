@@ -8088,6 +8088,9 @@ Browser owner dev-console에서 createOrder 후 cancelOrder까지의 Path A muta
 
 ### 다음 단계
 
-- **3-8A.7B-B**: Path B — createOrder → shipOrder → completeOrder
+- **3-8A.7B-B**: Path B — createOrder → shipOrder → completeOrder ✅
   - Path B: createOrder → shipOrder → completeOrder
+  - createOrder → PENDING, reserved_stock +1, inventory_log RESERVE 1건
+  - shipOrder → SHIPPED, current_stock -1, reserved_stock 복구, inventory_log SHIP 1건
+  - completeOrder → COMPLETED, customer order_count +1, total_quantity +1
 
