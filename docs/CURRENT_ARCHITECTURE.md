@@ -7774,3 +7774,53 @@ window.LESOUL_CONFIG = {
   - stock / inventory_logs / customer aggregate side effect 확인
 - **3-8A.8**: Analytics/Customers Compatibility 검증
 
+---
+
+## 68. 3-8A.7A: Orders Remote Browser Owner Smoke - Readiness Runtime Check (2026-07-26)
+
+### 목적
+
+실제 create/ship/cancel/complete mutation을 하기 전에 브라우저 owner 세션에서 remote Orders DataSource가 올바르게 선택되는지, listOrders read-only가 가능한지, smoke용 customer/product uuid와 재고 조건을 안전하게 확인한다.
+
+### 실행 방식
+
+Dev-console adapter smoke readiness — 실제 mutation 없이 read-only runtime smoke만 수행.
+
+### 결과 요약
+
+| 항목 | 결과 |
+|---|---|
+| **UI smoke** | ❌ NO-GO (orders.js가 sync local API 사용 — 3-8A.7-Prep과 동일) |
+| **Dev-console adapter smoke** | ✅ GO |
+| **Local-only config** | `js/config.js`에 `ORDERS_SUPABASE_ENABLED: true`, `ORDERS_SUPABASE_REMOTE_ENABLED: true` 설정 (git ignored) |
+| **Owner auth** | hasUser: true, role: owner, hasStoreId: true |
+| **DataSource 선택** | `SupabaseOrdersDataSource` (name 확인) |
+| **DataSource methods** | listOrders, getOrderById, createOrder, updatePendingOrder, shipOrder, cancelOrder, completeOrder 모두 존재 |
+| **listOrders read-only** | 성공 (orderCount: 0, 정상 응답) |
+| **Smoke data candidate** | hasCustomerUuid: false (고객 데이터 없음), hasProductUuid: true (5개 상품), availableStockGte1: true (3개 상품 재고 보유, 가용 재고 ≥ 1) |
+| **Console errors** | net::ERR_CONNECTION_REFUSED (초기 서버 연결 시), 그 외 RLS/guard/service_role 에러 없음 |
+| **Network failures** | localhost:8080 연결 거부 (초기), @vite/client 무관 |
+| **실제 mutation** | 없음 (create/ship/cancel/complete 호출 안 함) |
+| **JS runtime 변경** | 없음 |
+| **Migration** | 없음 |
+| **DB push** | 없음 |
+
+### Go/No-Go
+
+| 항목 | 판정 |
+|---|---|
+| Read-only runtime smoke | ✅ GO |
+| DataSource selection | ✅ GO (SupabaseOrdersDataSource) |
+| listOrders read-only | ✅ GO (성공, 0건) |
+| Smoke data candidate: product | ✅ GO (hasProductUuid: true, availableStockGte1: true) |
+| Smoke data candidate: customer | ⚠️ NO-GO (hasCustomerUuid: false — 고객 데이터 없음) |
+| 3-8A.7B mutation smoke readiness | ⚠️ BLOCKED (customer uuid 필요) |
+
+### 다음 단계
+
+- **3-8A.7B**: Browser Owner Mutation Smoke
+  - 고객 데이터가 없으므로 smoke용 customer를 먼저 생성하거나 기존 데이터 필요
+  - createOrder / updatePendingOrder / shipOrder / cancelOrder / completeOrder adapter smoke
+  - stock / inventory_logs / customer aggregate side effect 확인
+  - 3-8A.7B 진입 전 명시적 승인 필요
+

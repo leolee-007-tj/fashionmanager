@@ -917,3 +917,50 @@ RETURNS public.orders
   - `createOrder` / `updatePendingOrder` / `shipOrder` / `cancelOrder` / `completeOrder` 검증
   - `listOrders` read 확인
   - stock / inventory_logs / customer aggregate side effect 확인
+
+---
+
+## R. 3-8A.7A Runtime Readiness Result (2026-07-26)
+
+### DataSource Selection
+
+| 항목 | 결과 |
+|---|---|
+| DataSource name | `SupabaseOrdersDataSource` |
+| listOrders | ✅ function exists |
+| createOrder | ✅ function exists |
+| updatePendingOrder | ✅ function exists |
+| shipOrder | ✅ function exists |
+| cancelOrder | ✅ function exists |
+| completeOrder | ✅ function exists |
+
+### listOrders Read-Only
+
+| 항목 | 결과 |
+|---|---|
+| 호출 성공 | ✅ |
+| 반환된 order 수 | 0 (데이터 없음, 정상) |
+| 응답 형식 | 정상 |
+
+### Smoke Data Candidates
+
+| 항목 | 결과 |
+|---|---|
+| hasCustomerUuid | false (고객 데이터 없음) |
+| hasProductUuid | true (5개 상품) |
+| availableStockGte1 | true (3개 상품 재고 ≥ 1) |
+
+### Mutation Smoke Status
+
+| 항목 | 상태 |
+|---|---|
+| create_order 호출 | ❌ pending |
+| update_pending_order 호출 | ❌ pending |
+| ship_order 호출 | ❌ pending |
+| cancel_order 호출 | ❌ pending |
+| complete_order 호출 | ❌ pending |
+
+### Next Step
+
+- **3-8A.7B**: Browser Owner Mutation Smoke — 명시적 승인 필요
+  - customer uuid가 없으므로 smoke용 customer 생성 또는 기존 데이터 필요
