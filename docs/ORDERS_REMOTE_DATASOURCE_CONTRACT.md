@@ -1317,7 +1317,65 @@ Orders UI의 목록 조회/load/renderList 경로를 remote mode에서 read-only
 
 | 항목 | 상태 |
 |---|---|
-| createOrder UI submit | ❌ 미구현 (3-8A.9-B) |
+| createOrder UI submit | ✅ 완료 (3-8A.9-B) |
+| updatePendingOrder UI submit | ❌ 미구현 (3-8A.9-C) |
+| cancelOrder UI submit | ❌ 미구현 (3-8A.9-C) |
+| shipOrder UI submit | ❌ 미구현 (3-8A.9-D) |
+| completeOrder UI submit | ❌ 미구현 (3-8A.9-D) |
+
+---
+
+## Z. 3-8A.9-B UI Create Integration Status (2026-07-26)
+
+### 목적
+
+Orders UI의 주문 등록 submitAdd 경로를 remote mode에서 SupabaseOrdersDataSource.createOrder로 연결.
+
+### UI Create Integration Status
+
+| 항목 | 상태 |
+|---|---|
+| `submitAdd()` async 전환 + isRemoteOrdersMode() 분기 | ✅ 구현됨 |
+| `_submitAddRemote()` createOrder helper | ✅ 구현됨 |
+| `_renderAddRemote()` remote add form | ✅ 구현됨 |
+| `updateProductList()` remote 분기 | ✅ 구현됨 |
+| remote mode: DB.getOrdersDataSource().createOrder() | ✅ |
+| remote mode: DB.addOrder 직접 호출 금지 | ✅ |
+| remote mode: DB.updateProduct 직접 호출 금지 | ✅ |
+| remote mode: DB.addInventoryLog 직접 호출 금지 | ✅ |
+| remote mode: DB.addCustomer 직접 호출 금지 | ✅ |
+| remote mode: DB.findCustomerByName 직접 호출 금지 | ✅ |
+| customer_uuid 검증 | ✅ |
+| product_uuid 검증 | ✅ |
+| 신규 customer 자동 생성 금지 | ✅ |
+| local mode: 기존 submitAdd sync API 유지 | ✅ |
+| error handling (try/catch + App.flash) | ✅ |
+| contract tests | ✅ 28 tests, 0 fail |
+
+### CreateOrder UI Path Status
+
+| 항목 | 상태 |
+|---|---|
+| create_order RPC 호출 | ✅ createOrder(payload) |
+| product stock side effect | ✅ RPC 내부 처리 |
+| inventory_logs side effect | ✅ RPC 내부 처리 |
+| 성공 flash | ✅ |
+| 실패 flash | ✅ |
+
+### Customer/Product Dependency
+
+| 항목 | 상태 |
+|---|---|
+| remote customers read | ✅ cached _remoteCustomers |
+| remote customers write | ❌ 미구현 (신규 생성 불가) |
+| remote products read | ✅ cached _remoteProducts |
+| remote products write | ❌ 불필요 (create_order RPC) |
+
+### Mutation UI Pending (Updated)
+
+| 항목 | 상태 |
+|---|---|
+| createOrder UI submit | ✅ 완료 (3-8A.9-B) |
 | updatePendingOrder UI submit | ❌ 미구현 (3-8A.9-C) |
 | cancelOrder UI submit | ❌ 미구현 (3-8A.9-C) |
 | shipOrder UI submit | ❌ 미구현 (3-8A.9-D) |
@@ -1325,4 +1383,4 @@ Orders UI의 목록 조회/load/renderList 경로를 remote mode에서 read-only
 
 ### Next Step
 
-- **3-8A.9-B**: Orders UI create form remote submit
+- **3-8A.9-C**: Orders UI cancel/edit pending remote actions

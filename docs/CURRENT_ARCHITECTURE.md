@@ -8520,7 +8520,67 @@ Orders UI의 목록 조회/load/renderList 경로를 remote mode에서 read-only
 | migration 변경 | ❌ 없음 |
 | supabase db push | ❌ 없음 |
 
-### 다음 단계
+### 3-8A.9-B: Orders UI create form remote submit (2026-07-26)
 
-- **3-8A.9-B**: Orders UI create form remote submit
+#### 목적
+
+Orders UI의 주문 등록 submitAdd 경로를 remote mode에서 SupabaseOrdersDataSource.createOrder로 연결한다.
+local mode는 기존 sync 흐름을 유지하며, remote mode에서만 async create flow를 사용한다.
+
+#### 구현 범위
+
+- submitAdd() async 전환, isRemoteOrdersMode() 분기
+- _submitAddRemote() helper: SupabaseOrdersDataSource.createOrder(payload) 호출
+- _renderAddRemote() helper: customer_uuid / product_uuid 폼 필드 사용
+- updateProductList() remote 분기: cached _remoteProducts 사용
+- customer_uuid / product_uuid 검증 및 미존재 시 create submit 차단
+- 신규 customer 자동 생성 금지 (remote customers DataSource 미구현)
+
+#### local mode 유지
+
+- 기존 submitAdd sync 흐름 보존 (DB.addOrder, DB.updateProduct, DB.addCustomer, DB.findCustomerByName)
+- renderAdd() local 모드 intact
+- local mode는 isRemoteOrdersMode() false 시 기존 코드 그대로 실행
+
+#### remote mode create path
+
+- DB.getOrdersDataSource().createOrder(payload) 1회 호출
+- create_order RPC에서 product stock, inventory_logs 등 side effect 처리
+- DB.addOrder, DB.updateProduct, DB.addInventoryLog 직접 호출 금지
+- 성공 시 App.flash + location.hash 이동
+- 실패 시 App.flash error 표시
+
+#### customer_uuid / product_uuid requirement
+
+- remote mode: customer_uuid, product_uuid 필수
+- remote customers DataSource 미구현이므로 신규 고객 생성 불가
+- customer_uuid 없으면 create submit 차단 + 안내 메시지
+- product_uuid 없는 legacy-only product로 createOrder 금지
+
+#### forbidden mutation - 미구현 범위
+
+- updatePendingOrder UI 구현 ❌
+- cancelOrder UI 구현 ❌
+- shipOrder UI 구현 ❌
+- completeOrder UI 구현 ❌
+- edit/cancel/ship/complete button handler remote 구현 ❌
+
+#### Go/No-Go
+
+| 항목 | 판정 |
+|---|---|
+| remote create submit 연결 | ✅ GO |
+| local mode sync 흐름 유지 | ✅ GO |
+| forbidden mutation 미구현 | ✅ GO |
+| customer_uuid/product_uuid 검증 | ✅ GO |
+| tests 통과 | ✅ GO (tests below) |
+| preflight PASS | ✅ GO |
+| js/config.js staged | ❌ 없음 |
+| data_export.json | ❌ 없음 |
+| migration 변경 | ❌ 없음 |
+| supabase db push | ❌ 없음 |
+
+#### 다음 단계
+
+- **3-8A.9-C**: Orders UI cancel/edit pending remote actions
 

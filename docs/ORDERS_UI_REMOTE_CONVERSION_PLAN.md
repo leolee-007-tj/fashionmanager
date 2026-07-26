@@ -112,13 +112,17 @@ remote mode에서는 다음 작업이 절대 금지된다:
 - tests: 22 contract tests, 0 fail ✅
 - preflight: PASS ✅
 
-### 3-8A.9-B: Orders UI create form remote submit
+### 3-8A.9-B: Orders UI create form remote submit ✅ 완료 (2026-07-26)
 
-- submitAdd() async 전환
-- ds.createOrder() 사용
-- customer lookup/resolve async 전환
-- product dropdown async 전환
-- reserved_stock 직접 수정 제거
+- submitAdd() async 전환 + isRemoteOrdersMode() 분기 ✅
+- _submitAddRemote(): ds.createOrder() 사용 ✅
+- _renderAddRemote(): customer_uuid / product_uuid 폼 필드 사용 ✅
+- updateProductList() remote 분기: cached _remoteProducts 사용 ✅
+- customer_uuid / product_uuid 검증 ✅
+- DB.addOrder / DB.updateProduct / DB.addInventoryLog 금지 ✅
+- 신규 customer 자동 생성 금지 ✅
+- contract tests: 28 tests, 0 fail ✅
+- preflight: PASS ✅
 
 ### 3-8A.9-C: Orders UI cancel/edit pending remote actions
 

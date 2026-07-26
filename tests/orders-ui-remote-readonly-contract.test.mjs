@@ -112,22 +112,22 @@ describe('3-8A.9-A Orders UI Remote Read-only Contract', function () {
 
     it('UR15: renderList does not contain createOrder remote submit', function () {
         const renderListStart = ORDERS_JS.indexOf('async renderList(');
-        const renderShipStart = ORDERS_JS.indexOf('renderShip(');
-        const renderListSection = renderShipStart > renderListStart ? ORDERS_JS.slice(renderListStart, renderShipStart) : ORDERS_JS.slice(renderListStart);
+        const renderListBodyStart = ORDERS_JS.indexOf('_renderListBody(');
+        const renderListSection = renderListBodyStart > renderListStart ? ORDERS_JS.slice(renderListStart, renderListBodyStart) : ORDERS_JS.slice(renderListStart);
         assert.doesNotMatch(renderListSection, /createOrder/, 'renderList should not contain createOrder remote submit');
     });
 
     it('UR16: renderList does not contain cancelOrder remote submit', function () {
         const renderListStart = ORDERS_JS.indexOf('async renderList(');
-        const renderShipStart = ORDERS_JS.indexOf('renderShip(');
-        const renderListSection = renderShipStart > renderListStart ? ORDERS_JS.slice(renderListStart, renderShipStart) : ORDERS_JS.slice(renderListStart);
+        const renderListBodyStart = ORDERS_JS.indexOf('_renderListBody(');
+        const renderListSection = renderListBodyStart > renderListStart ? ORDERS_JS.slice(renderListStart, renderListBodyStart) : ORDERS_JS.slice(renderListStart);
         assert.doesNotMatch(renderListSection, /cancelOrder/, 'renderList should not contain cancelOrder remote submit');
     });
 
     it('UR17: renderList does not contain shipOrder remote submit', function () {
         const renderListStart = ORDERS_JS.indexOf('async renderList(');
-        const renderShipStart = ORDERS_JS.indexOf('renderShip(');
-        const renderListSection = renderShipStart > renderListStart ? ORDERS_JS.slice(renderListStart, renderShipStart) : ORDERS_JS.slice(renderListStart);
+        const renderListBodyStart = ORDERS_JS.indexOf('_renderListBody(');
+        const renderListSection = renderListBodyStart > renderListStart ? ORDERS_JS.slice(renderListStart, renderListBodyStart) : ORDERS_JS.slice(renderListStart);
         assert.doesNotMatch(renderListSection, /shipOrder/, 'renderList should not contain shipOrder remote submit');
     });
 

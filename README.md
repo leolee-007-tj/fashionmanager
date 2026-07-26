@@ -82,12 +82,12 @@
 | 3-8A.7 | Browser Owner Smoke | ✅ |
 | 3-8A.9-Prep | Orders UI remote conversion audit | ✅ |
 | **3-8A.9-A** | **Orders UI read-only remote list rendering** | ✅ |
+| **3-8A.9-B** | **Orders UI create remote submit** | ✅ |
 
 ### 진행 중 / 예정
 
 | 단계 | 내용 | 상태 |
 |---|---|---|
-| 3-8A.9-B | Orders UI create remote submit | 🔜 예정 |
 | 3-8A.9-C | Orders UI cancel/edit remote | 🔜 예정 |
 | 3-8A.9-D | Orders UI ship/complete remote | 🔜 예정 |
 | 3-8A.9-E | Orders UI browser smoke | 🔜 예정 |
