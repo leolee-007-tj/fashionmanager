@@ -3,7 +3,7 @@
 부티크 매장 관리를 위한 정적 웹 애플리케이션입니다. 상품·주문·고객·매출 분석을 한 곳에서 관리할 수 있습니다.
 
 > **현재 브랜치**: `feature/supabase-cloud-migration` — Supabase 원격 데이터베이스로 마이그레이션 진행 중  
-> **최종 작업 단계**: 3-8A.9-A (Orders UI read-only remote list rendering 완료)
+> **최종 작업 단계**: 3-8A.9-Prep (Orders UI remote conversion audit 완료)
 
 ---
 
@@ -55,7 +55,7 @@
 │   ├── auth-service.js     # 인증 서비스
 │   ├── auth-ui.js          # 인증 UI
 │   └── app-bootstrap.js    # 인증 게이트
-├── tests/                  # 테스트 (950+)
+├── tests/                  # 테스트 (930+)
 ├── docs/                   # 문서
 └── supabase/
     └── migrations/         # Supabase 마이그레이션
@@ -80,12 +80,13 @@
 | 3-8A.5 | createOrder RPC Adapter | ✅ |
 | 3-8A.6 | Status RPC Adapters | ✅ |
 | 3-8A.7 | Browser Owner Smoke | ✅ |
-| **3-8A.9-A** | **Orders UI read-only rendering** | ✅ |
+| 3-8A.9-Prep | Orders UI remote conversion audit | ✅ |
 
 ### 진행 중 / 예정
 
 | 단계 | 내용 | 상태 |
 |---|---|---|
+| 3-8A.9-A | Orders UI read-only remote list rendering | 🔜 예정 |
 | 3-8A.9-B | Orders UI create remote submit | 🔜 예정 |
 | 3-8A.9-C | Orders UI cancel/edit remote | 🔜 예정 |
 | 3-8A.9-D | Orders UI ship/complete remote | 🔜 예정 |
@@ -115,7 +116,7 @@ python3 -m http.server 8080
 ### 테스트 실행
 
 ```bash
-# 전체 테스트 (950+ tests)
+# 전체 테스트 (930+ tests)
 node --test tests/*.test.mjs
 
 # Preflight 검사
