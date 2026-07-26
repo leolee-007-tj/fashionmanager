@@ -7824,3 +7824,89 @@ Dev-console adapter smoke readiness — 실제 mutation 없이 read-only runtime
   - stock / inventory_logs / customer aggregate side effect 확인
   - 3-8A.7B 진입 전 명시적 승인 필요
 
+---
+
+## 69. 3-8A.7B-Prep: Orders Mutation Smoke Customer Readiness Plan (2026-07-26)
+
+### 목적
+
+3-8A.7B mutation smoke(create/update/ship/cancel/complete)를 실행하기 전에 customer uuid 부재 문제를 해결할 방법을 정리한다. 이번 단계는 docs-only readiness planning이다.
+
+### Blocking Reason
+
+- `create_order` RPC는 `p_customer_id uuid`를 필수 파라미터로 요구
+- RPC 내부에서 `WHERE id = p_customer_id AND store_id = p_store_id AND deleted_at IS NULL` 검증 수행
+- 3-8A.7A read-only smoke에서 `hasCustomerUuid: false` (remote customers 테이블 count 0)
+- 따라서 3-8A.7B mutation smoke는 현재 BLOCKED
+
+### create_order Customer UUID Dependency
+
+| 항목 | 내용 |
+|---|---|
+| RPC | `public.create_order(p_store_id uuid, p_customer_id uuid, p_product_id uuid, ...)` |
+| customer 검증 | `WHERE id = p_customer_id AND store_id = p_store_id AND deleted_at IS NULL` |
+| 실패 시 | `ERRCODE 22023: Customer not found or is deleted in this store` |
+| customers table 필수 필드 | `store_id` (uuid, NOT NULL), `name` (text, NOT NULL) |
+| customers table 기본값 컬럼 | `total_amount`, `total_profit`, `order_count`, `total_quantity` → default 0 |
+| customers RLS | `"Customers: owner/manager can insert"` — authenticated owner/manager INSERT 허용 |
+
+### 가능한 해결 전략 비교
+
+| 전략 | 설명 | 판정 | 사유 |
+|---|---|---|---|
+| **1. 기존 remote customer 확보** | remote customers table에 기존 active customer가 있는지 read-only 재확인 | ❌ NO-GO | 3-8A.7A에서 count 0 확인 |
+| **2. owner UI에서 customer 생성** | customers.js UI를 통해 customer 등록 → remote에 생성 | ❌ NO-GO | customers.js는 `DB.addCustomer()` 사용 (localStorage 전용). remote CustomersDataSource 없음 |
+| **3. dev-console에서 Supabase client로 insert** | 브라우저 console에서 `supabase.from('customers').insert({...})` 실행 | ✅ 권장 | RLS 허용 (owner/manager insert), name+store_id만 필수, publishable key로 가능 |
+| **4. customer creation adapter/RPC 먼저 구현** | 별도 3-8B 또는 customer remote 단계 진행 | ⚠️ 대안 | 장기적으로 필요하나 3-8A.7B 지연 |
+| **5. create_order RPC 변경** | customer snapshot만 허용하도록 DB 설계 변경 | ❌ NO-GO | migration/RPC 변경 필요, 이번 단계 범위 초과 |
+
+### 권장안: Strategy 3 — Dev-Console Smoke Customer Insert
+
+1. **선행 단계**: `3-8A.7B-CustomerSeed`로 분리하여 사용자 명시적 승인 획득
+2. **실행 방식**: 브라우저 owner 세션에서 `LESOULSupabase.getClient().from('customers').insert(...)` 사용
+3. **필수 필드**: `store_id` (owner session에서 획득), `name` (고객명)
+4. **식별자**: `name`과 `notes`에 `[SMOKE TEST 3-8A.7B]` 표시
+5. **키 제약**: publishable/anon key only, service_role 금지
+6. **uuid 정책**: 생성된 customer uuid 전체값은 문서/로그에 기록하지 않음
+7. **RLS 보장**: `"Customers: owner/manager can insert"` policy에 의해 store_id 자동 검증
+
+### Safety Policy
+
+| 항목 | 정책 |
+|---|---|
+| Service role | 금지 (publishable key only) |
+| SQL Editor | 금지 |
+| Migration | 금지 |
+| Customer UUID 기록 | 전체값 기록 금지 (hasCustomerUuid: true/false만 기록) |
+| Smoke 식별 | `name`, `notes`에 `[SMOKE TEST 3-8A.7B]` 포함 |
+| Cleanup | smoke 완료 후 필요 시 삭제 가능 (soft delete) |
+
+### 3-8A.7B Mutation Smoke 분리 계획
+
+customer 확보 후 3-8A.7B는 두 경로로 분리:
+
+| 경로 | 내용 | customer aggregate 영향 |
+|---|---|---|
+| **Path A: create → cancel** | createOrder 후 cancelOrder → reserved_stock 복구, customer aggregate 변동 후 복구 | 최종 영향 없음 |
+| **Path B: create → ship → complete** | createOrder 후 shipOrder → completeOrder → stock 차감, customer aggregate 증가 | 최종 영향 있음 (clenup 시 soft delete로 복구) |
+
+### Go/No-Go
+
+| 항목 | 판정 |
+|---|---|
+| 3-8A.7B mutation smoke (현재) | ❌ NO-GO (customer uuid 없음) |
+| 3-8A.7B-CustomerSeed (customer 1건 생성) | ⚠️ 사용자 명시적 승인 필요 |
+| 3-8A.7B (customer 확보 후) | ✅ 조건부 GO |
+| Direct SQL / SQL Editor | ❌ NO-GO |
+| Service role 사용 | ❌ NO-GO |
+| Publishable owner-session insert | ✅ 검토 완료 (RLS 허용) |
+
+### 다음 단계
+
+- **3-8A.7B-CustomerSeed**: 사용자 승인 후 dev-console에서 smoke customer 1건 생성
+  - `name: '[SMOKE TEST 3-8A.7B] Smoke Customer'`, `notes: '[SMOKE TEST 3-8A.7B]'`
+  - 생성 후 customer uuid 존재 확인 (전체값 기록 금지)
+- **3-8A.7B**: customer 확보 후 mutation smoke 진행
+  - Path A: create → cancel
+  - Path B: create → ship → complete
+

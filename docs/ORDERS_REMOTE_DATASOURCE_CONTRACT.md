@@ -964,3 +964,52 @@ RETURNS public.orders
 
 - **3-8A.7B**: Browser Owner Mutation Smoke — 명시적 승인 필요
   - customer uuid가 없으므로 smoke용 customer 생성 또는 기존 데이터 필요
+
+---
+
+## S. 3-8A.7B-Prep Customer Readiness Plan (2026-07-26)
+
+### 3-8A.7B Blocked Reason
+
+- `create_order` RPC는 `p_customer_id uuid`를 필수 파라미터로 요구
+- RPC 내부에서 customer 존재 여부 검증 (`WHERE id = p_customer_id AND store_id = p_store_id AND deleted_at IS NULL`)
+- 3-8A.7A에서 `hasCustomerUuid: false` 확인 → 현재 mutation smoke BLOCKED
+
+### Customer UUID Dependency
+
+| 항목 | 내용 |
+|---|---|
+| `create_order` param | `p_customer_id uuid` (필수) |
+| `update_pending_order` param | `p_customer_id uuid` (필수) |
+| customers table 필수 필드 | `store_id` (uuid, NOT NULL), `name` (text, NOT NULL) |
+| customers RLS insert | `"Customers: owner/manager can insert"` — authenticated owner/manager 허용 |
+
+### Smoke Customer Policy
+
+| 항목 | 정책 |
+|---|---|
+| 생성 방식 | dev-console `supabase.from('customers').insert(...)` |
+| 키 제약 | publishable/anon key only, service_role 금지 |
+| 필수 데이터 | `store_id` (owner session), `name` |
+| 식별자 | `name`, `notes`에 `[SMOKE TEST 3-8A.7B]` 표시 |
+| UUID 기록 | 전체값 기록 금지 |
+| Cleanup | smoke 완료 후 soft delete 가능 |
+
+### Mutation Smoke Prerequisite
+
+3-8A.7B mutation smoke 실행 전 선행 조건:
+1. `3-8A.7B-CustomerSeed`: 사용자 승인 후 dev-console에서 smoke customer 1건 생성
+2. 생성 후 customer uuid 존재 확인 (hasCustomerUuid: true)
+3. customer uuid 확보 후 3-8A.7B mutation smoke 진행
+
+### 3-8A.7B Path Plan
+
+| 경로 | 순서 | customer aggregate 영향 |
+|---|---|---|
+| **Path A** | createOrder → cancelOrder | 변동 후 복구 (최종 영향 없음) |
+| **Path B** | createOrder → shipOrder → completeOrder | stock 차감, aggregate 증가 (cleanup 필요) |
+
+### Next Step
+
+- **3-8A.7B-CustomerSeed**: 사용자 명시적 승인 필요
+- **3-8A.7B**: customer 확보 후 mutation smoke (조건부 GO)
