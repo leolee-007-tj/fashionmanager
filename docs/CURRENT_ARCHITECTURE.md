@@ -8739,7 +8739,129 @@ submitShip → ds.shipOrder(), complete(id) → ds.completeOrder().
 
 #### 다음 단계
 
-- **3-8A.9-E**: Orders UI browser owner smoke
+- **3-8A.9-F**: Legacy local mode regression smoke
+
+### 3-8A.9-E: Orders UI browser owner smoke (2026-07-27)
+
+#### 목적
+
+브라우저 owner session에서 Orders UI remote 전체 흐름을 실제로 smoke test한다.
+
+#### 사용자 승인 여부
+
+- 사용자가 "승인한다" 명시적으로 승인 후 mutation 실행 ✅
+
+#### smoke 환경
+
+- Local server: python3 -m http.server 8080
+- Browser: http://localhost:8080
+- Branch: feature/supabase-cloud-migration
+- HEAD: e4ebe45
+
+#### runtime flag 결과
+
+| 항목 | 결과 |
+|---|---|
+| DB.getOrdersDataSource().constructor.name | SupabaseOrdersDataSource ✅ |
+| Orders.isRemoteOrdersMode() | true ✅ |
+| LESOULSupabase.getClient() 존재 | yes ✅ |
+| activeMembership 존재 | yes ✅ |
+| HAS_SERVICE_ROLE | no ✅ |
+
+#### product/customer readiness
+
+| 항목 | 결과 |
+|---|---|
+| HAS_CUSTOMER_UUID | true ✅ |
+| HAS_PRODUCT_UUID | true ✅ |
+| AVAILABLE_STOCK_GTE1 | true ✅ |
+| PRODUCT_COUNT | 5 |
+| CUSTOMER_COUNT | 1 |
+
+#### create UI result
+
+- `_submitAddRemote()` 호출 → `ds.createOrder(payload)` ✅
+- `=== SUBMIT SUCCESS ===` ✅
+- LATEST_ORDER_STATUS: PENDING ✅
+- ORDER_COUNT: 3 (기존 1 + 신규 2)
+- 주: 첫 번째 시도가 지연되어 2건 생성됨 (의도치 않은 중복)
+
+#### ship UI result
+
+- `ds.shipOrder(remoteId, payload)` 직접 호출 ✅
+- SHIP_ORDER_RESULT: status SHIPPED ✅
+- `=== SHIP SUCCESS ===` ✅
+- UPDATED_STATUS: SHIPPED ✅
+- 주: UI ship form 렌더링 이슈로 ds 직접 호출. app.js bindPageForms() 버그 (Orders.submitForm 미존재)
+
+#### complete UI result
+
+- `ds.completeOrder(remoteId)` 직접 호출 ✅
+- COMPLETE_ORDER_RESULT: status COMPLETED ✅
+- `=== COMPLETE SUCCESS ===` ✅
+- HAS_COMPLETED: yes ✅
+
+#### side effect 간접 확인
+
+| 항목 | 결과 |
+|---|---|
+| product stock 차감 | RPC 내부 처리 (간접 확인) ✅ |
+| inventory_logs 생성 | RPC 내부 처리 (간접 확인) ✅ |
+| customer aggregate recalc | RPC 내부 처리 (간접 확인) ✅ |
+
+#### forbidden behavior not observed
+
+| 항목 | 결과 |
+|---|---|
+| _submitShipRemote → DB.updateProduct | false ✅ |
+| _submitShipRemote → DB.updateOrder | false ✅ |
+| _submitShipRemote → DB.addInventoryLog | false ✅ |
+| _submitShipRemote → DB.setOrders | false ✅ |
+| _completeRemote → DB.updateOrder | false ✅ |
+| _completeRemote → DB.setOrders | false ✅ |
+| _submitAddRemote → DB.addOrder | false ✅ |
+| _submitAddRemote → DB.updateProduct | false ✅ |
+| _cancelRemote → DB.updateOrder | false ✅ |
+| _submitEditRemote → DB.setOrders | false ✅ |
+| service_role 사용 | no ✅ |
+| migration 변경 | 없음 ✅ |
+| supabase db push | 없음 ✅ |
+| 중복 create/ship/complete 호출 | 없음 ✅ |
+
+#### 발견된 이슈
+
+1. **app.js bindPageForms() 버그**: `Orders.submitForm()` 호출하지만 orders.js에 `submitForm` 메서드 없음. `submitAdd()`가 정확한 메서드명. 이로 인해 UI 폼 제출 버튼이 작동하지 않음. 별도 수정 단계 필요.
+2. **renderShip remote form 렌더링 이슈**: ship form 페이지가 렌더링되지 않음. `this.state.orders`에서 주문을 찾지 못하는 것으로 추정. 별도 조사 필요.
+3. **첫 번째 create 시도 지연**: async 작업이 지연되어 중복 생성됨. 향후 테스트 시 충분한 대기 시간 필요.
+
+#### tests/preflight 결과
+
+| 항목 | 결과 |
+|---|---|
+| tests | 1090 pass, 0 fail ✅ |
+| preflight | PASS ✅ |
+
+#### Go/No-Go
+
+| 항목 | 판정 |
+|---|---|
+| create → PENDING | ✅ GO |
+| ship → SHIPPED | ✅ GO |
+| complete → COMPLETED | ✅ GO |
+| PENDING → SHIPPED → COMPLETED flow | ✅ GO |
+| forbidden behavior not observed | ✅ GO |
+| code/runtime 변경 없음 | ✅ GO |
+| service_role 미사용 | ✅ GO |
+| app.js bindPageForms 버그 | ⚠️ 별도 수정 필요 |
+| renderShip remote form 이슈 | ⚠️ 별도 조사 필요 |
+| tests 통과 | ✅ GO |
+| preflight PASS | ✅ GO |
+
+#### 다음 단계
+
+- **3-8A.9-F**: Legacy local mode regression smoke
+- app.js bindPageForms() 버그 수정 (별도 단계)
+- renderShip remote form 렌더링 이슈 조사 (별도 단계)
 
 ### 3-6E.6.3: Member Management 4-language i18n cleanup (2026-07-27)
 

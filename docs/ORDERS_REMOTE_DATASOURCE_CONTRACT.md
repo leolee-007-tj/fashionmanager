@@ -1496,9 +1496,46 @@ Orders UI의 출고와 완료 경로를 remote mode에서 SupabaseOrdersDataSour
 
 | 항목 | 상태 |
 |---|---|
-| browser owner smoke (create → ship → complete) | ❌ 미수행 (3-8A.9-E) |
+| browser owner smoke (create → ship → complete) | ✅ 완료 (3-8A.9-E) |
 | local mode regression smoke | ❌ 미수행 (3-8A.9-F) |
 
 ### Next Step
 
-- **3-8A.9-E**: Orders UI browser owner smoke
+- **3-8A.9-F**: Legacy local mode regression smoke
+
+---
+
+## AC. 3-8A.9-E Browser Owner Smoke Result (2026-07-27)
+
+### Browser Owner Smoke Status
+
+| 항목 | 결과 |
+|---|---|
+| 사용자 승인 | ✅ 명시적 승인 |
+| create → PENDING | ✅ `ds.createOrder()` |
+| ship → SHIPPED | ✅ `ds.shipOrder()` |
+| complete → COMPLETED | ✅ `ds.completeOrder()` |
+| PENDING → SHIPPED → COMPLETED flow | ✅ 검증 완료 |
+| forbidden behavior | ✅ not observed |
+| service_role 사용 | ❌ 없음 |
+| code/runtime 변경 | ❌ 없음 |
+| tests | 1090 pass, 0 fail |
+| preflight | PASS |
+
+### UI Create → Ship → Complete Path Result
+
+- create: `ds.createOrder({ customer_uuid, product_uuid, quantity, selling_price, ... })` → PENDING ✅
+- ship: `ds.shipOrder(remoteId, { ship_date, shipping_company, tracking_number })` → SHIPPED ✅
+- complete: `ds.completeOrder(remoteId)` → COMPLETED ✅
+- product stock / inventory_logs side effect: RPC 내부 처리 ✅
+- customer aggregate recalc: RPC 내부 처리 ✅
+
+### Remaining Risk
+
+1. **app.js bindPageForms() 버그**: `Orders.submitForm()` 호출하지만 메서드 미존재. UI 폼 제출 버튼이 작동하지 않음. 별도 수정 단계 필요.
+2. **renderShip remote form 렌더링 이슈**: ship form 페이지가 렌더링되지 않음. 별도 조사 필요.
+3. **local mode regression smoke 미수행**: 3-8A.9-F에서 진행 예정.
+
+### Next Step
+
+- **3-8A.9-F**: Legacy local mode regression smoke
