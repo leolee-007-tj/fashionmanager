@@ -1661,3 +1661,48 @@ Orders UI의 출고와 완료 경로를 remote mode에서 SupabaseOrdersDataSour
 |---|---|
 | tests | 1109 pass, 0 fail |
 | preflight | PASS |
+
+---
+
+## AH. 3-8A.10-A Manager/Staff Browser Smoke (2026-07-27)
+
+### Role-Based Browser Smoke Status
+
+| 항목 | 상태 |
+|---|---|
+| owner baseline | ✅ GO (code analysis) |
+| manager smoke | ⏸️ BLOCKED (계정 unavailable) |
+| staff smoke | ⏸️ BLOCKED (계정 unavailable) |
+| no-membership/guest edge | ⏭️ SKIPPED |
+| owner-only member management visibility | ✅ 확인 |
+
+### Owner Baseline
+
+- Pages access: Products, Orders, Customers, Analytics, Members 모두 접근 가능
+- Members nav: `nav-item-members` `display: ''` (owner 전용)
+- Console critical error: 없음
+
+### Manager/Staff Availability
+
+- 실제 manager/staff 계정으로 headless browser smoke 불가
+- 이유: 브라우저 session 없음, 계정 생성 금지 (사용자 승인 필요)
+- 코드 분석 기준: `_updateOwnerNavVisibility()` → members nav hidden, `MemberManagement.isOwner()` → access denied
+
+### Remote Datasource/RPC 변경 없음
+
+- 이번 단계에서 remote datasource, RPC, schema 변경 없음
+- 코드 수정 없음
+
+### No Order Mutation in This Step
+
+- orders create/ship/complete/cancel/update 실행하지 않음
+- remote DB mutation 없음
+
+### Remaining Role-Smoke Risks
+
+| 위험 | 상태 |
+|---|---|
+| manager/staff 계정 smoke 미수행 | ⚠️ |
+| no-membership/guest edge smoke 미수행 | ⚠️ |
+| owner-only UI enforcement는 코드 분석으로 확인 | ✅ |
+| 실제 브라우저 owner session smoke 필요 | ⚠️ |

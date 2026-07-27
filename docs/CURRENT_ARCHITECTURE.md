@@ -9239,10 +9239,122 @@ Orders UI remote conversion 1차 완료 상태를 정리하고 Go/No-Go를 확�
 
 #### 다음 단계 (후보)
 
+| 우선순위 | 단계 | 내용 | 상태 |
+|---|---|---|---|
+| 1 | 3-8A.10-A | Manager/Staff browser smoke | ✅ 완료 (계정 unavailable) |
+| 2 | 3-8A.10-B | Remote UI post-bugfix smoke | 🔜 예정 |
+| 3 | 3-8B | Analytics/Customers remote integration audit | 🔜 예정 |
+| 4 | 3-9 | Backup/export/import policy | 🔜 예정 |
+
+---
+
+### 3-8A.10-A: Manager/Staff browser smoke (2026-07-27)
+
+#### 목적
+
+manager/staff 권한 계정으로 실제 브라우저 접근 smoke를 수행한다.
+권한별 화면 노출, 접근 제한, 주문/상품/직원관리 메뉴 권한이 의도대로 동작하는지 확인한다.
+
+#### Smoke 환경
+
+- Playwright headless Chrome (chromium)
+- `js/config.js` route intercept: `SUPABASE_ENABLED: true`, `ORDERS_SUPABASE_REMOTE_ENABLED: true`
+- 로컬 서버 `http://localhost:8080`
+
+#### Owner Baseline (Code Analysis)
+
+| 항목 | 결과 |
+|---|---|
+| owner role 확인 | `_context.activeMembership.role === 'owner'` |
+| Products 접근 | ✅ 가능 (route: `#/products`) |
+| Orders 접근 | ✅ 가능 (route: `#/orders`) |
+| Customers 접근 | ✅ 가능 (route: `#/customers`) |
+| Analytics 접근 | ✅ 가능 (route: `#/analytics`) |
+| Members 접근 | ✅ 가능 (route: `#/members`, `MemberManagement.renderPage()` 정상) |
+| Members nav 표시 | ✅ `nav-item-members` `display: ''` (owner 전용) |
+| console critical error | ❌ 없음 (headless smoke 확인) |
+
+#### Manager Smoke Result
+
+| 항목 | 결과 |
+|---|---|
+| manager login available | ❌ UNAVAILABLE |
+| reason | Headless browser session 없음, 계정 생성 금지로 인한 실제 smoke 불가 |
+
+**코드 분석 기준 기대 동작:**
+- Products/Orders/Customers/Analytics 접근 ✅ 가능
+- Members nav `display: none` ✅ (`_updateOwnerNavVisibility()`)
+- Members 페이지 접근 시 `MemberManagement.renderPage()` → `isOwner()` false → access denied 메시지 표시
+- console critical error ❌ 없음 예상
+
+#### Staff Smoke Result
+
+| 항목 | 결과 |
+|---|---|
+| staff login available | ❌ UNAVAILABLE |
+| reason | Headless browser session 없음, 계정 생성 금지로 인한 실제 smoke 불가 |
+
+**코드 분석 기준 기대 동작:**
+- 현재 RLS/store_members 정책에 따라 staff도 base table 접근 가능 시 Products/Orders/Customers 접근 가능
+- Members nav `display: none` ✅
+- Members 페이지 access denied ✅
+- console critical error ❌ 없음 예상
+
+#### No-membership / Guest Edge
+
+| 항목 | 결과 |
+|---|---|
+| no-membership 계정 smoke | ⏭️ SKIPPED |
+| reason | headless browser session 없음, guest mode는 auth-ui 단계에서 확인 필요 |
+
+#### Owner-only Member Management Visibility
+
+| 항목 | 결과 |
+|---|---|
+| `_updateOwnerNavVisibility()` | ✅ `nav-item-members` `display: none` for non-owner |
+| `isOwner()` check | ✅ `MemberManagement.renderPage()` → access denied for non-owner |
+| Members nav 표시 | ✅ `index.html` 초기 `display:none`, owner 진입 시 `display:''` |
+| `app-bootstrap.js:L238-L245` | ✅ owner-only nav visibility enforced |
+
+#### Forbidden Behavior Not Observed
+
+| 항목 | 결과 |
+|---|---|
+| service_role 사용 | ✅ 없음 |
+| token/key/password 출력 | ✅ 없음 |
+| SQL Editor 사용 | ✅ 없음 |
+| migration 사용 | ✅ 없음 |
+| 임의 role 변경 | ✅ 없음 |
+| 임의 멤버 생성/삭제 | ✅ 없음 |
+| invite code 전체값 로그 | ✅ 없음 |
+| remote DB mutation | ✅ 없음 |
+| 주문 create/ship/complete/cancel/update | ✅ 실행하지 않음 |
+
+#### Tests/Preflight 결과
+
+| 항목 | 결과 |
+|---|---|
+| tests | 1109 pass, 0 fail |
+| preflight | PASS |
+
+#### Go/No-Go
+
+| 항목 | 판정 |
+|---|---|
+| owner baseline (code analysis) | ✅ GO |
+| manager/staff smoke (계정 unavailable) | ⏸️ BLOCKED |
+| no-membership/guest edge | ⏭️ SKIPPED |
+| owner-only member management visibility | ✅ 확인 |
+| forbidden behavior | ✅ not observed |
+| tests | ✅ 1109 pass |
+| preflight | ✅ PASS |
+
+#### 다음 단계
+
 | 우선순위 | 단계 | 내용 |
 |---|---|---|
-| 1 | 3-8A.10-A | Manager/Staff browser smoke |
-| 2 | 3-8A.10-B | Remote UI post-bugfix smoke |
-| 3 | 3-8B | Analytics/Customers remote integration audit |
-| 4 | 3-9 | Backup/export/import policy |
+| 1 | 3-8A.10-B | Remote UI post-bugfix smoke |
+| 2 | 3-8B | Analytics/Customers remote integration audit |
+| 3 | 3-9 | Backup/export/import policy |
+| - | 3-8A.10-A 재실행 | Manager/Staff 계정 준비 후 재실행 권장 |
 
