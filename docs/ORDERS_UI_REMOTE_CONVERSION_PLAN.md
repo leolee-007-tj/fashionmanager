@@ -209,14 +209,14 @@ remote mode에서는 다음 작업이 절대 금지된다:
 | 3-8A.9-E.6 | remote complete | browser owner, completeOrder (1회) |
 | 3-8A.9-F.1 | local mode regression | ORDERS_SUPABASE_ENABLED=false, 모든 기능 확인 | ✅ 완료 |
 
-## Rollback Plan
+### Rollback Strategy
 
 - orders.js 원본은 git으로 보존
 - remote mode 분기 실패 시 local mode로 fallback
 - remote mode는 ORDERS_SUPABASE_ENABLED flag로 on/off
 - js/config.js에서 ORDERS_SUPABASE_ENABLED=false로 설정하면 local mode로 복귀
 
-## Go/No-Go
+## Go/No-Go (Plan Audit)
 
 | 항목 | 판정 |
 |---|---|
@@ -228,3 +228,38 @@ remote mode에서는 다음 작업이 절대 금지된다:
 | implementation split | ✅ 6단계 |
 | local mode 보존 | ✅ 분기 설계 |
 | rollback 가능 | ✅ flag 기반 |
+
+---
+
+## 3-8A.10: Cleanup and Go/No-Go ✅ 완료 (2026-07-27)
+
+### Orders UI Remote Conversion 1차 완료
+
+| 단계 | 내용 | 상태 |
+|---|---|---|
+| 3-8A.9-A | read-only remote list rendering | ✅ |
+| 3-8A.9-B | remote create submit | ✅ |
+| 3-8A.9-C | remote cancel/edit pending | ✅ |
+| 3-8A.9-D | remote ship/complete | ✅ |
+| 3-8A.9-E | browser owner remote smoke | ✅ |
+| 3-8A.9-E.1 | submit/ship route bugfix | ✅ |
+| 3-8A.9-F | local mode regression smoke | ✅ |
+
+### Remaining Stages
+
+| 우선순위 | 단계 | 내용 |
+|---|---|---|
+| 1 | 3-8A.10-A | Manager/Staff browser smoke (optional) |
+| 2 | 3-8A.10-B | Remote UI post-bugfix smoke (recommended) |
+| 3 | 3-8B | Analytics/Customers remote integration audit |
+| 4 | 3-9 | Backup/export/import policy |
+
+### 결론
+
+| 항목 | 판정 |
+|---|---|
+| Internal LESOUL owner operation test | ✅ GO |
+| 제한된 내부 사용자/관리자 검증 | ✅ GO |
+| 외부 공개 서비스/상용 SaaS/결제 포함 | ❌ NO-GO |
+| GitHub sensitive-data Support ticket 완료 전 공개 홍보/배포 | ❌ NO-GO |
+| 데이터 백업/복구 정책 없는 실사용 확대 | ❌ NO-GO |

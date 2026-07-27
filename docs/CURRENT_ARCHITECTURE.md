@@ -9129,3 +9129,120 @@ remote mode OFF 상태에서 기존 localStorage 기반 Orders 기능이 깨지�
 - Orders UI remote conversion 1차 완료
 - 다음 milestone: 3-8A.10 Cleanup and Go/No-Go
 
+---
+
+### 3-8A.10: Cleanup and Go/No-Go (2026-07-27)
+
+#### 목적
+
+Orders UI remote conversion 1차 완료 상태를 정리하고 Go/No-Go를 확정한다.
+
+#### Cleanup 결과
+
+| 항목 | 결과 |
+|---|---|
+| `_local_smoke.mjs` 삭제 | ✅ 완료 |
+| `test-results/` 삭제 | ✅ 완료 |
+| tracked working tree | ✅ clean |
+| `js/config.js` | ✅ ignored 상태 유지 |
+
+#### Orders UI Remote Conversion 완료 요약
+
+| 단계 | 내용 | 상태 |
+|---|---|---|
+| 3-8A.9-A | Orders UI read-only remote list rendering | ✅ |
+| 3-8A.9-B | Orders UI create remote submit | ✅ |
+| 3-8A.9-C | Orders UI cancel/edit remote | ✅ |
+| 3-8A.9-D | Orders UI ship/complete remote | ✅ |
+| 3-8A.9-E | Orders UI browser owner remote smoke | ✅ |
+| 3-8A.9-E.1 | submit/ship route bugfix | ✅ |
+| 3-8A.9-F | Local mode regression smoke | ✅ |
+
+#### Local Mode Regression 완료 요약
+
+- `Orders.isRemoteOrdersMode()` === `false` 확인
+- create → PENDING ✅
+- edit pending → 가격 수정 ✅
+- cancel → CANCELLED + reserved_stock 복구 ✅
+- ship → SHIPPED + current_stock 감소 + inventory_logs 생성 ✅
+- complete → COMPLETED + Customers.recalculateAll ✅
+- forbidden remote behavior not observed ✅
+
+#### Remote Mode Browser Smoke 완료 요약
+
+- remote list rendering ✅
+- remote create (1회) ✅
+- remote edit pending (1회) ✅
+- remote cancel (1회) ✅
+- remote ship (1회) ✅
+- remote complete (1회) ✅
+
+#### Internal Operation GO
+
+| 항목 | 판정 |
+|---|---|
+| LESOUL owner 내부 운영 테스트 | ✅ GO |
+| 제한된 내부 사용자/관리자 검증 | ✅ GO |
+| 상품/주문/직원초대관리 기능의 내부 검증 | ✅ GO |
+| Supabase remote orders 1차 UI flow 내부 검증 | ✅ GO |
+
+#### Conditional GO (권장)
+
+| 항목 | 판정 |
+|---|---|
+| manager/staff 별도 계정 smoke | 🔜 권장 |
+| owner browser smoke 재실행 | 🔜 권장 |
+| remote UI smoke 재확인 (bugfix 후) | 🔜 권장 |
+| product/customer/order analytics 연동 검증 | 🔜 권장 |
+
+#### Public/Commercial NO-GO
+
+| 항목 | 판정 |
+|---|---|
+| 외부 공개 서비스 | ❌ NO-GO |
+| 유료 결제/구독 공개 | ❌ NO-GO |
+| 불특정 다중 사용자 SaaS 운영 | ❌ NO-GO |
+| GitHub sensitive-data Support ticket 완료 전 공개 홍보/배포 | ❌ NO-GO |
+| 결제 자동화/Alipay/Stripe production | ❌ NO-GO |
+| 데이터 백업/복구 정책 없는 실사용 확대 | ❌ NO-GO |
+
+#### Remaining Risks
+
+| 위험 | 상태 |
+|---|---|
+| GitHub Support ticket #4550770 server-side cache/object cleanup pending | ⚠️ |
+| old sensitive commit/blob may still resolve until GitHub cleanup confirmation | ⚠️ |
+| GitHub Pages/public 홍보는 아직 보류 | ⚠️ |
+| manager/staff separate-account browser smoke pending | ⚠️ |
+| no-membership/guest edge browser smoke pending | ⚠️ |
+| remote UI create 시도 지연으로 2건 생성된 이력 있음 | ⚠️ |
+| bugfix 후 full remote UI smoke 재실행은 별도 권장 | ⚠️ |
+| billing/subscription placeholder only, production billing NO-GO | ⚠️ |
+| backup/export/import policy pending | ⚠️ |
+| audit log/admin monitoring UX pending | ⚠️ |
+| analytics/customer aggregate remote full UI verification pending | ⚠️ |
+| error UX/loading/duplicate-submit guard 강화 필요 | ⚠️ |
+
+#### Support Ticket Caution
+
+- GitHub Support ticket #4550770 server-side cache/object cleanup **pending**
+- GitHub Support의 완료 확인 전까지 old sensitive commit/blob이 resolver로 접근 가능
+- GitHub Pages/public 홍보는 Support ticket 완료 확인 후 재검토
+- 본 문서에서는 Support ticket 완료/종료를 선언하지 않음
+
+#### Tests/Preflight 결과
+
+| 항목 | 결과 |
+|---|---|
+| tests | 1109 pass, 0 fail |
+| preflight | PASS |
+
+#### 다음 단계 (후보)
+
+| 우선순위 | 단계 | 내용 |
+|---|---|---|
+| 1 | 3-8A.10-A | Manager/Staff browser smoke |
+| 2 | 3-8A.10-B | Remote UI post-bugfix smoke |
+| 3 | 3-8B | Analytics/Customers remote integration audit |
+| 4 | 3-9 | Backup/export/import policy |
+

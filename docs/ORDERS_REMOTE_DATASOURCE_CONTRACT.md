@@ -1,8 +1,8 @@
 # Orders Remote DataSource Contract
 
-> 문서 버전: 1.6 (3-8A.9-F)
+> 문서 버전: 1.7 (3-8A.10)
 > 작성일: 2026-07-27
-> 상태: **LOCAL MODE REGRESSION SMOKE COMPLETE** — local mode 모든 기능 정상 확인
+> 상태: **CLEANUP AND GO/NO-GO COMPLETE** — Orders UI remote conversion 1차 완료, internal operation GO, public/commercial NO-GO
 
 ---
 
@@ -1608,4 +1608,56 @@ Orders UI의 출고와 완료 경로를 remote mode에서 SupabaseOrdersDataSour
 | remote mode UI smoke는 이미 완료 (3-8A.9-E) | ✅ |
 | local mode regression smoke 완료 | ✅ |
 | Orders UI remote conversion 1차 완료 | ✅ |
-| 다음 milestone: 3-8A.10 Cleanup and Go/No-Go | 🔜 |
+| 다음 milestone: 3-8A.10 Cleanup and Go/No-Go | ✅ 완료 |
+
+---
+
+## AG. 3-8A.10 Cleanup and Go-No-Go (2026-07-27)
+
+### Orders Remote DataSource Status
+
+- **Status**: Complete for first-pass UI integration
+- **Local mode preserved**: ✅ (Orders.isRemoteOrdersMode() === false)
+- **Remote datasource methods connected**:
+
+| 메서드 | 연결 상태 |
+|---|---|
+| `listOrders` | ✅ |
+| `createOrder` | ✅ |
+| `updatePendingOrder` | ✅ |
+| `cancelOrder` | ✅ |
+| `shipOrder` | ✅ |
+| `completeOrder` | ✅ |
+
+### Internal GO / Public NO-GO
+
+| 항목 | 판정 |
+|---|---|
+| Internal LESOUL owner operation test | ✅ GO |
+| 제한된 내부 사용자/관리자 검증 | ✅ GO |
+| 외부 공개 서비스/상용 SaaS/결제 포함 | ❌ NO-GO |
+| GitHub sensitive-data Support ticket 완료 전 공개 홍보/배포 | ❌ NO-GO |
+
+### Remaining Contract Risks
+
+| 위험 | 상태 |
+|---|---|
+| GitHub Support ticket #4550770 server-side cleanup pending | ⚠️ |
+| manager/staff separate-account browser smoke pending | ⚠️ |
+| remote UI post-bugfix smoke 재실행 권장 | ⚠️ |
+| analytics/customer aggregate remote UI verification pending | ⚠️ |
+| backup/export/import policy pending | ⚠️ |
+| error UX/loading/duplicate-submit guard 강화 필요 | ⚠️ |
+
+### No Schema/RPC Changes in This Step
+
+- This step is docs-only cleanup
+- No migration, no RPC, no SQL, no remote DB mutation
+- No code changes to js/app.js, js/orders.js, js/db.js, js/i18n.js, js/member-management.js
+
+### Tests/Preflight
+
+| 항목 | 결과 |
+|---|---|
+| tests | 1109 pass, 0 fail |
+| preflight | PASS |
