@@ -17,23 +17,46 @@ const Products = {
      * async boundary에 맞춰 DB.getProductsAsync()를 우선 사용하고,
      * 구버전 DB(또는 helper 미지원 환경)에서는 기존 sync DB.getProducts()로 fallback한다.
      * 렌더링 결과는 기존과 동일하다.
+     *
+     * BLOCKER-FIX-2: remote mode에서 autoClassifyAll()이 localStorage(DB.getProducts())를
+     * 읽어 remote 데이터를 덮어쓰지 않도록 remote mode에서는 autoClassifyAll()을 건너뛴다.
+     *
      * @returns {Promise<void>}
      */
     async load() {
+        const isRemote = this.isRemoteProductsMode();
         if (typeof DB.getProductsAsync === 'function') {
             this.state.products = await DB.getProductsAsync();
         } else {
             this.state.products = DB.getProducts();
         }
-        this.autoClassifyAll();
+        if (!isRemote) {
+            this.autoClassifyAll();
+        }
         this.applyFilters();
         this.state.loaded = true;
+    },
+
+    /**
+     * BLOCKER-FIX-2: Remote mode 감지 helper.
+     * DB.getProductsDataSource().name이 'SupabaseProductsDataSource'이면 true.
+     * @returns {boolean}
+     */
+    isRemoteProductsMode() {
+        try {
+            const ds = DB.getProductsDataSource();
+            return ds && ds.name === 'SupabaseProductsDataSource';
+        } catch (e) {
+            return false;
+        }
     },
 
     // 모든 상품에 대해 분류키워드 자동 적용
     // - DB에 저장된 분류값이 있으면 그대로 사용
     // - 없으면 original_title로 실시간 분류하여 DB에 저장
+    // BLOCKER-FIX-2: remote mode에서는 localStorage(DB.getProducts()) 읽기/쓰기를 절대 수행하지 않는다.
     autoClassifyAll() {
+        if (this.isRemoteProductsMode()) return;
         const allProducts = DB.getProducts();
         let updated = false;
         allProducts.forEach(p => {
@@ -218,9 +241,13 @@ const Products = {
                 const colorClass = p.color ? 'classification-badge color' : 'classification-badge unclassified';
                 const sizeClass = p.size ? 'classification-badge size' : 'classification-badge unclassified';
                 const tooltipInfo = classified._source === 'computed' ? ` (${t('common', 'auto_classified')})` : '';
+                // BLOCKER-FIX-2: actionKey를 안전하게 string 변환하여 JSON.stringify로 onclick 인자 전달
+                const actionKey = String(p.id ?? p.legacy_id ?? p.remote_id ?? '');
+                const actionArg = JSON.stringify(actionKey);
+                const hasValidId = !!(p.id || p.legacy_id);
                 html += `
                     <tr>
-                        <td><input type="checkbox" class="row-checkbox" data-id="${p.id}" data-target="products" ${this.state.selected.has(Number(p.id)) ? 'checked' : ''}></td>
+                        <td><input type="checkbox" class="row-checkbox" data-id="${p.id}" data-target="products" ${this.state.selected.has(Number(p.id || p.legacy_id)) ? 'checked' : ''}></td>
                         <td>${p.image ? `<img src="${p.image}" class="product-thumb">` : '-'}</td>
                         <td><strong>${p.brand || '-'}</strong></td>
                         <td>${p.original_title || '-'}</td>
@@ -231,13 +258,13 @@ const Products = {
                         <td class="font-bold">${(p.china_base_price || 0).toLocaleString()} ${t('common', 'currency')}</td>
                         <td class="${stockStatus}">${available} / ${p.current_stock || 0}</td>
                         <td>
-                            <button class="btn btn-sm btn-info" onclick="Products.reclassify(${p.id})" title="${t('common', 'reclassify')}">
+                            <button class="btn btn-sm btn-info" onclick="Products.reclassify(${actionArg})" title="${t('common', 'reclassify')}">
                                 <i class="fas fa-magic"></i>
                             </button>
-                            <button type="button" class="btn btn-sm btn-secondary" onclick="Products.editProduct(${p.id})" title="${t('products', 'edit')}">
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="Products.editProduct(${actionArg})" title="${t('products', 'edit')}">
                                 <i class="fas fa-edit"></i>
                             </button>
-                            <button class="btn btn-sm btn-danger" onclick="Products.delete(${p.id})">
+                            <button class="btn btn-sm btn-danger" onclick="Products.delete(${actionArg})" ${hasValidId ? '' : 'disabled title="삭제 불가: legacy_id 없음"'}>
                                 <i class="fas fa-trash"></i>
                             </button>
                         </td>
@@ -335,21 +362,44 @@ const Products = {
             return;
         }
         if (!confirm(this.state.selected.size + t('common', 'confirm_reclassify_items'))) return;
+        const isRemote = this.isRemoteProductsMode();
         const selectedIds = Array.from(this.state.selected);
         let successCount = 0;
         let failCount = 0;
         for (const id of selectedIds) {
-            const product = DB.getProducts().find(p => p.id === parseInt(id));
+            // BLOCKER-FIX-2: remote mode에서는 this.state.products에서 찾기
+            let product;
+            if (isRemote) {
+                product = this.state.products.find(p =>
+                    Number(p.id) === Number(id) || Number(p.legacy_id) === Number(id)
+                );
+            } else {
+                product = DB.getProducts().find(p => p.id === parseInt(id));
+            }
             if (!product || !product.original_title) continue;
             try {
                 const result = ClassificationService.classify(product.original_title);
-                await DB.updateProductAsync(id, {
+                const updatePayload = {
                     category: result.category || '',
                     color: result.color || '',
                     size: result.size || '',
                     material: result.material || '',
                     updated_at: new Date().toISOString()
-                });
+                };
+                if (isRemote) {
+                    const legacyId = product.legacy_id || product.id;
+                    if (legacyId && Number.isFinite(Number(legacyId)) && Number(legacyId) > 0) {
+                        updatePayload.legacy_id = Number(legacyId);
+                        await DB.updateProductAsync(Number(legacyId), updatePayload);
+                    } else {
+                        failCount++;
+                        continue;
+                    }
+                } else {
+                    await DB.updateProductAsync(id, updatePayload);
+                }
+                // this.state.products도 업데이트
+                Object.assign(product, updatePayload);
                 successCount++;
             } catch (e) {
                 failCount++;
@@ -407,33 +457,112 @@ const Products = {
             return;
         }
         if (!confirm(this.state.selected.size + t('common', 'confirm_delete_items'))) return;
+        const isRemote = this.isRemoteProductsMode();
         const selectedIds = Array.from(this.state.selected);
         let successCount = 0;
         let failCount = 0;
+        const failReasons = [];
         for (const id of selectedIds) {
-            try {
-                await DB.deleteProductAsync(id);
-                successCount++;
-            } catch (e) {
-                failCount++;
+            // BLOCKER-FIX-2: remote mode에서 legacy_id 검증
+            if (isRemote) {
+                const target = this.state.products.find(p =>
+                    Number(p.id) === Number(id) || Number(p.legacy_id) === Number(id)
+                );
+                if (target) {
+                    const legacyId = target.legacy_id || target.id;
+                    if (!legacyId || !Number.isFinite(Number(legacyId)) || Number(legacyId) <= 0) {
+                        failCount++;
+                        failReasons.push('legacy_id missing');
+                        continue;
+                    }
+                    try {
+                        await DB.deleteProductAsync(legacyId);
+                        successCount++;
+                    } catch (e) {
+                        failCount++;
+                        failReasons.push(e.message || 'delete failed');
+                    }
+                } else {
+                    failCount++;
+                    failReasons.push('product not found');
+                }
+            } else {
+                try {
+                    await DB.deleteProductAsync(id);
+                    successCount++;
+                } catch (e) {
+                    failCount++;
+                    failReasons.push(e.message || 'delete failed');
+                }
             }
         }
         this.state.selected.clear();
         let msg = successCount + t('common', 'delete') + '!';
         if (failCount > 0) msg += ' (' + failCount + t('common', 'failed') + ')';
         App.flash(msg, failCount > 0 ? 'warning' : 'success');
+        if (failCount > 0) {
+            console.warn('Products.batchDelete failures:', failReasons);
+        }
+        // BLOCKER-FIX-2: 삭제 후 reload
+        this.state.loaded = false;
+        await this.load();
         App.render();
     },
 
     async delete(id) {
         if (!confirm(t('common', 'confirm_delete') + '?')) return;
-        if (typeof DB.deleteProductAsync === 'function') {
-            await DB.deleteProductAsync(id);
+        // BLOCKER-FIX-2: remote mode에서 legacy_id 검증
+        const isRemote = this.isRemoteProductsMode();
+        if (isRemote && typeof DB.deleteProductAsync === 'function') {
+            // this.state.products에서 대상 product 찾기 (id/legacy_id/remote_id)
+            const target = this.state.products.find(p =>
+                String(p.id) === String(id) ||
+                String(p.legacy_id) === String(id) ||
+                String(p.remote_id) === String(id)
+            );
+            if (target) {
+                const legacyId = target.legacy_id || target.id;
+                if (!legacyId || !Number.isFinite(Number(legacyId)) || Number(legacyId) <= 0) {
+                    App.flash('이 상품은 legacy_id가 없어 현재 UI 삭제가 불가능합니다. 별도 cleanup/RPC가 필요합니다.', 'error');
+                    console.warn('Products.delete: cannot delete product without valid legacy_id', { id, hasRemoteId: !!target.remote_id });
+                    return;
+                }
+                try {
+                    await DB.deleteProductAsync(legacyId);
+                } catch (e) {
+                    App.flash('상품 삭제에 실패했습니다: ' + (e.message || 'unknown error'), 'error');
+                    return;
+                }
+            } else {
+                // id로 product를 찾을 수 없으면 legacy_id로 간주하고 시도
+                const numericId = Number(id);
+                if (!Number.isFinite(numericId) || numericId <= 0) {
+                    App.flash('상품을 찾을 수 없거나 유효하지 않은 식별값입니다.', 'error');
+                    return;
+                }
+                try {
+                    await DB.deleteProductAsync(numericId);
+                } catch (e) {
+                    App.flash('상품 삭제에 실패했습니다: ' + (e.message || 'unknown error'), 'error');
+                    return;
+                }
+            }
+        } else if (typeof DB.deleteProductAsync === 'function') {
+            try {
+                await DB.deleteProductAsync(id);
+            } catch (e) {
+                App.flash('상품 삭제에 실패했습니다: ' + (e.message || 'unknown error'), 'error');
+                return;
+            }
         } else {
             DB.deleteProduct(id);
         }
+        // BLOCKER-FIX-2: 삭제 후 reload
+        this.state.loaded = false;
+        this.state.selected.clear();
+        await this.load();
         App.flash(t('common', 'delete') + '!', 'success');
-        App.render();
+        App.renderPage();
     },
 
     editProduct(id) {
@@ -645,24 +774,68 @@ const Products = {
     tempImage: null,
 
     // 단일 상품 재분류 (목록에서 magic 버튼 클릭 시)
-    reclassify(id) {
-        const products = DB.getProducts();
-        const idx = products.findIndex(p => p.id === Number(id));
-        if (idx < 0) return;
-        const p = products[idx];
-        if (!p.original_title) {
+    // BLOCKER-FIX-2: remote mode에서는 DB.getProducts()(localStorage)를 사용하지 않고
+    // this.state.products에서 찾아서 updateProductAsync로 업데이트한다.
+    async reclassify(id) {
+        const isRemote = this.isRemoteProductsMode();
+        const target = this.state.products.find(p =>
+            String(p.id) === String(id) ||
+            String(p.legacy_id) === String(id) ||
+            String(p.remote_id) === String(id)
+        );
+        if (!target) {
+            // local mode fallback
+            if (!isRemote) {
+                const products = DB.getProducts();
+                const idx = products.findIndex(p => p.id === Number(id));
+                if (idx < 0) return;
+                const p = products[idx];
+                if (!p.original_title) {
+                    App.flash(t('common', 'no_product_name'), 'warning');
+                    return;
+                }
+                const result = ClassificationService.classify(p.original_title);
+                if (result.category) p.category = result.category;
+                if (result.color) p.color = result.color;
+                if (result.size) p.size = result.size;
+                if (result.material) p.material = result.material;
+                p.updated_at = new Date().toISOString();
+                DB.setProducts(products);
+                this.state.products = products;
+                App.flash(t('common', 'reclassify') + '!', 'success');
+                App.render();
+            }
+            return;
+        }
+        if (!target.original_title) {
             App.flash(t('common', 'no_product_name'), 'warning');
             return;
         }
-        const result = ClassificationService.classify(p.original_title);
-        if (result.category) p.category = result.category;
-        if (result.color) p.color = result.color;
-        if (result.size) p.size = result.size;
-        if (result.material) p.material = result.material;
-        p.updated_at = new Date().toISOString();
-        DB.setProducts(products);
-        this.state.products = products;
-        App.flash(t('common', 'reclassify') + '!', 'success');
+        const result = ClassificationService.classify(target.original_title);
+        const updates = {};
+        if (result.category) updates.category = result.category;
+        if (result.color) updates.color = result.color;
+        if (result.size) updates.size = result.size;
+        if (result.material) updates.material = result.material;
+        if (Object.keys(updates).length === 0) {
+            App.flash('분류 결과가 없습니다.', 'info');
+            return;
+        }
+        updates.updated_at = new Date().toISOString();
+        try {
+            if (typeof DB.updateProductAsync === 'function') {
+                const legacyId = target.legacy_id || target.id;
+                if (legacyId && Number.isFinite(Number(legacyId)) && Number(legacyId) > 0) {
+                    updates.legacy_id = Number(legacyId);
+                    await DB.updateProductAsync(Number(legacyId), updates);
+                }
+            }
+            // this.state.products도 업데이트
+            Object.assign(target, updates);
+            App.flash(t('common', 'reclassify') + '!', 'success');
+        } catch (e) {
+            App.flash('재분류 저장에 실패했습니다.', 'error');
+        }
         App.render();
     },
 

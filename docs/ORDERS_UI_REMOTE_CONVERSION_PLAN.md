@@ -250,7 +250,7 @@ remote mode에서는 다음 작업이 절대 금지된다:
 | 우선순위 | 단계 | 내용 | 상태 |
 |---|---|---|---|
 | 1 | 3-8A.10-A | Manager/Staff browser smoke | ✅ 완료 (계정 unavailable) |
-| 2 | 3-8A.10-B | Remote UI post-bugfix smoke (recommended) | 🔜 Product Excel import visibility blocker fix 선행 완료 후 재개 |
+| 2 | 3-8A.10-B | Remote UI post-bugfix smoke (recommended) | 🔜 Product Excel import visibility + Product list blank/delete blocker fix 선행 완료 후 재개 |
 | 3 | 3-8B | Analytics/Customers remote integration audit | 🔜 예정 |
 | 4 | 3-9 | Backup/export/import policy | 🔜 예정 |
 

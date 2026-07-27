@@ -625,9 +625,14 @@ const DB = {
              */
             deleteProduct(id) {
                 _validateWriteContext('deleteProduct');
+                // BLOCKER-FIX-2: legacy_id 검증 추가
+                const numericId = Number(id);
+                if (!id || !Number.isFinite(numericId) || numericId <= 0) {
+                    throw new Error('SupabaseProductsDataSource.deleteProduct requires valid legacy_id (positive integer)');
+                }
                 const payload = {
                     p_store_id: context.storeId,
-                    p_legacy_id: Number(id)
+                    p_legacy_id: numericId
                 };
 
                 return client.rpc('soft_delete_product', payload)

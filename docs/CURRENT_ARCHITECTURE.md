@@ -9424,3 +9424,83 @@ manager/staff 권한 계정으로 실제 브라우저 접근 smoke를 수행한�
 - 3-8A.10-B (Remote UI post-bugfix smoke)는 이 blocker fix가 선행되어야 함
 - Blocker fix 완료 후 3-8A.10-B 재개
 
+---
+
+### BLOCKER-FIX-2: Product list blank and delete failure (2026-07-27)
+
+#### 실제 원인
+
+1. **Products.load remote/local 혼합**:
+   - `Products.load()`가 `DB.getProductsAsync()`로 remote 데이터를 정상 로드한 후, `autoClassifyAll()`이 `DB.getProducts()`(localStorage)를 읽어 remote 데이터를 덮어쓰는 문제
+   - remote mode에서 `autoClassifyAll()`이 `DB.getProducts()` → 빈 배열 → `DB.setProducts(allProducts)`로 localStorage에 빈 배열 저장
+   - `this.state.products = allProducts`로 remote 데이터가 localStorage 빈 데이터로 대체됨
+   - 결과: remote mode에서 상품 목록이 비어 보임
+
+2. **Products.delete legacy_id 누락**:
+   - `Products.delete(id)`가 `p.id`를 그대로 `DB.deleteProductAsync(id)`에 전달
+   - Supabase에서 생성된 상품(legacy_id=null)의 경우 `soft_delete_product RPC`가 `p_legacy_id`에 0 또는 NaN을 전달하여 실패
+   - 실패 후에도 `App.flash('delete!', 'success')`로 성공 메시지 표시 (false positive)
+   - 삭제 후 `App.render()`만 호출하고 `state.loaded`를 리셋하지 않아 stale cache 유지
+
+3. **renderList action button id unsafe**:
+   - `onclick="Products.delete(${p.id})"`에서 `p.id`가 null/uuid/string이면 JS syntax error 발생
+   - checkbox `selected.has(Number(p.id))`도 null/undefined에서 `Number(null)` = 0으로 잘못 동작
+
+#### 수정
+
+1. **Products.load remote/local 분리**:
+   - `isRemoteProductsMode()` helper 추가: `DB.getProductsDataSource().name === 'SupabaseProductsDataSource'`
+   - `load()`: remote mode에서 `autoClassifyAll()` 건너뜀
+   - `autoClassifyAll()`: remote mode에서 early return (localStorage 접근 차단)
+
+2. **Products.delete remote-safe**:
+   - `this.state.products`에서 `id/legacy_id/remote_id`로 대상 product 검색
+   - `legacy_id`가 없거나 positive integer가 아니면 명확한 error 메시지 표시
+   - 삭제 성공 후 `state.loaded=false` + `await this.load()` + `App.renderPage()`
+   - 실패 시 `success` flash 금지
+
+3. **renderList action id safety**:
+   - `actionKey = String(p.id ?? p.legacy_id ?? p.remote_id ?? '')` + `JSON.stringify(actionKey)`
+   - checkbox `Number(p.id || p.legacy_id)` 사용
+   - `legacy_id` 없는 상품은 삭제 버튼 `disabled` 처리
+
+4. **batchDelete remote-safe**:
+   - remote mode에서 legacy_id 검증 후 삭제
+   - success/fail count 분리 + failReasons 기록
+   - 삭제 후 `state.loaded=false` + `await this.load()`
+
+5. **batchReclassify/reclassify remote-safe**:
+   - `this.state.products`에서 찾아 `updateProductAsync`로 업데이트
+   - remote mode에서 `DB.getProducts()`/`DB.setProducts()` 사용 금지
+
+6. **SupabaseProductsDataSource.deleteProduct 검증 강화**:
+   - `id`가 없거나 NaN/0/negative면 `throw` 명확한 에러
+
+#### 변경 파일
+
+| 파일 | 변경 내용 |
+|---|---|
+| `js/products.js` | `isRemoteProductsMode()`, `load()` remote 분기, `delete()`/`batchDelete()`/`reclassify()`/`batchReclassify()` remote-safe, `renderList` action id safety |
+| `js/db.js` | `SupabaseProductsDataSource.deleteProduct()` legacy_id 검증 |
+| `tests/product-list-delete-contract.test.mjs` | 신규: 20개 contract tests, 0 fail |
+
+#### 테스트 결과
+
+- 38 tests (18 visibility + 20 delete), 0 fail ✅
+- preflight: PASS ✅
+
+#### 안전 확인
+
+- `service_role` 사용 금지 ✅
+- `token/key/password` 출력 금지 ✅
+- `UUID` 전체값 문서 기록 금지 ✅
+- `migration` 생성/수정 금지 ✅
+- `db push/reset/pull` 금지 ✅
+- Remote DB mutation 자동 실행: **NO** ✅
+- 예시제품 외 다른 상품 삭제: **NO** ✅
+
+#### 3-8A.10-B 영향
+
+- 3-8A.10-B (Remote UI post-bugfix smoke) 재개 조건: Products list 정상 표시 확인 필요
+- Blocker fix-2 완료 후 3-8A.10-B 재개
+
