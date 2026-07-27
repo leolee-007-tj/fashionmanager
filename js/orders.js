@@ -1032,21 +1032,65 @@ const Orders = {
     },
 
     complete(id) {
+        if (this.isRemoteOrdersMode()) {
+            this._completeRemote(id);
+            return;
+        }
+        // local mode — 기존 sync 흐름
         DB.updateOrder(id, { status: 'COMPLETED' });
         Customers.recalculateAll();
         App.flash(t('orders', 'completed') + '!', 'success');
         App.render();
     },
 
+    /**
+     * 3-8A.9-D: remote mode 주문 완료.
+     * SupabaseOrdersDataSource.completeOrder(remoteId)만 사용한다.
+     * DB.updateOrder, DB.setOrders 금지.
+     * SHIPPED 상태 주문만 완료 허용.
+     */
+    async _completeRemote(id) {
+        const order = (this.state.orders || []).find(o => o.id === id || o.remote_id === id);
+        if (!order) {
+            App.flash(t('orders', 'order_not_found'), 'error');
+            return;
+        }
+        if (order.status !== 'SHIPPED') {
+            App.flash('SHIPPED 상태의 주문만 완료할 수 있습니다.', 'error');
+            return;
+        }
+        const remoteId = order.remote_id;
+        if (!remoteId || typeof remoteId !== 'string') {
+            App.flash(t('orders', 'order_not_found'), 'error');
+            return;
+        }
+        try {
+            const ds = DB.getOrdersDataSource();
+            await ds.completeOrder(remoteId);
+            App.flash(t('orders', 'completed') + '!', 'success');
+            await this._refreshOrdersAfterRemoteMutation();
+        } catch (e) {
+            console.error('Remote complete order failed:', e);
+            App.flash(t('common', 'fail') + ': ' + (e.message || ''), 'error');
+        }
+    },
+
     renderShip(id) {
-        const order = DB.getOrders().find(o => o.id === parseInt(id));
+        let order, product, customer;
+        if (this.isRemoteOrdersMode()) {
+            order = (this.state.orders || []).find(o => o.id === parseInt(id) || o.remote_id === id);
+            product = (this.state._remoteProducts || []).find(p => p.id === order?.product_id || p.remote_id === order?.product_uuid);
+            customer = (this.state._remoteCustomers || []).find(c => c.id === order?.customer_id || c.remote_id === order?.customer_uuid);
+        } else {
+            order = DB.getOrders().find(o => o.id === parseInt(id));
+            product = DB.getProducts().find(p => p.id === order?.product_id);
+            customer = DB.getCustomers().find(c => c.id === order?.customer_id);
+        }
         if (!order) {
             App.flash(t('orders', 'order_not_found'), 'error');
             location.hash = '#/orders';
             return '';
         }
-        const product = DB.getProducts().find(p => p.id === order.product_id);
-        const customer = DB.getCustomers().find(c => c.id === order.customer_id);
         const profit = PriceCalculator.calculateProfit(order.selling_price, product?.actual_converted_cost || 0, order.quantity);
         return `
             <div class="card">
@@ -1080,6 +1124,11 @@ const Orders = {
     },
 
     submitShip(id) {
+        if (this.isRemoteOrdersMode()) {
+            this._submitShipRemote(id);
+            return false;
+        }
+        // local mode — 기존 sync 흐름
         const fd = new FormData(document.getElementById('shipForm'));
         const order = DB.getOrders().find(o => o.id === id);
         const product = DB.getProducts().find(p => p.id === order.product_id);
@@ -1108,6 +1157,46 @@ const Orders = {
         Customers.recalculateAll();
         App.flash(t('orders', 'shipped') + '!', 'success');
         location.hash = '#/orders';
+        return false;
+    },
+
+    /**
+     * 3-8A.9-D: remote mode 주문 출고.
+     * SupabaseOrdersDataSource.shipOrder(remoteId, payload)만 사용한다.
+     * DB.updateProduct, DB.updateOrder, DB.addInventoryLog, DB.setOrders 금지.
+     * product stock / inventory_logs side effect는 ship_order RPC에 맡긴다.
+     * PENDING 상태 주문만 출고 허용.
+     */
+    async _submitShipRemote(id) {
+        const order = (this.state.orders || []).find(o => o.id === id || o.remote_id === id);
+        if (!order) {
+            App.flash(t('orders', 'order_not_found'), 'error');
+            return false;
+        }
+        if (order.status !== 'PENDING') {
+            App.flash('PENDING 상태의 주문만 출고할 수 있습니다.', 'error');
+            return false;
+        }
+        const remoteId = order.remote_id;
+        if (!remoteId || typeof remoteId !== 'string') {
+            App.flash(t('orders', 'order_not_found'), 'error');
+            return false;
+        }
+        const fd = new FormData(document.getElementById('shipForm'));
+        try {
+            const ds = DB.getOrdersDataSource();
+            await ds.shipOrder(remoteId, {
+                ship_date: new Date().toISOString().slice(0, 10),
+                shipping_company: fd.get('shipping_company') || undefined,
+                tracking_number: fd.get('tracking_number') || undefined
+            });
+            App.flash(t('orders', 'shipped') + '!', 'success');
+            location.hash = '#/orders';
+            await this._refreshOrdersAfterRemoteMutation();
+        } catch (e) {
+            console.error('Remote ship order failed:', e);
+            App.flash(t('common', 'fail') + ': ' + (e.message || ''), 'error');
+        }
         return false;
     }
 };

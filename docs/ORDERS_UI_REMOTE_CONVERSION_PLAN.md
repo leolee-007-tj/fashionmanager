@@ -145,11 +145,18 @@ remote mode에서는 다음 작업이 절대 금지된다:
 - contract tests: 30 tests, 1012 total, 0 fail ✅
 - preflight: PASS ✅
 
-### 3-8A.9-D: Orders UI ship/complete remote actions
+### 3-8A.9-D: Orders UI ship/complete remote actions ✅ 완료 (2026-07-27)
 
-- submitShip() → ds.shipOrder()
-- complete() → ds.completeOrder()
-- renderShip() display async 전환
+- submitShip(id): remote mode에서 `ds.shipOrder(remoteId, payload)` 사용 ✅
+- complete(id): remote mode에서 `ds.completeOrder(remoteId)` 사용 ✅
+- renderShip(id): remote mode에서 cached `_remoteProducts` / `_remoteCustomers` 사용 ✅
+- `_submitShipRemote(id)`, `_completeRemote(id)` helper 추가 ✅
+- PENDING 상태만 shipOrder 허용 ✅
+- SHIPPED 상태만 completeOrder 허용 ✅
+- DB.updateProduct / DB.updateOrder / DB.addInventoryLog / DB.setOrders 금지 ✅
+- local mode 기존 submitShip/complete 흐름 보존 ✅
+- contract tests: 28 tests, 1090 total, 0 fail ✅
+- preflight: PASS ✅
 
 ### 3-8A.9-E: Orders UI browser owner smoke
 

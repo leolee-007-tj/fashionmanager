@@ -243,12 +243,12 @@ describe('3-8A.9-C Orders UI Remote Cancel/Edit Contract', function () {
         assert.doesNotMatch(remoteSection, /completeOrder/, '_submitEditRemote should not contain completeOrder');
     });
 
-    it('CE29: complete(id) has no remote branch', function () {
+    it('CE29: complete(id) now has remote branch (3-8A.9-D)', function () {
         const completeStart = ORDERS_JS.indexOf('complete(id)');
         const renderShipStart = ORDERS_JS.indexOf('renderShip(');
         const completeSection = renderShipStart > completeStart ? ORDERS_JS.slice(completeStart, renderShipStart) : ORDERS_JS.slice(completeStart);
-        assert.doesNotMatch(completeSection, /isRemoteOrdersMode/, 'complete should not have remote branch');
-        assert.doesNotMatch(completeSection, /getOrdersDataSource/, 'complete should not use getOrdersDataSource');
+        assert.match(completeSection, /isRemoteOrdersMode/, 'complete should have remote branch');
+        assert.match(completeSection, /_completeRemote/, 'complete should delegate to _completeRemote');
     });
 
     // ============================================================

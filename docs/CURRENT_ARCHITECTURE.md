@@ -8672,6 +8672,75 @@ ship/complete UI 연결은 다음 단계로 미룬다.
 
 - **3-8A.9-D**: Orders UI ship/complete remote actions
 
+### 3-8A.9-D: Orders UI ship/complete remote actions (2026-07-27)
+
+#### 목적
+
+Orders UI의 출고와 완료 경로를 remote mode에서 SupabaseOrdersDataSource로 연결한다.
+submitShip → ds.shipOrder(), complete(id) → ds.completeOrder().
+
+#### 구현 범위
+
+- `submitShip(id)`: remote mode에서 `ds.shipOrder(remoteId, payload)` 사용
+- `complete(id)`: remote mode에서 `ds.completeOrder(remoteId)` 사용
+- `renderShip(id)`: remote mode에서 cached `_remoteProducts` / `_remoteCustomers` 사용
+- `_submitShipRemote(id)`, `_completeRemote(id)` helper 추가
+- PENDING 상태만 shipOrder 허용
+- SHIPPED 상태만 completeOrder 허용
+
+#### local mode 유지
+
+- submitShip/complete local mode sync 흐름 보존
+- DB.updateProduct, DB.updateOrder, DB.addInventoryLog local mode 사용 유지
+
+#### remote ship path
+
+- `ds.shipOrder(remoteId, { ship_date, shipping_company, tracking_number })` 1회 호출
+- ship_order RPC에서 product stock 차감, reserved_stock 복구, inventory_logs SHIP 생성, profit 계산 처리
+- DB.updateProduct, DB.updateOrder, DB.addInventoryLog, DB.setOrders 금지
+
+#### remote complete path
+
+- `ds.completeOrder(remoteId)` 1회 호출
+- complete_order RPC에서 customer aggregate recalc 처리
+- DB.updateOrder, DB.setOrders 금지
+
+#### 상태 전이 규칙
+
+- PENDING → SHIPPED: shipOrder만 허용
+- SHIPPED → COMPLETED: completeOrder만 허용
+- PENDING → COMPLETED 직접 전환 금지
+- CANCELLED/COMPLETED → 재변경 금지
+
+#### forbidden mutation - 미구현 범위
+
+- createOrder UI 로직: 변경 없음 (3-8A.9-B 그대로)
+- cancelOrder UI 로직: 변경 없음 (3-8A.9-C 그대로)
+- updatePendingOrder UI 로직: 변경 없음 (3-8A.9-C 그대로)
+- analytics/customers remote recalc: 별도 단계 (3-8A.8)
+
+#### Go/No-Go
+
+| 항목 | 판정 |
+|---|---|
+| remote ship 연결 | ✅ GO |
+| remote complete 연결 | ✅ GO |
+| local mode sync 흐름 유지 | ✅ GO |
+| create/cancel/edit pending 변경 없음 | ✅ GO |
+| forbidden mutation 미구현 | ✅ GO |
+| PENDING-only ship | ✅ GO |
+| SHIPPED-only complete | ✅ GO |
+| tests 통과 | ✅ GO (1090 tests, 0 fail) |
+| preflight PASS | ✅ GO |
+| js/config.js staged | ❌ 없음 |
+| data_export.json | ❌ 없음 |
+| migration 변경 | ❌ 없음 |
+| supabase db push | ❌ 없음 |
+
+#### 다음 단계
+
+- **3-8A.9-E**: Orders UI browser owner smoke
+
 ### 3-6E.6.3: Member Management 4-language i18n cleanup (2026-07-27)
 
 #### 목적

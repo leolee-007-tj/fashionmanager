@@ -1439,9 +1439,66 @@ Orders UI의 PENDING 주문 취소/수정 경로를 remote mode에서 SupabaseOr
 | createOrder UI submit | ✅ 완료 (3-8A.9-B) |
 | updatePendingOrder UI submit | ✅ 완료 (3-8A.9-C) |
 | cancelOrder UI submit | ✅ 완료 (3-8A.9-C) |
-| shipOrder UI submit | ❌ 미구현 (3-8A.9-D) |
-| completeOrder UI submit | ❌ 미구현 (3-8A.9-D) |
+| shipOrder UI submit | ✅ 완료 (3-8A.9-D) |
+| completeOrder UI submit | ✅ 완료 (3-8A.9-D) |
 
 ### Next Step
 
-- **3-8A.9-D**: Orders UI ship/complete remote actions
+- **3-8A.9-E**: Orders UI browser owner smoke
+
+---
+
+## AB. 3-8A.9-D UI Ship/Complete Integration Status (2026-07-27)
+
+### 목적
+
+Orders UI의 출고와 완료 경로를 remote mode에서 SupabaseOrdersDataSource로 연결.
+
+### UI Ship/Complete Integration Status
+
+| 항목 | 상태 |
+|---|---|
+| `submitShip(id)` remote branch | ✅ 구현됨 |
+| `complete(id)` remote branch | ✅ 구현됨 |
+| `renderShip(id)` remote compatibility | ✅ 구현됨 |
+| `_submitShipRemote(id)` helper | ✅ 구현됨 |
+| `_completeRemote(id)` helper | ✅ 구현됨 |
+| remote mode: DB.updateProduct 금지 | ✅ |
+| remote mode: DB.updateOrder 금지 | ✅ |
+| remote mode: DB.addInventoryLog 금지 | ✅ |
+| remote mode: DB.setOrders 금지 | ✅ |
+| PENDING only shipOrder | ✅ |
+| SHIPPED only completeOrder | ✅ |
+| local mode: 기존 submitShip/complete sync API 유지 | ✅ |
+| error handling (try/catch + App.flash) | ✅ |
+| contract tests | ✅ 28 tests, 1090 total, 0 fail |
+
+### ShipOrder UI Path Status
+
+| 항목 | 상태 |
+|---|---|
+| ship_order RPC 호출 | ✅ shipOrder(remoteId, payload) |
+| product stock 차감 | ✅ RPC 내/부 처리 |
+| inventory_logs SHIP 생성 | ✅ RPC 낸부 처리 |
+| 성공 flash | ✅ |
+| 실패 flash | ✅ |
+
+### CompleteOrder UI Path Status
+
+| 항목 | 상태 |
+|---|---|
+| complete_order RPC 호출 | ✅ completeOrder(remoteId) |
+| customer aggregate recalc | ✅ RPC 낸부 처리 |
+| 성공 flash | ✅ |
+| 실패 flash | ✅ |
+
+### Remaining Browser Smoke
+
+| 항목 | 상태 |
+|---|---|
+| browser owner smoke (create → ship → complete) | ❌ 미수행 (3-8A.9-E) |
+| local mode regression smoke | ❌ 미수행 (3-8A.9-F) |
+
+### Next Step
+
+- **3-8A.9-E**: Orders UI browser owner smoke

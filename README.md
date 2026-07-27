@@ -3,7 +3,7 @@
 부티크 매장 관리를 위한 정적 웹 애플리케이션입니다. 상품·주문·고객·매출 분석을 한 곳에서 관리할 수 있습니다.
 
 > **현재 브랜치**: `feature/supabase-cloud-migration` — Supabase 원격 데이터베이스로 마이그레이션 진행 중  
-> **최종 작업 단계**: 3-8A.9-A (Orders UI read-only remote list rendering 완료)
+> **최종 작업 단계**: 3-8A.9-D (Orders UI ship/complete remote actions 완료)
 
 ---
 
@@ -84,12 +84,12 @@
 | **3-8A.9-A** | **Orders UI read-only remote list rendering** | ✅ |
 | **3-8A.9-B** | **Orders UI create remote submit** | ✅ |
 | **3-8A.9-C** | **Orders UI cancel/edit remote** | ✅ |
+| **3-8A.9-D** | **Orders UI ship/complete remote** | ✅ |
 
 ### 진행 중 / 예정
 
 | 단계 | 내용 | 상태 |
 |---|---|---|
-| 3-8A.9-D | Orders UI ship/complete remote | 🔜 예정 |
 | 3-8A.9-E | Orders UI browser smoke | 🔜 예정 |
 | 3-8A.9-F | Local mode regression smoke | 🔜 예정 |
 
@@ -116,7 +116,7 @@ python3 -m http.server 8080
 ### 테스트 실행
 
 ```bash
-# 전체 테스트 (930+ tests)
+# 전체 테스트 (1090+ tests)
 node --test tests/*.test.mjs
 
 # Preflight 검사
