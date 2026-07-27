@@ -167,9 +167,21 @@ remote mode에서는 다음 작업이 절대 금지된다:
 - PENDING → SHIPPED → COMPLETED 상태 전이 검증 ✅
 - forbidden behavior not observed ✅
 - 발견된 이슈:
-  - app.js bindPageForms() 버그: `Orders.submitForm()` 미존재 (별도 수정 필요)
-  - renderShip remote form 렌더링 이슈 (별도 조사 필요)
+  - app.js bindPageForms() 버그: `Orders.submitForm()` 미존재 → ✅ 3-8A.9-E.1 수정 완료
+  - renderShip remote form 렌더링 이슈 → ✅ 3-8A.9-E.1 수정 완료
 - tests: 1090 pass, 0 fail ✅
+- preflight: PASS ✅
+
+### 3-8A.9-E.1: Orders UI submit and ship route bugfix ✅ 완료 (2026-07-27)
+
+- app.js bindPageForms: `Orders.submitForm()` → `await Orders.submitAdd()` ✅
+- orders route: `#/orders/ship/{id}` + `#/orders/{id}/ship` 모두 지원 ✅
+- renderShip: async + remote data preload ✅
+- ship form onsubmit: `JSON.stringify(String(id))` UUID safety ✅
+- _submitShipRemote id lookup: `String(o.id) === String(id)` ✅
+- create/cancel/edit/complete 로직 변경 없음 ✅
+- no remote DB mutation ✅
+- tests: 1109 pass, 0 fail ✅
 - preflight: PASS ✅
 
 ### 3-8A.9-F: Legacy local mode regression smoke

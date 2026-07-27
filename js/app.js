@@ -142,7 +142,8 @@ const App = {
                     break;
                 case 'orders':
                     if (args[0] === 'add') content = Orders.renderAdd();
-                    else if (args[1] === 'ship') content = Orders.renderShip(args[0]);
+                    else if (args[0] === 'ship' && args[1]) content = await Orders.renderShip(args[1]);
+                    else if (args[1] === 'ship') content = await Orders.renderShip(args[0]);
                     else content = await Orders.renderList();
                     break;
                 case 'customers':
@@ -223,9 +224,10 @@ const App = {
         }
         const orderForm = document.getElementById('orderForm');
         if (orderForm) {
-            orderForm.onsubmit = (e) => {
+            orderForm.onsubmit = async (e) => {
                 e.preventDefault();
-                Orders.submitForm();
+                await Orders.submitAdd();
+                return false;
             };
         }
     },

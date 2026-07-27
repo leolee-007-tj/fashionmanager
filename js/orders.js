@@ -1075,12 +1075,16 @@ const Orders = {
         }
     },
 
-    renderShip(id) {
+    async renderShip(id) {
         let order, product, customer;
         if (this.isRemoteOrdersMode()) {
-            order = (this.state.orders || []).find(o => o.id === parseInt(id) || o.remote_id === id);
-            product = (this.state._remoteProducts || []).find(p => p.id === order?.product_id || p.remote_id === order?.product_uuid);
-            customer = (this.state._remoteCustomers || []).find(c => c.id === order?.customer_id || c.remote_id === order?.customer_uuid);
+            // remote mode: load data first if not already loaded
+            if (!this.state.orders || this.state.orders.length === 0) {
+                await this._loadRemoteDataForRender();
+            }
+            order = (this.state.orders || []).find(o => String(o.id) === String(id) || o.remote_id === String(id) || String(o.legacy_id) === String(id));
+            product = (this.state._remoteProducts || []).find(p => String(p.id) === String(order?.product_id) || p.remote_id === order?.product_uuid);
+            customer = (this.state._remoteCustomers || []).find(c => String(c.id) === String(order?.customer_id) || c.remote_id === order?.customer_uuid);
         } else {
             order = DB.getOrders().find(o => o.id === parseInt(id));
             product = DB.getProducts().find(p => p.id === order?.product_id);
@@ -1092,6 +1096,7 @@ const Orders = {
             return '';
         }
         const profit = PriceCalculator.calculateProfit(order.selling_price, product?.actual_converted_cost || 0, order.quantity);
+        const submitId = JSON.stringify(String(id));
         return `
             <div class="card">
                 <h2><i class="fas fa-truck"></i> ${t('orders', 'ship')}</h2>
@@ -1103,7 +1108,7 @@ const Orders = {
                     <p><strong>${t('orders', 'selling_price')}:</strong> ${order.selling_price?.toLocaleString()} ${t('common', 'currency')}</p>
                     <p class="text-success"><strong>${t('common', 'expected_profit')}:</strong> ${profit.profit?.toLocaleString()} ${t('common', 'currency')} (${profit.profit_margin}%)</p>
                 </div>
-                <form id="shipForm" onsubmit="return Orders.submitShip(${id})">
+                <form id="shipForm" onsubmit="return Orders.submitShip(${submitId})">
                     <div class="form-row">
                         <div class="form-group">
                             <label>${t('orders', 'shipping_company')}</label>
@@ -1168,7 +1173,7 @@ const Orders = {
      * PENDING 상태 주문만 출고 허용.
      */
     async _submitShipRemote(id) {
-        const order = (this.state.orders || []).find(o => o.id === id || o.remote_id === id);
+        const order = (this.state.orders || []).find(o => String(o.id) === String(id) || o.remote_id === String(id) || String(o.legacy_id) === String(id));
         if (!order) {
             App.flash(t('orders', 'order_not_found'), 'error');
             return false;

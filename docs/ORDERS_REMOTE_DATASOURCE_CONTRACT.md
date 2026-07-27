@@ -1532,9 +1532,33 @@ Orders UI의 출고와 완료 경로를 remote mode에서 SupabaseOrdersDataSour
 
 ### Remaining Risk
 
-1. **app.js bindPageForms() 버그**: `Orders.submitForm()` 호출하지만 메서드 미존재. UI 폼 제출 버튼이 작동하지 않음. 별도 수정 단계 필요.
-2. **renderShip remote form 렌더링 이슈**: ship form 페이지가 렌더링되지 않음. 별도 조사 필요.
+1. ~~app.js bindPageForms() 버그~~ → ✅ 3-8A.9-E.1에서 수정 완료
+2. ~~renderShip remote form 렌더링 이슈~~ → ✅ 3-8A.9-E.1에서 수정 완료 (async renderShip + remote data preload)
 3. **local mode regression smoke 미수행**: 3-8A.9-F에서 진행 예정.
+
+### Next Step
+
+- **3-8A.9-F**: Legacy local mode regression smoke
+
+---
+
+## AD. 3-8A.9-E.1 UI Bugfix Status (2026-07-27)
+
+### UI Bugfix Status
+
+| 항목 | 상태 |
+|---|---|
+| app.js bindPageForms: `Orders.submitForm()` 제거 | ✅ `await Orders.submitAdd()`로 교체 |
+| orders route: `#/orders/ship/{id}` 지원 | ✅ 추가됨 |
+| renderShip: async + remote data preload | ✅ `_loadRemoteDataForRender()` 선 호출 |
+| renderShip id lookup: String 비교 | ✅ `String(o.id) === String(id)` |
+| ship form onsubmit: UUID/string safety | ✅ `JSON.stringify(String(id))` 사용 |
+| _submitShipRemote id lookup: String 비교 | ✅ `String(o.id) === String(id)` |
+| create/cancel/edit/complete 로직 변경 없음 | ✅ |
+| datasource/RPC 변경 없음 | ✅ |
+| no remote DB mutation | ✅ (bugfix only) |
+| tests | 1109 pass, 0 fail |
+| preflight | PASS |
 
 ### Next Step
 

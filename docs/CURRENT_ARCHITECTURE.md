@@ -8860,8 +8860,68 @@ submitShip → ds.shipOrder(), complete(id) → ds.completeOrder().
 #### 다음 단계
 
 - **3-8A.9-F**: Legacy local mode regression smoke
-- app.js bindPageForms() 버그 수정 (별도 단계)
-- renderShip remote form 렌더링 이슈 조사 (별도 단계)
+
+### 3-8A.9-E.1: Orders UI submit and ship route bugfix (2026-07-27)
+
+#### 목적
+
+Orders UI remote smoke에서 발견된 submit/ship route 문제를 수정한다.
+
+#### 수정 범위
+
+| 항목 | 변경 전 | 변경 후 |
+|---|---|---|
+| app.js bindPageForms | `Orders.submitForm()` 호출 (메서드 없음) | `await Orders.submitAdd()` 호출 |
+| orders route | `#/orders/{id}/ship`만 지원 | `#/orders/ship/{id}` + `#/orders/{id}/ship` 모두 지원 |
+| renderShip | sync, remote orders 미리 로드 안 함 | async, remote mode에서 `_loadRemoteDataForRender()` 호출 후 렌더링 |
+| ship form onsubmit | raw `${id}` 주입 (UUID 깨짐 가능) | `JSON.stringify(String(id))` 사용 |
+| _submitShipRemote id lookup | `o.id === id` (string/number mismatch) | `String(o.id) === String(id)` 사용 |
+
+#### app.js bindPageForms bugfix
+
+- `Orders.submitForm()` → `await Orders.submitAdd()` + `return false`
+- async handler로 변경하여 Promise 반환
+
+#### ship route support
+
+- `#/orders/ship/{id}`: `args[0] === 'ship' && args[1]` → `await Orders.renderShip(args[1])`
+- `#/orders/{id}/ship`: `args[1] === 'ship'` → `await Orders.renderShip(args[0])`
+
+#### renderShip remote compatibility
+
+- `async renderShip(id)`로 변경
+- remote mode: `this.state.orders`가 비어 있으면 `_loadRemoteDataForRender()` 호출
+- remote mode lookup: `String(o.id) === String(id) || o.remote_id === String(id) || String(o.legacy_id) === String(id)`
+- local mode는 기존 `parseInt(id)` 기반 lookup 유지
+
+#### ship form onsubmit UUID/string safety
+
+- `const submitId = JSON.stringify(String(id))`
+- `onsubmit="return Orders.submitShip(${submitId})"` → JSON.stringify로 안전한 문자열 인코딩
+
+#### no remote DB mutation
+
+- 이번 단계는 bugfix만 수행, 실제 remote DB mutation 없음
+
+#### 수정하지 않은 로직
+
+- _submitAddRemote createOrder payload policy
+- _cancelRemote cancelOrder policy
+- _submitEditRemote updatePendingOrder policy
+- _completeRemote completeOrder policy
+- SupabaseOrdersDataSource adapter methods
+- DB getOrdersDataSource/getOrdersAsync methods
+
+#### tests/preflight 결과
+
+| 항목 | 결과 |
+|---|---|
+| tests | 1109 pass, 0 fail |
+| preflight | PASS |
+
+#### 다음 단계
+
+- **3-8A.9-F**: Legacy local mode regression smoke
 
 ### 3-6E.6.3: Member Management 4-language i18n cleanup (2026-07-27)
 
