@@ -2,8 +2,8 @@ const Orders = {
     state: {
         orders: [],
         filtered: [],
-        year: 2026,
-        month: new Date().getMonth() + 1,
+        year: 0,
+        month: 0,
         sortBy: 'order_date',
         sortOrder: 'desc',
         selected: new Set(),
@@ -111,11 +111,14 @@ const Orders = {
 
     applyFilters() {
         let list = [...this.state.orders];
-        if (this.state.year && this.state.month) {
+        if (this.state.year) {
             list = list.filter(o => {
                 const ym = this._extractYearMonth(o.order_date || o.created_at);
                 if (!ym) return false;
-                return ym.year === this.state.year && ym.month === this.state.month;
+                if (this.state.month > 0) {
+                    return ym.year === this.state.year && ym.month === this.state.month;
+                }
+                return ym.year === this.state.year;
             });
         }
         list.sort((a, b) => {
@@ -304,15 +307,23 @@ const Orders = {
     },
 
     yearOptions() {
-        let html = '';
-        for (let y = 2026; y <= 2030; y++) {
+        let html = '<option value="0">전체</option>';
+        // 데이터 기반 year 옵션
+        const dataYears = new Set();
+        this.state.orders.forEach(o => {
+            const ym = this._extractYearMonth(o.order_date || o.created_at);
+            if (ym && ym.year) dataYears.add(ym.year);
+        });
+        const years = new Set([2025, 2026, 2027, ...dataYears]);
+        const sorted = [...years].filter(y => y >= 2025).sort((a, b) => b - a);
+        sorted.forEach(y => {
             html += `<option value="${y}" ${this.state.year === y ? 'selected' : ''}>${y}${t('common', 'year_suffix')}</option>`;
-        }
+        });
         return html;
     },
 
     monthOptions() {
-        let html = '';
+        let html = `<option value="0" ${this.state.month === 0 ? 'selected' : ''}>${t('common', 'all') || '전체'}</option>`;
         for (let m = 1; m <= 12; m++) {
             html += `<option value="${m}" ${this.state.month === m ? 'selected' : ''}>${m}${t('common', 'month_suffix')}</option>`;
         }
@@ -320,13 +331,15 @@ const Orders = {
     },
 
     setYear(val) {
-        this.state.year = parseInt(val);
-        App.render();
+        this.state.year = parseInt(val) || 0;
+        this.applyFilters();
+        App.renderPage();
     },
 
     setMonth(val) {
-        this.state.month = parseInt(val);
-        App.render();
+        this.state.month = parseInt(val) || 0;
+        this.applyFilters();
+        App.renderPage();
     },
 
     sort(field) {

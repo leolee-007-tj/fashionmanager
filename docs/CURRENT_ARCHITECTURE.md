@@ -9358,3 +9358,69 @@ manager/staff 권한 계정으로 실제 브라우저 접근 smoke를 수행한�
 | 3 | 3-9 | Backup/export/import policy |
 | - | 3-8A.10-A 재실행 | Manager/Staff 계정 준비 후 재실행 권장 |
 
+---
+
+### BLOCKER-FIX: Product Excel import visibility / skipped diagnostics / 2025 filter issue (2026-07-27)
+
+#### 원인
+
+1. **Filter hardcoded default year**: `products.js`와 `orders.js`의 `stockYear`/`year` 기본값이 2026으로 하드코딩되어 있어, 2025년 데이터가 필터에서 누락됨. `yearOptions`에도 2025가 포함되지 않음.
+2. **Local import vs remote list datasource mismatch**: `excel.js importProducts()`가 `DB.getProducts()` + `DB.setProducts()`를 직접 사용하여 localStorage에만 저장. remote mode(Supabase)에서 업로드한 상품이 SupabaseProductsDataSource 목록에 표시되지 않는 핵심 원인.
+3. **Skipped reason opacity**: skipped row가 숫자만 표시되고 원인을 알 수 없어 디버깅 불가.
+4. **Post-import cache miss**: 업로드 후 `Products.state.loaded`가 갱신되지 않아 목록이 바로 반영되지 않음.
+
+#### 수정
+
+1. **Products/Orders dynamic year filter**:
+   - `products.js`: `stockYear` 기본값 0(전체), `stockMonth` 기본값 0(전체)
+   - `yearOptions`: 2025~2030 + 데이터 기반 dynamic year 포함
+   - `monthOptions`: `value="0"` 전체 옵션 포함
+   - `applyFilters`: year/month 필터 분리 — month=0이어도 year 필터는 유지
+   - `orders.js`: 동일한 방식으로 `year`/`month` 필터 분리
+
+2. **Excel import remote/local 분기**:
+   - `excel.js`: `_isRemoteProductsMode()`로 remote mode 감지
+   - Local mode: 기존 `DB.getProducts()` + `DB.setProducts()` 유지
+   - Remote mode: `dataSource.createProduct()`를 행별로 호출
+   - `SupabaseProductsDataSource.setProducts()`는 disabled이므로 사용 금지
+   - `DB.setProducts`/`DB.setProductsAsync` 직접 호출 금지
+
+3. **Skipped diagnostics 강화**:
+   - `_normalizeProductImportRow()`: 각 row의 유효성 검사 및 skip reason 기록
+   - `skippedDetails` 배열: `MISSING_TITLE`, `MISSING_KOREA_COST`, `INVALID_KOREA_COST`, `REMOTE_CREATE_FAILED`, `DUPLICATE_PRODUCT_CODE`
+   - `window.__LAST_PRODUCT_IMPORT_SUMMARY`에 safe summary 저장
+   - `App.flash`에 요약 메시지 표시: "N건 등록 완료, M건 스킵. 콘솔에서 스킵 사유 확인."
+
+4. **Post-import cache reload**:
+   - 업로드 완료 후 `Products.state.loaded = false`
+   - `await Products.load()` 또는 `App.render()` 호출
+   - `#/products`로 이동하여 업로드한 데이터가 바로 목록에 표시
+
+#### 변경 파일
+
+| 파일 | 변경 내용 |
+|---|---|
+| `js/excel.js` | Remote/local 분기 import, skipped diagnostics, post-import reload |
+| `js/products.js` | Dynamic year/month filter, 기본값 0, year/month 분리 |
+| `js/orders.js` | Dynamic year/month filter, 기본값 0, year/month 분리 |
+| `tests/product-import-visibility-contract.test.mjs` | 신규: 18개 contract tests, 0 fail |
+
+#### 테스트 결과
+
+- 18 tests, 0 fail ✅
+- preflight: PASS ✅
+
+#### 안전 확인
+
+- `service_role` 사용 금지 ✅
+- `token/key/password` 출력 금지 ✅
+- `UUID` 전체값 문서 기록 금지 ✅
+- `migration` 생성/수정 금지 ✅
+- `db push/reset/pull` 금지 ✅
+- Remote DB mutation 자동 실행: **NO** ✅
+
+#### 3-8A.10-B 영향
+
+- 3-8A.10-B (Remote UI post-bugfix smoke)는 이 blocker fix가 선행되어야 함
+- Blocker fix 완료 후 3-8A.10-B 재개
+

@@ -1,5 +1,16 @@
 const ExcelManager = {
     render() {
+        const currentYear = new Date().getFullYear();
+        const currentMonth = new Date().getMonth() + 1;
+        let yearOpts = '';
+        for (let y = 2025; y <= currentYear + 2; y++) {
+            yearOpts += `<option value="${y}"${y === currentYear ? ' selected' : ''}>${y}년</option>`;
+        }
+        let monthOpts = '';
+        for (let m = 1; m <= 12; m++) {
+            monthOpts += `<option value="${m}"${m === currentMonth ? ' selected' : ''}>${m}월</option>`;
+        }
+
         return `
             <div class="card">
                 <h2><i class="fas fa-file-excel"></i> ${t('excel', 'title')}</h2>
@@ -41,9 +52,45 @@ const ExcelManager = {
                             <option value="keywords">${t('excel', 'import_keywords')}</option>
                         </select>
                     </div>
+                    <div class="row">
+                        <div class="form-group col-md-6">
+                            <label>입고년도</label>
+                            <select id="importYear" class="form-control">${yearOpts}</select>
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label>입고월</label>
+                            <select id="importMonth" class="form-control">${monthOpts}</select>
+                        </div>
+                    </div>
                     <button class="btn btn-primary" onclick="ExcelManager.importData()">
                         <i class="fas fa-upload"></i> ${t('excel', 'start_import')}
                     </button>
+                </div>
+
+                <!-- 초기화 -->
+                <div class="card mb-4" style="background: #fff3f3; border: 1px solid #e74c3c;">
+                    <h3><i class="fas fa-trash-alt"></i> 데이터 초기화</h3>
+                    <p class="text-muted mb-3">업로드한 데이터를 초기화합니다. 되돌릴 수 없으니 주의하세요.</p>
+                    <div class="mb-3">
+                        <button class="btn btn-danger" onclick="ExcelManager.resetAll()">
+                            <i class="fas fa-trash"></i> 전체 초기화
+                        </button>
+                    </div>
+                    <div class="row">
+                        <div class="form-group col-md-3">
+                            <label>년도</label>
+                            <select id="resetYear" class="form-control">${yearOpts}</select>
+                        </div>
+                        <div class="form-group col-md-3">
+                            <label>월</label>
+                            <select id="resetMonth" class="form-control">${monthOpts}</select>
+                        </div>
+                        <div class="form-group col-md-3 d-flex align-items-end">
+                            <button class="btn btn-warning" onclick="ExcelManager.resetByYearMonth()">
+                                <i class="fas fa-calendar-times"></i> 해당 년월 초기화
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- 안내 -->
@@ -70,6 +117,21 @@ const ExcelManager = {
         if (!ws['!cols']) ws['!cols'] = [];
         for (let i = 0; i < data[0].length; i++) {
             ws['!cols'][i] = { wch: 18 };
+        }
+        // 숫자 타입 강제: 문자열로 저장된 숫자값을 숫자 타입(n)으로 변환
+        const range = XLSX.utils.decode_range(ws['!ref']);
+        for (let r = range.s.r; r <= range.e.r; r++) {
+            for (let c = range.s.c; c <= range.e.c; c++) {
+                const addr = XLSX.utils.encode_cell({ r, c });
+                const cell = ws[addr];
+                if (cell && cell.t === 's') {
+                    const num = Number(cell.v);
+                    if (!isNaN(num) && String(num) === String(cell.v)) {
+                        cell.t = 'n';
+                        cell.v = num;
+                    }
+                }
+            }
         }
         XLSX.utils.book_append_sheet(wb, ws, sheetName);
         XLSX.writeFile(wb, fileName);
@@ -156,7 +218,7 @@ const ExcelManager = {
         }
         const file = fileInput.files[0];
         const reader = new FileReader();
-        reader.onload = function(e) {
+        reader.onload = async function(e) {
             try {
                 const data = new Uint8Array(e.target.result);
                 const wb = XLSX.read(data, { type: 'array' });
@@ -178,7 +240,7 @@ const ExcelManager = {
                 }).filter(row => Object.values(row).some(v => v !== '' && v !== null && v !== undefined));
 
                 if (mode === 'products') {
-                    ExcelManager.importProducts(rows);
+                    await ExcelManager.importProducts(rows);
                 } else if (mode === 'orders') {
                     ExcelManager.importOrders(rows);
                 } else if (mode === 'customers') {
@@ -193,80 +255,198 @@ const ExcelManager = {
         reader.readAsArrayBuffer(file);
     },
 
-    importProducts(data) {
+    _isRemoteProductsMode() {
+        try {
+            const ds = DB.getProductsDataSource();
+            return ds && ds.name === 'SupabaseProductsDataSource';
+        } catch (e) {
+            return false;
+        }
+    },
+
+    _normalizeProductImportRow(row, idx, nextProductId, selYear, selMonth) {
+        let koreaCost = row['한국매입원가(KRW)'] || row['한국매입원가'] || row['한국원가'] || row['원가'] || row['cost'] || row['매입가'] || row['korea_cost'] || 0;
+        if (typeof koreaCost === 'string') koreaCost = parseInt(String(koreaCost).replace(/,/g, '')) || 0;
+
+        const brand = row['브랜드'] || row['brand'] || '';
+        const title = row['상품명'] || row['original_title'] || row['title'] || row['product_name'] || '';
+
+        const skipReasons = [];
+        if (!koreaCost) skipReasons.push('MISSING_KOREA_COST');
+        if (!title) skipReasons.push('MISSING_TITLE');
+
+        if (skipReasons.length > 0) {
+            return { valid: false, reason: skipReasons.join('+'), rowIndex: idx, hasTitle: !!title, hasKoreaCost: !!koreaCost, parsedKoreaCost: koreaCost };
+        }
+
+        const priceResult = PriceCalculator.calculate(koreaCost);
+        const stockYear = selYear;
+        const stockMonth = selMonth;
+        const productCode = row['product_code'] || DB.generateProductCode(brand, stockYear, stockMonth);
+        const currentStock = parseInt(row['초기재고'] || row['현재재고'] || row['재고'] || row['수량'] || row['stock'] || row['quantity'] || 0) || 0;
+
+        let category = row['종류'] || row['카테고리'] || row['category'] || '';
+        let color = row['색상'] || row['컬러'] || row['color'] || '';
+        let size = row['사이즈'] || row['칫수'] || row['size'] || '';
+        let material = row['소재'] || row['재질'] || row['material'] || '';
+        if (!category || !color || !size) {
+            const autoClassified = ClassificationService.classify(title);
+            if (!category && autoClassified.category) category = autoClassified.category;
+            if (!color && autoClassified.color) color = autoClassified.color;
+            if (!size && autoClassified.size) size = autoClassified.size;
+            if (!material && autoClassified.material) material = autoClassified.material;
+        }
+
+        const product = {
+            id: nextProductId,
+            product_code: productCode,
+            original_title: title,
+            brand: brand,
+            category: category,
+            color: color,
+            size: size,
+            material: material,
+            korea_cost: koreaCost,
+            actual_converted_cost: priceResult.actual_converted_cost,
+            china_base_price: priceResult.china_base_price,
+            current_stock: currentStock,
+            reserved_stock: 0,
+            stock_year: stockYear,
+            stock_month: stockMonth,
+            image: null,
+            notes: row['메모'] || row['비고'] || row['notes'] || '',
+            title_language: ClassificationService.detectLanguage(title),
+            normalized_title: title,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+        };
+
+        return { valid: true, product };
+    },
+
+    async _importProductsLocal(normalizedRows) {
+        const products = DB.getProducts();
+        let added = 0;
+        let skipped = 0;
+        const skippedDetails = [];
+        let nextProductId = DB.getNextId('products');
+
+        normalizedRows.forEach((nr) => {
+            if (!nr.valid) {
+                skipped++;
+                skippedDetails.push(nr);
+                return;
+            }
+            const existing = products.some(p => p.brand === nr.product.brand && p.original_title === nr.product.original_title);
+            if (existing) {
+                skipped++;
+                skippedDetails.push({ ...nr, reason: 'DUPLICATE' });
+                return;
+            }
+            nr.product.id = nextProductId++;
+            products.push(nr.product);
+            added++;
+        });
+
+        DB.setProducts(products);
+        return { added, skipped, skippedDetails, failed: 0 };
+    },
+
+    async _importProductsRemote(normalizedRows) {
+        const dataSource = DB.getProductsDataSource();
+        let added = 0;
+        let skipped = 0;
+        let failed = 0;
+        const skippedDetails = [];
+        let nextProductId = DB.getNextId('products');
+
+        for (const nr of normalizedRows) {
+            if (!nr.valid) {
+                skipped++;
+                skippedDetails.push(nr);
+                continue;
+            }
+            nr.product.id = nextProductId++;
+            try {
+                const result = await dataSource.createProduct(nr.product);
+                if (result) {
+                    added++;
+                } else {
+                    failed++;
+                    skippedDetails.push({ ...nr, reason: 'REMOTE_CREATE_FAILED' });
+                }
+            } catch (e) {
+                failed++;
+                skippedDetails.push({ ...nr, reason: 'REMOTE_CREATE_ERROR', error: e.message });
+            }
+        }
+        return { added, skipped, failed, skippedDetails };
+    },
+
+    async importProducts(data) {
         if (data.length === 0) {
             App.flash('업로드할 데이터가 없습니다.', 'warning');
             return;
         }
         if (!confirm(data.length + ' ' + t('excel', 'confirm_import_count') + '?')) return;
 
-        const products = DB.getProducts();
-        let added = 0;
-        let skipped = 0;
+        const selYear = parseInt(document.getElementById('importYear')?.value) || new Date().getFullYear();
+        const selMonth = parseInt(document.getElementById('importMonth')?.value) || new Date().getMonth() + 1;
         let nextProductId = DB.getNextId('products');
 
-        data.forEach((row, idx) => {
-            // 한국매입원가(KRW) 찾기
-            let koreaCost = row['한국매입원가(KRW)'] || row['한국매입원가'] || row['한국원가'] || row['원가'] || row['cost'] || row['매입가'] || row['korea_cost'] || 0;
-            if (typeof koreaCost === 'string') koreaCost = parseInt(String(koreaCost).replace(/,/g, '')) || 0;
-            if (!koreaCost) { skipped++; return; }
-
-            const priceResult = PriceCalculator.calculate(koreaCost);
-            const brand = row['브랜드'] || row['brand'] || '';
-            const title = row['상품명'] || row['original_title'] || row['title'] || row['product_name'] || '';
-            if (!title) { skipped++; return; }
-
-            const stockYear = row['입고년도'] || row['년도'] || row['stock_year'] || new Date().getFullYear();
-            const stockMonth = row['입고월'] || row['월'] || row['stock_month'] || new Date().getMonth() + 1;
-            const productCode = row['product_code'] || DB.generateProductCode(brand, stockYear, stockMonth);
-            const currentStock = parseInt(row['초기재고'] || row['현재재고'] || row['재고'] || row['수량'] || row['stock'] || row['quantity'] || 0) || 0;
-
-            // 엑셀에 카테고리/색상/사이즈가 비어있으면 분류키워드로 자동 분류
-            let category = row['종류'] || row['카테고리'] || row['category'] || '';
-            let color = row['색상'] || row['컬러'] || row['color'] || '';
-            let size = row['사이즈'] || row['칫수'] || row['size'] || '';
-            let material = row['소재'] || row['재질'] || row['material'] || '';
-            if (!category || !color || !size) {
-                const autoClassified = ClassificationService.classify(title);
-                if (!category && autoClassified.category) category = autoClassified.category;
-                if (!color && autoClassified.color) color = autoClassified.color;
-                if (!size && autoClassified.size) size = autoClassified.size;
-                if (!material && autoClassified.material) material = autoClassified.material;
-            }
-
-            products.push({
-                id: nextProductId++,
-                product_code: productCode,
-                original_title: title,
-                brand: brand,
-                category: category,
-                color: color,
-                size: size,
-                material: material,
-                korea_cost: koreaCost,
-                actual_converted_cost: priceResult.actual_converted_cost,
-                china_base_price: priceResult.china_base_price,
-                current_stock: currentStock,
-                reserved_stock: 0,
-                stock_year: parseInt(stockYear) || new Date().getFullYear(),
-                stock_month: parseInt(stockMonth) || new Date().getMonth() + 1,
-                image: null,
-                notes: row['메모'] || row['비고'] || row['notes'] || '',
-                title_language: ClassificationService.detectLanguage(title),
-                normalized_title: title,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-            });
-            added++;
+        // 모든 행을 정규화
+        const normalizedRows = data.map((row, idx) => {
+            return this._normalizeProductImportRow(row, idx, nextProductId + idx, selYear, selMonth);
         });
-        DB.setProducts(products);
-        if (added === 0) {
+
+        // remote mode 감지
+        const isRemote = this._isRemoteProductsMode();
+
+        let result;
+        if (isRemote) {
+            result = await this._importProductsRemote(normalizedRows);
+        } else {
+            result = await this._importProductsLocal(normalizedRows);
+        }
+
+        // skipped diagnostics
+        if (result.skippedDetails.length > 0) {
+            window.__LAST_PRODUCT_IMPORT_SUMMARY = {
+                added: result.added,
+                skipped: result.skipped,
+                failed: result.failed || 0,
+                skippedDetails: result.skippedDetails.map(d => ({
+                    rowIndex: d.rowIndex,
+                    reason: d.reason,
+                    hasTitle: d.hasTitle,
+                    hasKoreaCost: d.hasKoreaCost
+                })),
+                mode: isRemote ? 'remote' : 'local'
+            };
+            console.warn('Product import skipped details:', window.__LAST_PRODUCT_IMPORT_SUMMARY);
+        }
+
+        // UI 메시지
+        if (result.added === 0 && result.skipped === 0 && (result.failed || 0) === 0) {
             App.flash('0건 등록 (한국매입원가(KRW) 컬럼 확인 필요)', 'warning');
         } else {
-            let msg = `${added}건 등록 완료!`;
-            if (skipped > 0) msg += ` (${skipped}건 스킵)`;
-            App.flash(msg, 'success');
+            let msg = `${result.added}건 등록 완료!`;
+            const extra = [];
+            if (result.skipped > 0) extra.push(`${result.skipped}건 스킵`);
+            if (result.failed > 0) extra.push(`${result.failed}건 실패`);
+            if (extra.length > 0) msg += ` (${extra.join(', ')})`;
+            if (result.skipped > 0 || result.failed > 0) msg += ' 콘솔에서 스킵 사유 확인.';
+            App.flash(msg, result.failed > 0 ? 'warning' : 'success');
         }
+
+        // 업로드 후 목록 cache 갱신
+        if (typeof Products !== 'undefined') {
+            Products.state.loaded = false;
+            Products.state.stockYear = 0;
+            Products.state.stockMonth = 0;
+            await Products.load();
+        }
+        App.render();
     },
 
     importOrders(data) {
@@ -412,6 +592,8 @@ const ExcelManager = {
         data.forEach(row => {
             const name = row['이름'] || row['name'] || row['고객명'] || row['customer_name'] || '';
             if (!name) return;
+            // 중복 검증: 같은 이름의 고객이 이미 존재하면 스킵
+            if (customers.some(c => c.name === name)) { return; }
             customers.push({
                 id: nextCustomerId++,
                 name: name,
@@ -447,6 +629,9 @@ const ExcelManager = {
             const standard = row['표준명'] || row['standard'] || row['키워드'] || row['keyword'] || '';
             if (!standard) return;
 
+            // 중복 검증: 같은 타입 + 같은 표준명이 이미 존재하면 스킵
+            if (keywords.some(k => k.type === type && k.standard === standard)) { return; }
+
             // 언어별 키워드 읽기 (여러 컬럼명 지원)
             const koStr = row['한국어키워드'] || row['한국어'] || row['ko'] || row['ko_keywords'] || '';
             const zhStr = row['중국어키워드'] || row['중국어'] || row['zh'] || row['zh_keywords'] || '';
@@ -479,5 +664,38 @@ const ExcelManager = {
         });
         DB.setKeywords(keywords);
         App.flash(`${added}건 등록 완료!`, 'success');
+    },
+
+    resetAll() {
+        if (!confirm('정말 모든 데이터를 초기화하시겠습니까?\n\n상품, 주문, 고객, 재고내역, 지출, 키워드가 모두 삭제됩니다.\n되돌릴 수 없습니다.')) return;
+        DB.clearAllData();
+        App.flash('전체 데이터가 초기화되었습니다.', 'success');
+        App.render();
+    },
+
+    resetByYearMonth() {
+        const year = parseInt(document.getElementById('resetYear')?.value);
+        const month = parseInt(document.getElementById('resetMonth')?.value);
+        if (!year || !month) {
+            App.flash('년도와 월을 선택해주세요.', 'warning');
+            return;
+        }
+        if (!confirm(`${year}년 ${month}월에 등록된 상품을 모두 삭제하시겠습니까?\n\n되돌릴 수 없습니다.`)) return;
+
+        const products = DB.getProducts();
+        const idsToDelete = new Set();
+        products.forEach(p => {
+            if (String(p.stock_year) === String(year) && String(p.stock_month) === String(month)) {
+                idsToDelete.add(p.id);
+            }
+        });
+        if (idsToDelete.size === 0) {
+            App.flash(`${year}년 ${month}월에 해당하는 상품이 없습니다.`, 'info');
+            return;
+        }
+        const filtered = products.filter(p => !idsToDelete.has(p.id));
+        DB.setProducts(filtered);
+        App.flash(`${year}년 ${month}월 상품 ${idsToDelete.size}건 삭제 완료!`, 'success');
+        App.render();
     }
 };

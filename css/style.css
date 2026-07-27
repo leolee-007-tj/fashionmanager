@@ -516,6 +516,18 @@ textarea.form-control {
     opacity: 0.12;
 }
 
+.stat-card-link {
+    text-decoration: none;
+    color: inherit;
+    display: block;
+}
+
+.stat-card-link:hover .stat-card {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+    cursor: pointer;
+}
+
 /* ============================================================
    3-7C: Dashboard Premium Cards Polish
    - quiet luxury admin tone

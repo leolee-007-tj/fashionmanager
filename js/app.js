@@ -266,36 +266,48 @@ const App = {
                 <h2><i class="fas fa-tachometer-alt"></i> <span data-i18n="dashboard.title">${t('dashboard', 'title')}</span></h2>
                 <p class="text-muted" data-i18n="dashboard.welcome">${t('dashboard', 'welcome')}</p>
                 <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-label" data-i18n="dashboard.monthly_sales">${t('dashboard', 'monthly_sales')}</div>
-                        <div class="stat-value">${totalSales.toLocaleString()} <span data-i18n="common.currency">${t('common', 'currency')}</span></div>
-                        <i class="fas fa-won-sign stat-icon"></i>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-label" data-i18n="dashboard.monthly_profit">${t('dashboard', 'monthly_profit')}</div>
-                        <div class="stat-value" style="color: #28a745;">${totalProfit.toLocaleString()} <span data-i18n="common.currency">${t('common', 'currency')}</span></div>
-                        <i class="fas fa-chart-line stat-icon"></i>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-label" data-i18n="dashboard.total_products">${t('dashboard', 'total_products')}</div>
-                        <div class="stat-value">${products.length}<span data-i18n="dashboard.items"> ${t('dashboard', 'items')}</span></div>
-                        <i class="fas fa-tshirt stat-icon"></i>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-label" data-i18n="dashboard.total_orders">${t('dashboard', 'total_orders')}</div>
-                        <div class="stat-value">${orders.length}<span data-i18n="dashboard.items"> ${t('dashboard', 'items')}</span></div>
-                        <i class="fas fa-shopping-cart stat-icon"></i>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-label" data-i18n="dashboard.total_customers">${t('dashboard', 'total_customers')}</div>
-                        <div class="stat-value">${customers.length}<span data-i18n="dashboard.items"> ${t('dashboard', 'items')}</span></div>
-                        <i class="fas fa-users stat-icon"></i>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-label" data-i18n="dashboard.total_products">${t('inventory', 'stock')}</div>
-                        <div class="stat-value">${totalStock.toLocaleString()}</div>
-                        <i class="fas fa-boxes stat-icon"></i>
-                    </div>
+                    <a href="#/orders" class="stat-card-link">
+                        <div class="stat-card">
+                            <div class="stat-label" data-i18n="dashboard.monthly_sales">${t('dashboard', 'monthly_sales')}</div>
+                            <div class="stat-value">${totalSales.toLocaleString()} <span data-i18n="common.currency">${t('common', 'currency')}</span></div>
+                            <i class="fas fa-won-sign stat-icon"></i>
+                        </div>
+                    </a>
+                    <a href="#/orders" class="stat-card-link">
+                        <div class="stat-card">
+                            <div class="stat-label" data-i18n="dashboard.monthly_profit">${t('dashboard', 'monthly_profit')}</div>
+                            <div class="stat-value" style="color: #28a745;">${totalProfit.toLocaleString()} <span data-i18n="common.currency">${t('common', 'currency')}</span></div>
+                            <i class="fas fa-chart-line stat-icon"></i>
+                        </div>
+                    </a>
+                    <a href="#/products" class="stat-card-link">
+                        <div class="stat-card">
+                            <div class="stat-label" data-i18n="dashboard.total_products">${t('dashboard', 'total_products')}</div>
+                            <div class="stat-value">${products.length}<span data-i18n="dashboard.items"> ${t('dashboard', 'items')}</span></div>
+                            <i class="fas fa-tshirt stat-icon"></i>
+                        </div>
+                    </a>
+                    <a href="#/orders" class="stat-card-link">
+                        <div class="stat-card">
+                            <div class="stat-label" data-i18n="dashboard.total_orders">${t('dashboard', 'total_orders')}</div>
+                            <div class="stat-value">${orders.length}<span data-i18n="dashboard.items"> ${t('dashboard', 'items')}</span></div>
+                            <i class="fas fa-shopping-cart stat-icon"></i>
+                        </div>
+                    </a>
+                    <a href="#/customers" class="stat-card-link">
+                        <div class="stat-card">
+                            <div class="stat-label" data-i18n="dashboard.total_customers">${t('dashboard', 'total_customers')}</div>
+                            <div class="stat-value">${customers.length}<span data-i18n="dashboard.items"> ${t('dashboard', 'items')}</span></div>
+                            <i class="fas fa-users stat-icon"></i>
+                        </div>
+                    </a>
+                    <a href="#/products" class="stat-card-link">
+                        <div class="stat-card">
+                            <div class="stat-label" data-i18n="inventory.stock">${t('inventory', 'stock')}</div>
+                            <div class="stat-value">${totalStock.toLocaleString()}</div>
+                            <i class="fas fa-boxes stat-icon"></i>
+                        </div>
+                    </a>
                 </div>
             </div>
             <div class="form-row" style="gap:1rem; flex-wrap:wrap;">

@@ -3,7 +3,7 @@
 부티크 매장 관리를 위한 정적 웹 애플리케이션입니다. 상품·주문·고객·매출 분석을 한 곳에서 관리할 수 있습니다.
 
 > **현재 브랜치**: `feature/supabase-cloud-migration` — Supabase 원격 데이터베이스로 마이그레이션 진행 중  
-> **최종 작업 단계**: 3-8A.10 (Cleanup and Go/No-Go 완료)
+> **최종 작업 단계**: 3-8A.10 (Cleanup and Go/No-Go 완료) + BLOCKER-FIX: Product Excel import visibility
 >
 > **내부 운영 테스트**: ✅ GO | **외부 공개/상용 서비스**: ❌ NO-GO
 

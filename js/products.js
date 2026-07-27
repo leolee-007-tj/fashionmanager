@@ -5,8 +5,8 @@ const Products = {
         search: '',
         sortBy: 'brand',
         sortOrder: 'asc',
-        stockYear: 2026,
-        stockMonth: new Date().getMonth() + 1,
+        stockYear: 0,
+        stockMonth: 0,
         selected: new Set(),
         editingId: null,
         loaded: false
@@ -251,15 +251,23 @@ const Products = {
     },
 
     yearOptions() {
-        let html = '';
-        for (let y = 2026; y <= 2030; y++) {
+        let html = '<option value="0">전체</option>';
+        // 데이터 기반 year 옵션
+        const dataYears = new Set();
+        this.state.products.forEach(p => {
+            if (p.stock_year) dataYears.add(p.stock_year);
+        });
+        // 2025~2030 고정 범위와 데이터 year 병합
+        const years = new Set([2025, 2026, 2027, ...dataYears]);
+        const sorted = [...years].filter(y => y >= 2025).sort((a, b) => b - a);
+        sorted.forEach(y => {
             html += `<option value="${y}" ${this.state.stockYear === y ? 'selected' : ''}>${y}${t('common', 'year_suffix')}</option>`;
-        }
+        });
         return html;
     },
 
     monthOptions() {
-        let html = '';
+        let html = `<option value="0" ${this.state.stockMonth === 0 ? 'selected' : ''}>${t('common', 'all') || '전체'}</option>`;
         for (let m = 1; m <= 12; m++) {
             html += `<option value="${m}" ${this.state.stockMonth === m ? 'selected' : ''}>${m}${t('common', 'month_suffix')}</option>`;
         }
@@ -267,13 +275,15 @@ const Products = {
     },
 
     setYear(val) {
-        this.state.stockYear = parseInt(val);
-        App.render();
+        this.state.stockYear = parseInt(val) || 0;
+        this.applyFilters();
+        App.renderPage();
     },
 
     setMonth(val) {
-        this.state.stockMonth = parseInt(val);
-        App.render();
+        this.state.stockMonth = parseInt(val) || 0;
+        this.applyFilters();
+        App.renderPage();
     },
 
     searchTimer: null,
@@ -363,7 +373,7 @@ const Products = {
         if (!month) return;
         const y = parseInt(year);
         const m = parseInt(month);
-        if (isNaN(y) || isNaN(m) || y < 2026 || m < 1 || m > 12) {
+        if (isNaN(y) || isNaN(m) || y < 2025 || m < 1 || m > 12) {
             App.flash(t('common', 'invalid_input'), 'error');
             return;
         }
