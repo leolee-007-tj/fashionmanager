@@ -184,12 +184,20 @@ remote mode에서는 다음 작업이 절대 금지된다:
 - tests: 1109 pass, 0 fail ✅
 - preflight: PASS ✅
 
-### 3-8A.9-F: Legacy local mode regression smoke
+### 3-8A.9-F: Legacy local mode regression smoke ✅ 완료 (2026-07-27)
 
 - remote mode OFF 상태에서 기존 기능 정상 동작 확인
 - localStorage 기반 orders CRUD 검증
+- create → PENDING ✅
+- edit pending → 가격 수정 ✅
+- cancel → CANCELLED + reserved_stock 복구 ✅
+- ship → SHIPPED + current_stock 감소 + inventory_logs 생성 ✅
+- complete → COMPLETED + Customers.recalculateAll ✅
+- forbidden remote behavior not observed ✅
+- tests: 1109 pass, 0 fail ✅
+- preflight: PASS ✅
 
-## Smoke Plan
+## Rollback Plan
 
 | 단계 | 검증 내용 | 방식 |
 |---|---|---|
@@ -199,7 +207,7 @@ remote mode에서는 다음 작업이 절대 금지된다:
 | 3-8A.9-E.4 | remote cancel | browser owner, cancelOrder (1회) |
 | 3-8A.9-E.5 | remote ship | browser owner, shipOrder (1회) |
 | 3-8A.9-E.6 | remote complete | browser owner, completeOrder (1회) |
-| 3-8A.9-F.1 | local mode regression | ORDERS_SUPABASE_ENABLED=false, 모든 기능 확인 |
+| 3-8A.9-F.1 | local mode regression | ORDERS_SUPABASE_ENABLED=false, 모든 기능 확인 | ✅ 완료 |
 
 ## Rollback Plan
 

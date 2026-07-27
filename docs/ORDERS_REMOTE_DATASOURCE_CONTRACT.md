@@ -1,8 +1,8 @@
 # Orders Remote DataSource Contract
 
-> 문서 버전: 1.5 (3-8A.7-Prep)
-> 작성일: 2026-07-26
-> 상태: **BROWSER SMOKE READINESS CHECK (3-8A.7-Prep)** — dev-console adapter smoke only; UI smoke blocked (orders.js uses sync local API)
+> 문서 버전: 1.6 (3-8A.9-F)
+> 작성일: 2026-07-27
+> 상태: **LOCAL MODE REGRESSION SMOKE COMPLETE** — local mode 모든 기능 정상 확인
 
 ---
 
@@ -1497,11 +1497,11 @@ Orders UI의 출고와 완료 경로를 remote mode에서 SupabaseOrdersDataSour
 | 항목 | 상태 |
 |---|---|
 | browser owner smoke (create → ship → complete) | ✅ 완료 (3-8A.9-E) |
-| local mode regression smoke | ❌ 미수행 (3-8A.9-F) |
+| local mode regression smoke | ✅ 완료 (3-8A.9-F) |
 
 ### Next Step
 
-- **3-8A.9-F**: Legacy local mode regression smoke
+- **3-8A.10**: Cleanup and Go/No-Go
 
 ---
 
@@ -1562,4 +1562,50 @@ Orders UI의 출고와 완료 경로를 remote mode에서 SupabaseOrdersDataSour
 
 ### Next Step
 
-- **3-8A.9-F**: Legacy local mode regression smoke
+- **3-8A.10**: Cleanup and Go/No-Go
+
+---
+
+## AF. 3-8A.9-F Legacy Local Mode Regression Smoke Result (2026-07-27)
+
+### Local Mode Regression Smoke Status
+
+| 항목 | 결과 |
+|---|---|
+| local mode list rendering | ✅ GO |
+| local mode create | ✅ GO (PENDING, reserved_stock 증가) |
+| local mode edit pending | ✅ GO (가격 수정, 상태 유지) |
+| local mode cancel/delete | ✅ GO (CANCELLED, reserved_stock 복구) |
+| local mode ship | ✅ GO (SHIPPED, current_stock 감소, inventory_logs 생성) |
+| local mode complete | ✅ GO (COMPLETED, Customers.recalculateAll 호출) |
+| local side effect 보존 | ✅ GO |
+| forbidden remote behavior | ✅ not observed |
+| code/runtime 변경 | ❌ 없음 |
+| remote DB mutation | ❌ 없음 |
+| tests | 1109 pass, 0 fail |
+| preflight | PASS |
+
+### Remote Datasource Not Used
+
+- `Orders.isRemoteOrdersMode()` === `false` 확인
+- `DB.getOrdersDataSource().name` === `'LocalOrdersDataSource'` 확인
+- `ds.createOrder` / `ds.updatePendingOrder` / `ds.cancelOrder` / `ds.shipOrder` / `ds.completeOrder` 호출되지 않음
+
+### Local Side Effects Preserved
+
+| 효과 | 확인 |
+|---|---|
+| `DB.addOrder` | ✅ 정상 동작 |
+| `DB.updateOrder` | ✅ 정상 동작 |
+| `DB.updateProduct` | ✅ 정상 동작 (reserved_stock, current_stock) |
+| `DB.addInventoryLog` | ✅ 정상 동작 (OUT log) |
+| `Customers.recalculateAll` | ✅ 정상 동작 |
+
+### Remaining Risk / Next Step
+
+| 위험 | 상태 |
+|---|---|
+| remote mode UI smoke는 이미 완료 (3-8A.9-E) | ✅ |
+| local mode regression smoke 완료 | ✅ |
+| Orders UI remote conversion 1차 완료 | ✅ |
+| 다음 milestone: 3-8A.10 Cleanup and Go/No-Go | 🔜 |

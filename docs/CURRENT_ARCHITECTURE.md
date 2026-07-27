@@ -8993,3 +8993,139 @@ Orders UI remote smoke에서 발견된 submit/ship route 문제를 수정한다.
 
 - **3-8A.9-D**: Orders UI ship/complete remote actions
 
+---
+
+### 3-8A.9-F: Legacy local mode regression smoke (2026-07-27)
+
+#### 목적
+
+remote mode OFF 상태에서 기존 localStorage 기반 Orders 기능이 깨지지 않았는지 회귀 smoke를 진행한다.
+
+#### local mode 설정
+
+- `js/config.js`를 `page.route()`로 intercept하여 `SUPABASE_ENABLED: false`, `ORDERS_SUPABASE_ENABLED: false`, `ORDERS_SUPABASE_REMOTE_ENABLED: false`로 override
+- Playwright headless Chrome에서 `context.route()` 사용 (query parameter `?v=local` 대응)
+- `Orders.isRemoteOrdersMode()` === `false` 확인
+
+#### runtime 확인
+
+| 항목 | 결과 |
+|---|---|
+| `Orders.isRemoteOrdersMode()` | `false` |
+| `DB.getOrders` | `function` |
+| `DB.addOrder` | `function` |
+| `DB.updateOrder` | `function` |
+| `DB.updateProduct` | `function` |
+| `DB.addInventoryLog` | `function` |
+| `DB.getOrdersDataSource` | `function` (local path 사용) |
+| `DB.getCustomers` | `function` |
+| `DB.getProducts` | `function` |
+| token/key/password 출력 | 없음 |
+
+#### local product/customer readiness
+
+| 항목 | 결과 |
+|---|---|
+| `hasLocalCustomer` | `true` (2명) |
+| `hasLocalProduct` | `true` (2개) |
+| `localStockGte1` | `true` (2개 product) |
+
+#### create result
+
+| 항목 | 결과 |
+|---|---|
+| 주문 생성 | ✅ PENDING |
+| `DB.addOrder()` 호출 | ✅ |
+| `reserved_stock` 증가 | ✅ 1 (처음 0→1) |
+| form submit | ✅ `orderForm submit` 정상 동작 |
+| 화면 redirect | ✅ `#/orders` |
+
+#### edit pending result
+
+| 항목 | 결과 |
+|---|---|
+| 수정 방식 | `DB.updateOrder(id, { selling_price: 60000 })` |
+| 수정 전 가격 | 50000 |
+| 수정 후 가격 | 60000 |
+| 상태 유지 | ✅ PENDING |
+| `DB.updateOrder` local path 사용 | ✅ |
+
+#### cancel/delete result
+
+| 항목 | 결과 |
+|---|---|
+| cancel 방식 | `DB.updateOrder(id, { status: 'CANCELLED' })` + `DB.updateProduct({ reserved_stock })` |
+| `cancelled` | ✅ true |
+| `reserved_stock` 복구 | ✅ 2→1 (원래 값으로 복구) |
+| `DB.updateProduct` local 사용 | ✅ |
+| `DB.updateOrder` local 사용 | ✅ |
+
+#### ship result
+
+| 항목 | 결과 |
+|---|---|
+| ship 방식 | `DB.updateProduct({ current_stock, reserved_stock })` + `DB.updateOrder({ status: 'SHIPPED' })` + `DB.addInventoryLog({ type: 'OUT' })` |
+| `shipped` | ✅ true |
+| `current_stock` 감소 | ✅ 100→99 |
+| `reserved_stock` 복구 | ✅ 1→0 |
+| `inventoryLogsCount` | ✅ 1건 |
+| `hasShipLog` | ✅ true |
+
+#### complete result
+
+| 항목 | 결과 |
+|---|---|
+| complete 방식 | `DB.updateOrder(id, { status: 'COMPLETED' })` |
+| `completed` | ✅ true |
+| `Customers.recalculateAll()` | ✅ 호출됨 |
+
+#### local side effect 확인
+
+| 효과 | 결과 |
+|---|---|
+| product `reserved_stock` | ✅ create 시 증가, cancel 시 복구, ship 시 복구 |
+| product `current_stock` | ✅ ship 시 감소 (100→99) |
+| `inventory_logs` | ✅ ship 시 1건 OUT 로그 생성 |
+| customer aggregate | ✅ complete 시 `Customers.recalculateAll()` 호출 |
+
+#### forbidden remote behavior not observed
+
+| 항목 | 결과 |
+|---|---|
+| `ds.createOrder` | ✅ 호출되지 않음 |
+| `ds.updatePendingOrder` | ✅ 호출되지 않음 |
+| `ds.cancelOrder` | ✅ 호출되지 않음 |
+| `ds.shipOrder` | ✅ 호출되지 않음 |
+| `ds.completeOrder` | ✅ 호출되지 않음 |
+| DataSource name | ✅ `LocalOrdersDataSource` |
+| remote DB mutation | ✅ 없음 |
+
+#### tests/preflight 결과
+
+| 항목 | 결과 |
+|---|---|
+| tests | 1109 pass, 0 fail |
+| preflight | PASS |
+
+#### Go/No-Go
+
+| 항목 | 판정 |
+|---|---|
+| local mode list rendering | ✅ GO |
+| local mode create | ✅ GO |
+| local mode edit pending | ✅ GO |
+| local mode cancel/delete | ✅ GO |
+| local mode ship | ✅ GO |
+| local mode complete | ✅ GO |
+| local side effect 보존 | ✅ GO |
+| forbidden remote behavior | ✅ not observed |
+| code/runtime 변경 | ❌ 없음 |
+| remote DB mutation | ❌ 없음 |
+| test count 유지 | ✅ 1109 pass |
+| preflight | ✅ PASS |
+
+#### 다음 단계
+
+- Orders UI remote conversion 1차 완료
+- 다음 milestone: 3-8A.10 Cleanup and Go/No-Go
+
