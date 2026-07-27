@@ -38,8 +38,9 @@ describe('Member Management UI Contract (3-6E.6)', function () {
         const content = readFile('js/member-management.js');
         assert.match(content, /renderAccessDenied/,
             'renderPage must have access denied path');
-        assert.match(content, /이 화면은 매장 owner만 사용할 수 있습니다/,
-            'access denied message must exist');
+        // 3-6E.6.3: i18n - uses t('members', 'owner_only_page') instead of hardcoded Korean
+        assert.match(content, /t\s*\(\s*['"]members['"]\s*,\s*['"]owner_only_page['"]\s*\)/,
+            'access denied message must use i18n');
     });
 
     it('D: staff/manager/guest/no-membership access blocked by isOwner()', function () {

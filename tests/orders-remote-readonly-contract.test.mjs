@@ -185,16 +185,19 @@ describe('Orders Remote Read-only Prototype Contract (RO1-RO18)', function () {
     // RO16-RO17: File change safety
     // ============================================================
 
-    it('RO16: JS files outside db.js/orders.js/app.js/config.example.js unchanged (3-8A.9-A)', function () {
+    it('RO16: only allowed JS files changed (3-8A.9-A + 3-6E.6.3)', function () {
         const changed = execSync('git diff --name-only HEAD', { cwd: REPO_ROOT, encoding: 'utf-8' }).trim();
         const lines = changed ? changed.split('\n') : [];
-        const allowedJs = ['js/db.js', 'js/config.example.js', 'js/orders.js', 'js/app.js'];
+        const allowedJs = [
+            'js/db.js', 'js/config.example.js', 'js/orders.js', 'js/app.js', // 3-8A.9-A
+            'js/i18n.js', 'js/member-management.js' // 3-6E.6.3
+        ];
         const forbiddenJs = lines.filter(f =>
             f.startsWith('js/') &&
             !allowedJs.includes(f)
         );
         assert.strictEqual(forbiddenJs.length, 0,
-            `Only js/db.js, js/config.example.js, js/orders.js, js/app.js should be changed in 3-8A.9-A. Found JS changes: ${forbiddenJs.join(', ')}`);
+            `Allowed JS: db.js, config.example.js, orders.js, app.js, i18n.js, member-management.js. Found other JS: ${forbiddenJs.join(', ')}`);
     });
 
     it('RO17: no migration changes', function () {

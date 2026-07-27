@@ -14,7 +14,7 @@
 
     function getClient() {
         if (!global.LESOULSupabase || !global.LESOULSupabase.getClient) {
-            throw new Error('Supabase 연결이 초기화되지 않았습니다.');
+            throw new Error(t('members', 'supabase_not_initialized'));
         }
         return global.LESOULSupabase.getClient();
     }
@@ -34,45 +34,45 @@
     async function listStoreMembers() {
         var client = getClient();
         var result = await client.rpc('list_store_members');
-        if (result.error) throw new Error(result.error.message || '멤버 목록 조회 실패');
+        if (result.error) throw new Error(result.error.message || t('members', 'member_list_error'));
         return result.data || [];
     }
 
     async function deactivateStoreMember(memberId) {
-        if (!memberId) throw new Error('멤버 ID가 필요합니다.');
+        if (!memberId) throw new Error(t('members', 'member_id_required'));
         var client = getClient();
         var result = await client.rpc('deactivate_store_member', { p_member_id: memberId });
-        if (result.error) throw new Error(result.error.message || '멤버 비활성화 실패');
+        if (result.error) throw new Error(result.error.message || t('members', 'member_deactivate_failed'));
         return result.data;
     }
 
     async function generateStoreInviteCode(role, invitedEmail, expiresInDays) {
-        if (role === 'owner') throw new Error('owner 초대는 생성할 수 없습니다.');
-        if (role !== 'staff' && role !== 'manager') throw new Error('초대 역할은 staff 또는 manager만 가능합니다.');
+        if (role === 'owner') throw new Error(t('members', 'owner_invite_not_allowed'));
+        if (role !== 'staff' && role !== 'manager') throw new Error(t('members', 'invite_role_staff_manager_only'));
         var days = parseInt(expiresInDays, 10);
-        if (isNaN(days) || days < 1 || days > 30) throw new Error('만료일은 1~30일 사이여야 합니다.');
+        if (isNaN(days) || days < 1 || days > 30) throw new Error(t('members', 'expires_days_range_error'));
         var client = getClient();
         var result = await client.rpc('generate_store_invite_code', {
             p_role: role,
             p_invited_email: invitedEmail || null,
             p_expires_in_days: days
         });
-        if (result.error) throw new Error(result.error.message || '초대 코드 생성 실패');
+        if (result.error) throw new Error(result.error.message || t('members', 'invite_code_create_failed'));
         return result.data;
     }
 
     async function listStoreInviteCodes() {
         var client = getClient();
         var result = await client.rpc('list_store_invite_codes');
-        if (result.error) throw new Error(result.error.message || '초대 코드 목록 조회 실패');
+        if (result.error) throw new Error(result.error.message || t('members', 'invite_code_list_failed'));
         return result.data || [];
     }
 
     async function revokeStoreInviteCode(invitationId) {
-        if (!invitationId) throw new Error('초대 ID가 필요합니다.');
+        if (!invitationId) throw new Error(t('members', 'invite_id_required'));
         var client = getClient();
         var result = await client.rpc('revoke_store_invite_code', { p_invitation_id: invitationId });
-        if (result.error) throw new Error(result.error.message || '초대 코드 취소 실패');
+        if (result.error) throw new Error(result.error.message || t('members', 'invite_code_revoke_failed'));
         return result.data;
     }
 
@@ -103,8 +103,8 @@
     function renderAccessDenied() {
         return '<div class="member-mgmt-container">' +
             '<div class="member-mgmt-access-denied">' +
-            '<h2><i class="fas fa-lock"></i> 접근 권한 없음</h2>' +
-            '<p>이 화면은 매장 owner만 사용할 수 있습니다.</p>' +
+            '<h2><i class="fas fa-lock"></i> ' + t('members', 'access_denied') + '</h2>' +
+            '<p>' + t('members', 'owner_only_page') + '</p>' +
             '</div></div>';
     }
 
@@ -113,12 +113,12 @@
         var isSelf = member.member_id && currentUserId && member.member_id === currentUserId;
         var canDeactivate = !isOwnerRow && !isSelf && member.is_active === true && !!member.member_id;
         var statusBadge = member.is_active
-            ? '<span class="status-badge status-active">활성</span>'
-            : '<span class="status-badge status-inactive">비활성</span>';
+            ? '<span class="status-badge status-active">' + t('members', 'active') + '</span>'
+            : '<span class="status-badge status-inactive">' + t('members', 'inactive') + '</span>';
         var roleLabel = member.role === 'owner' ? 'Owner' : (member.role === 'manager' ? 'Manager' : 'Staff');
 
         var deactivateBtn = canDeactivate
-            ? '<button class="btn btn-sm btn-danger" onclick="MemberManagement.confirmDeactivate(\'' + member.member_id + '\')">비활성화</button>'
+            ? '<button class="btn btn-sm btn-danger" onclick="MemberManagement.confirmDeactivate(\'' + member.member_id + '\')">' + t('members', 'deactivate') + '</button>'
             : '';
 
         return '<tr>' +
@@ -141,7 +141,7 @@
             : '-';
 
         var revokeBtn = canRevoke
-            ? '<button class="btn btn-sm btn-warning" onclick="MemberManagement.confirmRevoke(\'' + invite.id + '\')">취소</button>'
+            ? '<button class="btn btn-sm btn-warning" onclick="MemberManagement.confirmRevoke(\'' + invite.id + '\')">' + t('members', 'cancel') + '</button>'
             : '';
 
         return '<tr>' +
@@ -161,45 +161,45 @@
         }
 
         return '<div class="member-mgmt-container">' +
-            '<h2 class="page-title"><i class="fas fa-users-cog"></i> 직원/초대 관리</h2>' +
+            '<h2 class="page-title"><i class="fas fa-users-cog"></i> ' + t('members', 'member_invite_management') + '</h2>' +
 
             '<div class="member-mgmt-card" id="member-list-card">' +
             '<div class="member-mgmt-card-header">' +
-            '<h3><i class="fas fa-users"></i> 직원 목록</h3>' +
-            '<button class="btn btn-sm btn-secondary" onclick="MemberManagement.refreshMembers()">새로고침</button>' +
+            '<h3><i class="fas fa-users"></i> ' + t('members', 'member_list') + '</h3>' +
+            '<button class="btn btn-sm btn-secondary" onclick="MemberManagement.refreshMembers()">' + t('members', 'refresh') + '</button>' +
             '</div>' +
-            '<div id="member-list-body"><p class="muted-text">로딩 중...</p></div>' +
+            '<div id="member-list-body"><p class="muted-text">' + t('members', 'loading') + '</p></div>' +
             '</div>' +
 
             '<div class="member-mgmt-card" id="invite-generate-card">' +
-            '<div class="member-mgmt-card-header"><h3><i class="fas fa-plus-circle"></i> 초대 코드 생성</h3></div>' +
+            '<div class="member-mgmt-card-header"><h3><i class="fas fa-plus-circle"></i> ' + t('members', 'invite_code_generate') + '</h3></div>' +
             '<div class="invite-generate-form">' +
             '<div class="form-row">' +
-            '<label>역할</label>' +
+            '<label>' + t('members', 'role') + '</label>' +
             '<select id="invite-role-select">' +
             '<option value="staff">Staff</option>' +
             '<option value="manager">Manager</option>' +
             '</select>' +
             '</div>' +
             '<div class="form-row">' +
-            '<label>초대 이메일 (선택)</label>' +
+            '<label>' + t('members', 'invite_email_optional') + '</label>' +
             '<input type="email" id="invite-email-input" placeholder="email@example.com" />' +
             '</div>' +
             '<div class="form-row">' +
-            '<label>만료일 (1~30일)</label>' +
+            '<label>' + t('members', 'expires_days_label') + '</label>' +
             '<input type="number" id="invite-expires-input" value="7" min="1" max="30" />' +
             '</div>' +
-            '<button class="btn btn-primary" id="invite-generate-btn" onclick="MemberManagement.handleGenerateInvite()">초대 코드 생성</button>' +
+            '<button class="btn btn-primary" id="invite-generate-btn" onclick="MemberManagement.handleGenerateInvite()">' + t('members', 'generate_invite_code') + '</button>' +
             '<div id="invite-generate-result"></div>' +
             '</div>' +
             '</div>' +
 
             '<div class="member-mgmt-card" id="invite-list-card">' +
             '<div class="member-mgmt-card-header">' +
-            '<h3><i class="fas fa-ticket-alt"></i> 초대 코드 목록</h3>' +
-            '<button class="btn btn-sm btn-secondary" onclick="MemberManagement.refreshInvites()">새로고침</button>' +
+            '<h3><i class="fas fa-ticket-alt"></i> ' + t('members', 'invite_code_list') + '</h3>' +
+            '<button class="btn btn-sm btn-secondary" onclick="MemberManagement.refreshInvites()">' + t('members', 'refresh') + '</button>' +
             '</div>' +
-            '<div id="invite-list-body"><p class="muted-text">로딩 중...</p></div>' +
+            '<div id="invite-list-body"><p class="muted-text">' + t('members', 'loading') + '</p></div>' +
             '</div>' +
 
             '</div>';
@@ -212,17 +212,17 @@
     async function refreshMembers() {
         var body = document.getElementById('member-list-body');
         if (!body) return;
-        body.innerHTML = '<p class="muted-text">로딩 중...</p>';
+        body.innerHTML = '<p class="muted-text">' + t('members', 'loading') + '</p>';
         try {
             var members = await listStoreMembers();
             if (members.length === 0) {
-                body.innerHTML = '<p class="muted-text">등록된 직원이 없습니다.</p>';
+                body.innerHTML = '<p class="muted-text">' + t('members', 'no_members') + '</p>';
                 return;
             }
             var ctx = global.LESOULAppBootstrap ? global.LESOULAppBootstrap.getContext() : {};
             var currentUserId = ctx.user ? ctx.user.id : null;
             var html = '<table class="member-mgmt-table">' +
-                '<thead><tr><th>이름</th><th>이메일</th><th>역할</th><th>상태</th><th>가입일</th><th>관리</th></tr></thead>' +
+                '<thead><tr><th>' + t('members', 'name') + '</th><th>' + t('members', 'email') + '</th><th>' + t('members', 'role') + '</th><th>' + t('members', 'status') + '</th><th>' + t('members', 'joined_at') + '</th><th>' + t('members', 'actions') + '</th></tr></thead>' +
                 '<tbody>';
             for (var i = 0; i < members.length; i++) {
                 html += renderMemberRow(members[i], currentUserId);
@@ -230,19 +230,19 @@
             html += '</tbody></table>';
             body.innerHTML = html;
         } catch (e) {
-            body.innerHTML = '<p class="error-text">직원 목록을 불러올 수 없습니다: ' + escapeHtml(e.message) + '</p>';
+            body.innerHTML = '<p class="error-text">' + t('members', 'member_list_load_failed') + ': ' + escapeHtml(e.message) + '</p>';
         }
     }
 
     async function confirmDeactivate(memberId) {
         if (!memberId) return;
-        if (!confirm('이 직원을 비활성화하시겠습니까?')) return;
+        if (!confirm(t('members', 'confirm_deactivate_member'))) return;
         try {
             await deactivateStoreMember(memberId);
-            if (global.App && global.App.flash) global.App.flash('직원이 비활성화되었습니다.', 'success');
+            if (global.App && global.App.flash) global.App.flash(t('members', 'member_deactivated'), 'success');
             await refreshMembers();
         } catch (e) {
-            if (global.App && global.App.flash) global.App.flash('비활성화 실패: ' + e.message, 'error');
+            if (global.App && global.App.flash) global.App.flash(t('members', 'deactivate_failed') + ': ' + e.message, 'error');
         }
     }
 
@@ -259,16 +259,16 @@
         var days = parseInt(expiresInput.value, 10);
 
         if (role === 'owner') {
-            if (resultDiv) resultDiv.innerHTML = '<p class="error-text">owner 초대는 생성할 수 없습니다.</p>';
+            if (resultDiv) resultDiv.innerHTML = '<p class="error-text">' + t('members', 'owner_invite_not_allowed') + '</p>';
             return;
         }
         if (isNaN(days) || days < 1 || days > 30) {
-            if (resultDiv) resultDiv.innerHTML = '<p class="error-text">만료일은 1~30일 사이여야 합니다.</p>';
+            if (resultDiv) resultDiv.innerHTML = '<p class="error-text">' + t('members', 'expires_days_range_error') + '</p>';
             return;
         }
 
         if (btn) btn.disabled = true;
-        if (resultDiv) resultDiv.innerHTML = '<p class="muted-text">생성 중...</p>';
+        if (resultDiv) resultDiv.innerHTML = '<p class="muted-text">' + t('members', 'creating') + '</p>';
 
         try {
             var code = await generateStoreInviteCode(role, email, days);
@@ -276,17 +276,17 @@
             // Full value must not be written to logs
             if (resultDiv) {
                 resultDiv.innerHTML = '<div class="invite-code-result">' +
-                    '<p><strong>초대 코드가 생성되었습니다:</strong></p>' +
+                    '<p><strong>' + t('members', 'invite_code_created') + '</strong></p>' +
                     '<div class="invite-code-box">' +
                     '<code id="generated-invite-code">' + escapeHtml(code) + '</code>' +
-                    '<button class="btn btn-sm btn-secondary" onclick="MemberManagement.copyInviteCode()">복사</button>' +
+                    '<button class="btn btn-sm btn-secondary" onclick="MemberManagement.copyInviteCode()">' + t('members', 'copy') + '</button>' +
                     '</div>' +
-                    '<p class="muted-text">이 코드를 초대할 직원에게 전달하세요.</p>' +
+                    '<p class="muted-text">' + t('members', 'send_code_to_staff') + '</p>' +
                     '</div>';
             }
             await refreshInvites();
         } catch (e) {
-            if (resultDiv) resultDiv.innerHTML = '<p class="error-text">생성 실패: ' + escapeHtml(e.message) + '</p>';
+            if (resultDiv) resultDiv.innerHTML = '<p class="error-text">' + t('members', 'create_failed') + ': ' + escapeHtml(e.message) + '</p>';
         } finally {
             if (btn) btn.disabled = false;
         }
@@ -306,21 +306,21 @@
             document.execCommand('copy');
             document.body.removeChild(textarea);
         }
-        if (global.App && global.App.flash) global.App.flash('초대 코드가 복사되었습니다.', 'success');
+        if (global.App && global.App.flash) global.App.flash(t('members', 'invite_code_copied'), 'success');
     }
 
     async function refreshInvites() {
         var body = document.getElementById('invite-list-body');
         if (!body) return;
-        body.innerHTML = '<p class="muted-text">로딩 중...</p>';
+        body.innerHTML = '<p class="muted-text">' + t('members', 'loading') + '</p>';
         try {
             var invites = await listStoreInviteCodes();
             if (invites.length === 0) {
-                body.innerHTML = '<p class="muted-text">생성된 초대 코드가 없습니다.</p>';
+                body.innerHTML = '<p class="muted-text">' + t('members', 'no_invite_codes') + '</p>';
                 return;
             }
             var html = '<table class="member-mgmt-table">' +
-                '<thead><tr><th>초대 코드</th><th>역할</th><th>이메일</th><th>상태</th><th>생성일</th><th>만료일</th><th>관리</th></tr></thead>' +
+                '<thead><tr><th>' + t('members', 'invite_code') + '</th><th>' + t('members', 'role') + '</th><th>' + t('members', 'email') + '</th><th>' + t('members', 'status') + '</th><th>' + t('members', 'created_at') + '</th><th>' + t('members', 'expires_at') + '</th><th>' + t('members', 'actions') + '</th></tr></thead>' +
                 '<tbody>';
             for (var i = 0; i < invites.length; i++) {
                 html += renderInviteRow(invites[i]);
@@ -328,19 +328,19 @@
             html += '</tbody></table>';
             body.innerHTML = html;
         } catch (e) {
-            body.innerHTML = '<p class="error-text">초대 코드 목록을 불러올 수 없습니다: ' + escapeHtml(e.message) + '</p>';
+            body.innerHTML = '<p class="error-text">' + t('members', 'invite_code_list_load_failed') + ': ' + escapeHtml(e.message) + '</p>';
         }
     }
 
     async function confirmRevoke(invitationId) {
         if (!invitationId) return;
-        if (!confirm('이 초대 코드를 취소하시겠습니까?')) return;
+        if (!confirm(t('members', 'confirm_revoke_invite'))) return;
         try {
             await revokeStoreInviteCode(invitationId);
-            if (global.App && global.App.flash) global.App.flash('초대 코드가 취소되었습니다.', 'success');
+            if (global.App && global.App.flash) global.App.flash(t('members', 'invite_code_revoked'), 'success');
             await refreshInvites();
         } catch (e) {
-            if (global.App && global.App.flash) global.App.flash('취소 실패: ' + e.message, 'error');
+            if (global.App && global.App.flash) global.App.flash(t('members', 'revoke_failed') + ': ' + e.message, 'error');
         }
     }
 

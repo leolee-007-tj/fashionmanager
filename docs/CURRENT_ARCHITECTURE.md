@@ -8672,3 +8672,73 @@ ship/complete UI 연결은 다음 단계로 미룬다.
 
 - **3-8A.9-D**: Orders UI ship/complete remote actions
 
+### 3-6E.6.3: Member Management 4-language i18n cleanup (2026-07-27)
+
+#### 목적
+
+직원/초대 관리 화면의 하드코딩 한국어 문구를 i18n key로 분리하고, 4개국어(ko/zh/en/ja) 번역을 추가한다.
+
+#### 변경 범위
+
+- `js/i18n.js`: `members` namespace 추가 (50개 key, 4개국어)
+- `js/member-management.js`: 하드코딩 한국어 문구를 `t('members', 'key')`로 교체
+- `tests/member-management-i18n-contract.test.mjs`: 신규 테스트 파일
+
+#### i18n namespace
+
+`members` namespace에 다음 카테고리의 key를 추가:
+
+- Access control: `access_denied`, `owner_only_page`, `supabase_not_initialized`
+- Page titles: `member_invite_management`, `member_list`, `invite_code_generate`, `invite_code_list`
+- Buttons: `refresh`, `copy`, `deactivate`, `cancel`, `generate_invite_code`
+- Form labels: `role`, `invite_email_optional`, `expires_days_label`
+- Table headers: `name`, `email`, `status`, `joined_at`, `actions`, `invite_code`, `created_at`, `expires_at`
+- Status: `active`, `inactive`
+- Messages: `loading`, `no_members`, `member_list_load_failed`, `member_deactivated`, `invite_code_created`, `invite_code_copied`, `invite_code_revoked` 등
+- Error messages: `owner_invite_not_allowed`, `invite_role_staff_manager_only`, `expires_days_range_error`, `create_failed`, `revoke_failed` 등
+
+#### 4개국어 적용
+
+모든 key에 대해 한국어(ko), 중국어 간체(zh), 영어(en), 일본어(ja) 번역을 추가.
+
+#### 기능 로직 변경 없음
+
+- RPC 호출 방식 변경 없음
+- owner-only access 로직 변경 없음
+- error handling 로직 변경 없음
+- escapeHtml 사용 위치 유지
+
+#### RPC 변경 없음
+
+다음 RPC 이름이 그대로 유지됨:
+
+- `list_store_members`
+- `deactivate_store_member`
+- `generate_store_invite_code`
+- `list_store_invite_codes`
+- `revoke_store_invite_code`
+
+#### 보안 유지
+
+- invite code 전체값 console.log 금지
+- service_role 미사용
+- token/key/password 로그 없음
+- invite code는 `<code>` element에만 표시
+
+#### Go/No-Go
+
+| 항목 | 판정 |
+|---|---|
+| members namespace 추가 | ✅ GO |
+| 4개국어 key 추가 | ✅ GO |
+| hardcoded Korean 제거 | ✅ GO |
+| RPC 변경 없음 | ✅ GO |
+| 기능 로직 변경 없음 | ✅ GO |
+| invite code 로그 금지 | ✅ GO |
+| tests 통과 | ✅ GO |
+| preflight PASS | ✅ GO |
+
+#### 다음 단계
+
+- **3-8A.9-D**: Orders UI ship/complete remote actions
+

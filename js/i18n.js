@@ -592,6 +592,80 @@ const TRANSLATIONS = {
         items_reclassified: { ko: '개 상품이 자동분류 되었습니다!', zh: '个商品已自动分类！', en: 'items auto-classified!', ja: '件の商品が自動分類されました！' },
         out_of_stock: { ko: '재고없음', zh: '缺货', en: 'Out of Stock', ja: '在庫切れ' },
         ship_out_log: { ko: '출고', zh: '出货', en: 'Ship', ja: '出荷' },
+    },
+    members: {
+        // Access control
+        access_denied: { ko: '접근 권한 없음', zh: '无访问权限', en: 'Access Denied', ja: 'アクセス権限なし' },
+        owner_only_page: { ko: '이 화면은 매장 owner만 사용할 수 있습니다.', zh: '此页面仅限店主使用。', en: 'This page is only available to the store owner.', ja: 'この画面はオーナーのみ使用できます。' },
+        supabase_not_initialized: { ko: 'Supabase 연결이 초기화되지 않았습니다.', zh: 'Supabase连接未初始化。', en: 'Supabase connection not initialized.', ja: 'Supabase接続が初期化されていません。' },
+
+        // Page titles
+        member_invite_management: { ko: '직원/초대 관리', zh: '员工/邀请管理', en: 'Staff & Invites', ja: 'スタッフ/招待管理' },
+        member_list: { ko: '직원 목록', zh: '员工列表', en: 'Staff List', ja: 'スタッフ一覧' },
+        invite_code_generate: { ko: '초대 코드 생성', zh: '生成邀请码', en: 'Generate Invite Code', ja: '招待コード生成' },
+        invite_code_list: { ko: '초대 코드 목록', zh: '邀请码列表', en: 'Invite Codes', ja: '招待コード一覧' },
+
+        // Buttons
+        refresh: { ko: '새로고침', zh: '刷新', en: 'Refresh', ja: '更新' },
+        copy: { ko: '복사', zh: '复制', en: 'Copy', ja: 'コピー' },
+        deactivate: { ko: '비활성화', zh: '停用', en: 'Deactivate', ja: '無効化' },
+        cancel: { ko: '취소', zh: '取消', en: 'Cancel', ja: '取消' },
+        generate_invite_code: { ko: '초대 코드 생성', zh: '生成邀请码', en: 'Generate Code', ja: 'コード生成' },
+
+        // Form labels
+        role: { ko: '역할', zh: '角色', en: 'Role', ja: '役割' },
+        invite_email_optional: { ko: '초대 이메일 (선택)', zh: '邀请邮箱（可选）', en: 'Invite Email (Optional)', ja: '招待メール（任意）' },
+        expires_days_label: { ko: '만료일 (1~30일)', zh: '过期天数（1~30天）', en: 'Expires (1~30 days)', ja: '有効期限（1~30日）' },
+
+        // Table headers
+        name: { ko: '이름', zh: '姓名', en: 'Name', ja: '名前' },
+        email: { ko: '이메일', zh: '邮箱', en: 'Email', ja: 'メール' },
+        status: { ko: '상태', zh: '状态', en: 'Status', ja: '状態' },
+        joined_at: { ko: '가입일', zh: '加入日期', en: 'Joined', ja: '参加日' },
+        actions: { ko: '관리', zh: '管理', en: 'Actions', ja: '管理' },
+        invite_code: { ko: '초대 코드', zh: '邀请码', en: 'Invite Code', ja: '招待コード' },
+        created_at: { ko: '생성일', zh: '创建日期', en: 'Created', ja: '作成日' },
+        expires_at: { ko: '만료일', zh: '过期日期', en: 'Expires', ja: '有効期限' },
+
+        // Status
+        active: { ko: '활성', zh: '活跃', en: 'Active', ja: '有効' },
+        inactive: { ko: '비활성', zh: '停用', en: 'Inactive', ja: '無効' },
+
+        // Messages - success/error
+        loading: { ko: '로딩 중...', zh: '加载中...', en: 'Loading...', ja: '読み込み中...' },
+        no_members: { ko: '등록된 직원이 없습니다.', zh: '没有已注册的员工。', en: 'No staff registered.', ja: '登録されたスタッフはいません。' },
+        member_list_load_failed: { ko: '직원 목록을 불러올 수 없습니다', zh: '无法加载员工列表', en: 'Failed to load staff list', ja: 'スタッフ一覧を読み込めません' },
+        member_list_error: { ko: '멤버 목록 조회 실패', zh: '成员列表查询失败', en: 'Failed to list members', ja: 'メンバー一覧の取得に失敗' },
+
+        // Deactivate
+        confirm_deactivate_member: { ko: '이 직원을 비활성화하시겠습니까?', zh: '确定要停用此员工吗？', en: 'Deactivate this staff member?', ja: 'このスタッフを無効化しますか？' },
+        member_deactivated: { ko: '직원이 비활성화되었습니다.', zh: '员工已停用。', en: 'Staff member deactivated.', ja: 'スタッフが無効化されました。' },
+        deactivate_failed: { ko: '비활성화 실패', zh: '停用失败', en: 'Deactivation failed', ja: '無効化に失敗' },
+        member_id_required: { ko: '멤버 ID가 필요합니다.', zh: '需要成员ID。', en: 'Member ID required.', ja: 'メンバーIDが必要です。' },
+        member_deactivate_failed: { ko: '멤버 비활성화 실패', zh: '成员停用失败', en: 'Failed to deactivate member', ja: 'メンバーの無効化に失敗' },
+
+        // Invite code generation
+        owner_invite_not_allowed: { ko: 'owner 초대는 생성할 수 없습니다.', zh: '无法创建owner邀请。', en: 'Cannot create owner invites.', ja: 'オーナーの招待は作成できません。' },
+        invite_role_staff_manager_only: { ko: '초대 역할은 staff 또는 manager만 가능합니다.', zh: '仅限staff或manager角色。', en: 'Only staff or manager roles allowed.', ja: '招待役割はstaffまたはmanagerのみ可能です。' },
+        expires_days_range_error: { ko: '만료일은 1~30일 사이여야 합니다.', zh: '过期天数须在1~30天之间。', en: 'Expiry must be between 1~30 days.', ja: '有効期限は1~30日の間で指定してください。' },
+        invite_code_create_failed: { ko: '초대 코드 생성 실패', zh: '邀请码生成失败', en: 'Failed to generate invite code', ja: '招待コードの生成に失敗' },
+        invite_code_list_failed: { ko: '초대 코드 목록 조회 실패', zh: '邀请码列表查询失败', en: 'Failed to list invite codes', ja: '招待コード一覧の取得に失敗' },
+        creating: { ko: '생성 중...', zh: '生成中...', en: 'Creating...', ja: '作成中...' },
+        invite_code_created: { ko: '초대 코드가 생성되었습니다:', zh: '邀请码已生成：', en: 'Invite code generated:', ja: '招待コードが生成されました：' },
+        send_code_to_staff: { ko: '이 코드를 초대할 직원에게 전달하세요.', zh: '请将此码发送给要邀请的员工。', en: 'Share this code with the staff member.', ja: 'このコードを招待するスタッフに伝えてください。' },
+        create_failed: { ko: '생성 실패', zh: '生成失败', en: 'Creation failed', ja: '作成失敗' },
+        invite_code_copied: { ko: '초대 코드가 복사되었습니다.', zh: '邀请码已复制。', en: 'Invite code copied.', ja: '招待コードがコピーされました。' },
+
+        // Invite code list
+        no_invite_codes: { ko: '생성된 초대 코드가 없습니다.', zh: '没有生成的邀请码。', en: 'No invite codes generated.', ja: '生成された招待コードはありません。' },
+        invite_code_list_load_failed: { ko: '초대 코드 목록을 불러올 수 없습니다', zh: '无法加载邀请码列表', en: 'Failed to load invite codes', ja: '招待コード一覧を読み込めません' },
+
+        // Revoke invite
+        invite_id_required: { ko: '초대 ID가 필요합니다.', zh: '需要邀请ID。', en: 'Invite ID required.', ja: '招待IDが必要です。' },
+        confirm_revoke_invite: { ko: '이 초대 코드를 취소하시겠습니까?', zh: '确定要取消此邀请码吗？', en: 'Revoke this invite code?', ja: 'この招待コードを取り消しますか？' },
+        invite_code_revoked: { ko: '초대 코드가 취소되었습니다.', zh: '邀请码已取消。', en: 'Invite code revoked.', ja: '招待コードが取り消されました。' },
+        revoke_failed: { ko: '취소 실패', zh: '取消失败', en: 'Revoke failed', ja: '取り消し失敗' },
+        invite_code_revoke_failed: { ko: '초대 코드 취소 실패', zh: '邀请码取消失败', en: 'Failed to revoke invite code', ja: '招待コードの取り消しに失敗' },
     }
 };
 

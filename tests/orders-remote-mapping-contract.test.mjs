@@ -465,10 +465,13 @@ describe('Orders Remote Mapping Contract (M1-M30)', function () {
             `No migration files should be changed. Found: ${migrationChanges.join(', ')}`);
     });
 
-    it('M29: only allowed JS files changed (db.js, orders.js, app.js); other JS/CSS/HTML/migration untouched (3-8A.9-A)', function () {
+    it('M29: only allowed JS files changed (3-8A.9-A + 3-6E.6.3)', function () {
         const changed = execSync('git diff --name-only HEAD', { cwd: REPO_ROOT, encoding: 'utf-8' }).trim();
         const lines = changed ? changed.split('\n') : [];
-        const allowedJs = new Set(['js/db.js', 'js/orders.js', 'js/app.js']);
+        const allowedJs = new Set([
+            'js/db.js', 'js/orders.js', 'js/app.js', // 3-8A.9-A
+            'js/i18n.js', 'js/member-management.js' // 3-6E.6.3
+        ]);
         const forbidden = lines.filter(f =>
             (f.startsWith('js/') && !allowedJs.has(f)) ||
             f.startsWith('css/') ||
@@ -476,7 +479,7 @@ describe('Orders Remote Mapping Contract (M1-M30)', function () {
             f.startsWith('supabase/migrations/')
         );
         assert.strictEqual(forbidden.length, 0,
-            `Only js/db.js, js/orders.js, js/app.js may change in 3-8A.9-A. Forbidden: ${forbidden.join(', ')}`);
+            `Allowed JS: db.js, orders.js, app.js, i18n.js, member-management.js. Forbidden: ${forbidden.join(', ')}`);
     });
 
     // ============================================================
