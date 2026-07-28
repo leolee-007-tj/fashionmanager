@@ -190,7 +190,8 @@ describe('Orders Remote Read-only Prototype Contract (RO1-RO18)', function () {
         const lines = changed ? changed.split('\n') : [];
         const allowedJs = [
             'js/db.js', 'js/config.example.js', 'js/orders.js', 'js/app.js', // 3-8A.9-A
-            'js/i18n.js', 'js/member-management.js' // 3-6E.6.3
+            'js/i18n.js', 'js/member-management.js', // 3-6E.6.3
+            'js/products.js', // BLOCKER-FIX-3
         ];
         const forbiddenJs = lines.filter(f =>
             f.startsWith('js/') &&

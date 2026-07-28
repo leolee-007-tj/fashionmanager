@@ -26,6 +26,7 @@ const TRANSLATIONS = {
         view_all: { ko: '전체 보기', zh: '查看全部', en: 'View All', ja: '全て表示' },
         currency_cny: { ko: '元', zh: '元', en: 'CNY', ja: '元' },
         items: { ko: '개', zh: '件', en: 'items', ja: '件' },
+        data_source: { ko: '데이터 기준', zh: '数据来源', en: 'Data Source', ja: 'データソース' },
     },
     products: {
         title: { ko: '상품 목록', zh: '商品列表', en: 'Product List', ja: '商品リスト' },
@@ -43,6 +44,7 @@ const TRANSLATIONS = {
         base_price: { ko: '중국기준판매가', zh: '中国基准售价', en: 'Base Price', ja: '基準価格' },
         total_count: { ko: '총 상품', zh: '总商品', en: 'Total Products', ja: '総商品' },
         total_stock: { ko: '총 재고', zh: '总库存', en: 'Total Stock', ja: '総在庫' },
+        displayed_vs_total: { ko: '표시 / 전체', zh: '显示 / 全部', en: 'Displayed / Total', ja: '表示 / 全体' },
         select_all: { ko: '전체 선택', zh: '全选', en: 'Select All', ja: '全選択' },
         change_month: { ko: '년/월 변경', zh: '年月变更', en: 'Change Month', ja: '年月変更' },
         batch_reclassify: { ko: '선택 자동분류', zh: '选择自动分类', en: 'Auto Classify Selected', ja: '選択自動分類' },

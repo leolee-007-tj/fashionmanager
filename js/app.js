@@ -133,7 +133,7 @@ const App = {
         try {
             switch (page) {
                 case 'dashboard':
-                    content = this.renderDashboard();
+                    content = await this.renderDashboard();
                     break;
                 case 'products':
                     if (args[0] === 'add') content = Products.renderAdd();
@@ -233,8 +233,11 @@ const App = {
     },
 
     // ==================== 대시보드 ====================
-    renderDashboard() {
-        const products = DB.getProducts();
+    // BLOCKER-FIX-3: async로 변경, products는 DB.getProductsAsync() 우선 사용
+    async renderDashboard() {
+        const products = typeof DB.getProductsAsync === 'function'
+            ? await DB.getProductsAsync()
+            : DB.getProducts();
         const orders = DB.getOrders();
         const customers = DB.getCustomers();
         const now = new Date();
@@ -309,6 +312,12 @@ const App = {
                         </div>
                     </a>
                 </div>
+            </div>
+            <div class="text-muted" style="font-size:0.75rem; text-align:right; margin-top:0.25rem;">
+                <span data-i18n="dashboard.data_source">${t('dashboard', 'data_source')}</span>:
+                ${typeof DB.getProductsAsync === 'function' && DB.getProductsDataSource && DB.getProductsDataSource().name === 'SupabaseProductsDataSource'
+                    ? 'Supabase (remote)'
+                    : 'localStorage'}
             </div>
             <div class="form-row" style="gap:1rem; flex-wrap:wrap;">
                 <div class="card" style="flex:1; min-width:300px;">

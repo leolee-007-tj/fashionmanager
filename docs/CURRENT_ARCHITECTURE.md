@@ -9504,3 +9504,83 @@ manager/staff 권한 계정으로 실제 브라우저 접근 smoke를 수행한�
 - 3-8A.10-B (Remote UI post-bugfix smoke) 재개 조건: Products list 정상 표시 확인 필요
 - Blocker fix-2 완료 후 3-8A.10-B 재개
 
+---
+
+### BLOCKER-FIX-3: Dashboard/Product list datasource mismatch (2026-07-27)
+
+#### 실제 원인
+
+1. **Dashboard `DB.getProducts()` localStorage count**:
+   - `app.js renderDashboard()`가 `DB.getProducts()`를 직접 호출
+   - localStorage에 남아 있는 과거 상품 약 270개를 기준으로 total products 표시
+   - remote mode에서도 localStorage stale count를 사용
+
+2. **Product list `DB.getProductsAsync()` remote count**:
+   - `products.js Products.load()`가 `DB.getProductsAsync()`를 우선 호출
+   - SupabaseProductsDataSource 기준 실제 상품 수(약 3개) 표시
+   - dashboard total(270)과 product list total(3)이 다른 datasource 기준으로 갈라짐
+
+#### 270 vs 3의 의미
+
+- **270** = stale/localStorage count (과거 업로드 데이터, 실제 DB에 없는 상품)
+- **3** = remote/current datasource count (Supabase DB에 실제 존재하는 상품)
+- localStorage에 270개가 남아 있지만, remote mode에서는 SupabaseProductsDataSource가 실제 데이터 소스
+
+#### 수정
+
+1. **Dashboard async products datasource**:
+   - `renderDashboard()`를 `async`로 변경
+   - `DB.getProductsAsync()`가 존재하면 `await DB.getProductsAsync()` 우선 사용
+   - 없으면 기존 `DB.getProducts()`로 fallback
+   - `renderPage()`에서 `'dashboard'` case를 `await this.renderDashboard()`로 처리
+
+2. **Count 기준 표시**:
+   - Dashboard 하단에 작은 `text-muted` 표시: "데이터 기준: Supabase (remote)" 또는 "데이터 기준: localStorage"
+   - 사용자가 현재 어떤 데이터 소스를 보고 있는지 명확히 구분 가능
+
+3. **Product list displayed/total count 분리**:
+   - 상품목록 stat-card에 "표시 상품: X / 전체 상품: Y" 형태로 표시
+   - `Products.state.filtered.length` (표시 수) / `Products.state.products.length` (전체 수)
+   - stockYear/stockMonth/search 필터가 걸려 있으면 표시 수가 전체 수보다 작아지는 것이 명확
+
+4. **Delete reload/legacy_id handling**:
+   - `Products.delete(id)`에서 `this.state.products`에서 id/legacy_id/remote_id로 대상 검색
+   - remote mode에서 positive numeric legacy_id 없으면 error flash, success flash 금지
+   - 삭제 성공 후 `state.loaded=false` + `await this.load()` + `App.renderPage()`
+   - dashboard도 같은 datasource를 보므로 count가 같이 줄어듦
+
+5. **localStorage stale count 처리**:
+   - remote mode에서 `DB.getProducts()` localStorage 270개가 있어도 dashboard에 표시하지 않음
+   - localStorage 자동 삭제하지 않음 (별도 승인 후 진행)
+   - localStorage cleanup은 추후 검토
+
+#### 변경 파일
+
+| 파일 | 변경 내용 |
+|---|---|
+| `js/app.js` | `renderDashboard()` async, `DB.getProductsAsync()` 우선 사용, 데이터 소스 표시, `renderPage()` dashboard await |
+| `js/products.js` | `renderList()` count 표시 "표시 X / 전체 Y", `delete()` legacy_id 검증 강화, post-delete reload |
+| `js/db.js` | `SupabaseProductsDataSource.deleteProduct()` legacy_id 검증 (기존 유지) |
+| `js/i18n.js` | `dashboard.data_source` 번역 키 추가 |
+| `tests/dashboard-products-datasource-contract.test.mjs` | 신규: 11개 contract tests, 0 fail |
+| `tests/product-list-delete-contract.test.mjs` | 보강: 22개 contract tests, 0 fail |
+| `tests/browser-auth-recovery-contract.test.mjs` | excel.js Supabase 참조 예외 처리 |
+| `tests/browser-auth-smoke-contract.test.mjs` | products.js Supabase 참조 예외 처리 |
+| `tests/orders-*-contract.test.mjs` (6개) | allowedJs에 products.js 추가 |
+
+#### 테스트 결과
+
+- BLOCKER-FIX-3 신규 테스트: 11 tests, 0 fail ✅
+- 전체 테스트: 1156 tests, 0 fail ✅
+- preflight: PASS ✅
+
+#### 안전 확인
+
+- `service_role` 사용 금지 ✅
+- `token/key/password` 출력 금지 ✅
+- `UUID` 전체값 문서 기록 금지 ✅
+- `migration` 생성/수정 금지 ✅
+- `db push/reset/pull` 금지 ✅
+- Remote DB mutation 자동 실행: **NO** ✅
+- localStorage 자동 삭제: **NO** ✅
+

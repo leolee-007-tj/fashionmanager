@@ -149,7 +149,8 @@ const Products = {
                 <div class="stats-grid">
                     <div class="stat-card">
                         <div class="stat-label">${t('products', 'total_count')}</div>
-                        <div class="stat-value">${list.length}</div>
+                        <div class="stat-value">${list.length} / ${this.state.products.length}</div>
+                        <div class="text-muted" style="font-size:0.7rem; margin-top:0.15rem;">${t('products', 'displayed_vs_total')}</div>
                         <i class="fas fa-tshirt stat-icon"></i>
                     </div>
                     <div class="stat-card">

@@ -82,7 +82,8 @@ test('Browser auth smoke contract (B1-B10)', async (t) => {
         // 실제 Supabase CRUD 호출 여부는 products-supabase-mapping-contract.test.mjs가 검증.
         // 여기서는 business 업무 모듈만 검사.
         // 3-8A.9-A: orders.js, app.js는 의도적 수정 대상이므로 검사에서 제외.
-        const businessFiles = ['js/products.js', 'js/customers.js'];
+        // BLOCKER-FIX-3: products.js는 SupabaseProductsDataSource name 참조가 허용됨.
+        const businessFiles = ['js/customers.js'];
         for (const file of businessFiles) {
             const filePath = join(__dirname, '..', file);
             const content = readFileSync(filePath, 'utf8');

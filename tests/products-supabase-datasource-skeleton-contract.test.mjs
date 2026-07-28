@@ -208,7 +208,7 @@ describe('Products Supabase DataSource Skeleton Contract (S1-S16)', function () 
         });
     });
 
-    it('S10: products.js unchanged or uses async helper path', function () {
+    it('S10: products.js uses async helper path and Supabase ProductsDataSource name reference', function () {
         const content = readFile('js/products.js');
         // products.js는 DB.getProductsAsync / addProductAsync 등을 사용해야 함
         assert.match(content, /getProductsAsync\s*\(/,
@@ -219,9 +219,10 @@ describe('Products Supabase DataSource Skeleton Contract (S1-S16)', function () 
             'products.js should use updateProductAsync');
         assert.match(content, /deleteProductAsync\s*\(/,
             'products.js should use deleteProductAsync');
-        // Supabase 직접 호출 없음
-        assert.doesNotMatch(content, /supabase/i,
-            'products.js must not contain supabase');
+        // BLOCKER-FIX-3: SupabaseProductsDataSource name 참조는 허용 (isRemoteProductsMode)
+        // Supabase client 직접 호출 (supabase.from(...))은 금지
+        assert.doesNotMatch(content, /supabase\s*\.\s*(from|insert|update|delete|select|rpc|storage|auth)\s*\(/i,
+            'products.js must not call Supabase client methods directly');
     });
 
     it('S11: localStorage prefix lesoul_gh_ preserved', function () {
