@@ -243,7 +243,8 @@ describe('Orders Remote DataSource Contract (OD1-OD17)', function () {
         const allowedJs = new Set([
             'js/db.js', 'js/config.example.js', 'js/orders.js', 'js/app.js', // 3-8A.9-A
             'js/i18n.js', 'js/member-management.js', // 3-6E.6.3
-            'js/products.js' // BLOCKER-FIX-3
+            'js/products.js', // BLOCKER-FIX-3
+            'js/excel.js' // BLOCKER-FIX-4
         ]);
         const forbidden = lines.filter(f =>
             (f.startsWith('js/') && !allowedJs.has(f)) ||

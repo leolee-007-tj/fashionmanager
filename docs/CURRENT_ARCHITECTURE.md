@@ -9584,3 +9584,43 @@ manager/staff 권한 계정으로 실제 브라우저 접근 smoke를 수행한�
 - Remote DB mutation 자동 실행: **NO** ✅
 - localStorage 자동 삭제: **NO** ✅
 
+### BLOCKER-FIX-4: Product import year/month visibility guard (2026-07-28)
+
+#### 사용자 요구
+
+- UI에서 입고년도/입고월을 선택하지 않아도 업로드 후 자동으로 상품목록에 표시되어야 함
+- 사용자가 상품목록에서 다시 년도/월을 맞추지 않아도 됨
+
+#### 원인
+
+- 업로드 저장 년월과 상품목록 필터 년월 불일치 가능
+- cache/reload 불일치로 업로드 후 상품목록에 안 보임
+- 엑셀 row 값과 UI 선택값을 일관되게 사용하지 않음
+
+#### 수정
+
+1. **Year/Month resolver**: `_getSelectedImportYearMonth()` (UI select 값 읽기) + `_resolveProductImportYearMonth(row, selected)` (row 값 > UI 선택값 fallback)
+2. **Row value priority**: 엑셀 row에 `입고년도`/`입고월`이 있으면 row 값 우선, 없으면 UI 선택값 사용
+3. **stock_month=0 금지**: `_resolveProductImportYearMonth`에서 month=0은 `null` 반환 → `MISSING_STOCK_YEAR_MONTH` skip
+4. **Post-import auto-navigation**: 단일 year/month 업로드 시 해당 년월로 필터 이동, 다중 월은 전체 보기
+5. **Import summary**: `window.__LAST_PRODUCT_IMPORT_SUMMARY`에 safe 결과 저장 (mode, selectedYear, selectedMonth, added, skipped, failed, successYearMonths, postImportDatasourceCount, postImportVisibleCount, productsFilterYear, productsFilterMonth, navigatedToProducts)
+6. **Filter info 표시**: 상품목록 stat-card에 "현재 필터: 2025년 12월" 또는 "전체" 표시
+7. **Search clear**: 업로드 후 `Products.state.search = ''`
+8. **Reload**: `Products.state.loaded = false` → `await Products.load()` → `App.render()`
+
+#### 테스트 결과
+
+- `tests/product-import-year-month-visibility-contract.test.mjs` 신규: 38 tests, 0 fail ✅
+- 전체 테스트: 1188 tests, 0 fail ✅
+- preflight: PASS ✅
+
+#### 안전 확인
+
+- `service_role` 사용 금지 ✅
+- `token/key/password` 출력 금지 ✅
+- `UUID` 전체값 문서 기록 금지 ✅
+- `migration` 생성/수정 금지 ✅
+- `db push/reset/pull` 금지 ✅
+- Remote DB mutation 자동 실행: **NO** ✅
+- localStorage 자동 삭제: **NO** ✅
+

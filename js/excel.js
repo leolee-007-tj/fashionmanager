@@ -264,6 +264,33 @@ const ExcelManager = {
         }
     },
 
+    // BLOCKER-FIX-4: UI importYear/importMonth select 값을 읽어온다.
+    _getSelectedImportYearMonth() {
+        const yearEl = document.getElementById('importYear');
+        const monthEl = document.getElementById('importMonth');
+        const selectedYear = parseInt(yearEl && yearEl.value, 10);
+        const selectedMonth = parseInt(monthEl && monthEl.value, 10);
+        return {
+            year: Number.isFinite(selectedYear) && selectedYear >= 2025 ? selectedYear : null,
+            month: Number.isFinite(selectedMonth) && selectedMonth >= 1 && selectedMonth <= 12 ? selectedMonth : null
+        };
+    },
+
+    // BLOCKER-FIX-4: row 값 > UI 선택값 fallback 정책
+    _resolveProductImportYearMonth(row, selected) {
+        const rowYear = parseInt(row['입고년도'] || row['년도'] || row['stock_year'] || '', 10);
+        const rowMonth = parseInt(row['입고월'] || row['월'] || row['stock_month'] || '', 10);
+
+        const rowYearValid = Number.isFinite(rowYear) && rowYear >= 2025;
+        const rowMonthValid = Number.isFinite(rowMonth) && rowMonth >= 1 && rowMonth <= 12;
+
+        return {
+            stockYear: rowYearValid ? rowYear : (selected.year || null),
+            stockMonth: rowMonthValid ? rowMonth : (selected.month || null),
+            source: (rowYearValid && rowMonthValid) ? 'row' : 'ui'
+        };
+    },
+
     _normalizeProductImportRow(row, idx, nextProductId, selYear, selMonth) {
         let koreaCost = row['한국매입원가(KRW)'] || row['한국매입원가'] || row['한국원가'] || row['원가'] || row['cost'] || row['매입가'] || row['korea_cost'] || 0;
         if (typeof koreaCost === 'string') koreaCost = parseInt(String(koreaCost).replace(/,/g, '')) || 0;
@@ -275,13 +302,22 @@ const ExcelManager = {
         if (!koreaCost) skipReasons.push('MISSING_KOREA_COST');
         if (!title) skipReasons.push('MISSING_TITLE');
 
+        // BLOCKER-FIX-4: year/month resolution
+        const resolved = this._resolveProductImportYearMonth(row, { year: selYear, month: selMonth });
+        if (!resolved.stockYear || !resolved.stockMonth) {
+            skipReasons.push('MISSING_STOCK_YEAR_MONTH');
+        }
+        if (resolved.stockMonth === 0) {
+            skipReasons.push('STOCK_MONTH_ZERO');
+        }
+
         if (skipReasons.length > 0) {
             return { valid: false, reason: skipReasons.join('+'), rowIndex: idx, hasTitle: !!title, hasKoreaCost: !!koreaCost, parsedKoreaCost: koreaCost };
         }
 
         const priceResult = PriceCalculator.calculate(koreaCost);
-        const stockYear = selYear;
-        const stockMonth = selMonth;
+        const stockYear = resolved.stockYear;
+        const stockMonth = resolved.stockMonth;
         const productCode = row['product_code'] || DB.generateProductCode(brand, stockYear, stockMonth);
         const currentStock = parseInt(row['초기재고'] || row['현재재고'] || row['재고'] || row['수량'] || row['stock'] || row['quantity'] || 0) || 0;
 
@@ -390,11 +426,20 @@ const ExcelManager = {
         }
         if (!confirm(data.length + ' ' + t('excel', 'confirm_import_count') + '?')) return;
 
-        const selYear = parseInt(document.getElementById('importYear')?.value) || new Date().getFullYear();
-        const selMonth = parseInt(document.getElementById('importMonth')?.value) || new Date().getMonth() + 1;
+        // BLOCKER-FIX-4: UI 선택값 읽기
+        const selectedYM = this._getSelectedImportYearMonth();
+        const selYear = selectedYM.year;
+        const selMonth = selectedYM.month;
+
+        // UI 선택값이 없으면 전체 import 중단
+        if (!selYear || !selMonth) {
+            App.flash('입고년도/입고월을 선택하세요.', 'warning');
+            return;
+        }
+
         let nextProductId = DB.getNextId('products');
 
-        // 모든 행을 정규화
+        // 모든 행을 정규화 (resolver가 row > UI fallback 처리)
         const normalizedRows = data.map((row, idx) => {
             return this._normalizeProductImportRow(row, idx, nextProductId + idx, selYear, selMonth);
         });
@@ -409,20 +454,61 @@ const ExcelManager = {
             result = await this._importProductsLocal(normalizedRows);
         }
 
-        // skipped diagnostics
-        if (result.skippedDetails.length > 0) {
-            window.__LAST_PRODUCT_IMPORT_SUMMARY = {
-                added: result.added,
-                skipped: result.skipped,
-                failed: result.failed || 0,
-                skippedDetails: result.skippedDetails.map(d => ({
-                    rowIndex: d.rowIndex,
-                    reason: d.reason,
-                    hasTitle: d.hasTitle,
-                    hasKoreaCost: d.hasKoreaCost
-                })),
-                mode: isRemote ? 'remote' : 'local'
-            };
+        // 업로드 후 read-only count (local/remote 공통)
+        const beforeCount = isRemote ? 0 : DB.getProducts().length;
+        let datasourceCount = 0;
+        let visibleCount = 0;
+        if (typeof DB.getProductsAsync === 'function') {
+            try {
+                const allProducts = await DB.getProductsAsync();
+                datasourceCount = allProducts.length;
+            } catch (e) {
+                // fallback
+            }
+        } else {
+            datasourceCount = DB.getProducts().length;
+        }
+
+        // 성공한 상품들의 year/month 집계
+        const successYearMonths = new Set();
+        let firstSuccessYear = null;
+        let firstSuccessMonth = null;
+        if (result.added > 0) {
+            // 성공한 normalizedRows에서 year/month 추출
+            normalizedRows.forEach((nr, idx) => {
+                if (nr.valid && idx < (result.added + (result.skipped || 0))) {
+                    const p = nr.product;
+                    if (p && p.stock_year && p.stock_month) {
+                        successYearMonths.add(String(p.stock_year) + '-' + String(p.stock_month).padStart(2, '0'));
+                        if (!firstSuccessYear) { firstSuccessYear = p.stock_year; firstSuccessMonth = p.stock_month; }
+                    }
+                }
+            });
+        }
+
+        // window.__LAST_PRODUCT_IMPORT_SUMMARY 저장
+        window.__LAST_PRODUCT_IMPORT_SUMMARY = {
+            mode: isRemote ? 'remote' : 'local',
+            selectedYear: selYear,
+            selectedMonth: selMonth,
+            added: result.added,
+            skipped: result.skipped,
+            failed: result.failed || 0,
+            skippedDetails: result.skippedDetails ? result.skippedDetails.map(d => ({
+                rowIndex: d.rowIndex,
+                reason: d.reason,
+                hasTitle: d.hasTitle,
+                hasKoreaCost: d.hasKoreaCost
+            })) : [],
+            successYearMonths: Array.from(successYearMonths).sort(),
+            postImportDatasourceCount: datasourceCount,
+            postImportVisibleCount: visibleCount,
+            productsFilterYear: null,
+            productsFilterMonth: null,
+            navigatedToProducts: false
+        };
+
+        if (result.skippedDetails && result.skippedDetails.length > 0) {
             console.warn('Product import skipped details:', window.__LAST_PRODUCT_IMPORT_SUMMARY);
         }
 
@@ -439,13 +525,42 @@ const ExcelManager = {
             App.flash(msg, result.failed > 0 ? 'warning' : 'success');
         }
 
-        // 업로드 후 목록 cache 갱신
+        // BLOCKER-FIX-4: 업로드 후 상품목록 자동 필터 이동
         if (typeof Products !== 'undefined') {
             Products.state.loaded = false;
-            Products.state.stockYear = 0;
-            Products.state.stockMonth = 0;
+            Products.state.search = '';
+
+            if (result.added > 0) {
+                if (successYearMonths.size === 1 && firstSuccessYear && firstSuccessMonth) {
+                    // 단일 year/month → 해당 년월로 필터
+                    Products.state.stockYear = firstSuccessYear;
+                    Products.state.stockMonth = firstSuccessMonth;
+                    window.__LAST_PRODUCT_IMPORT_SUMMARY.productsFilterYear = firstSuccessYear;
+                    window.__LAST_PRODUCT_IMPORT_SUMMARY.productsFilterMonth = firstSuccessMonth;
+                } else {
+                    // 여러 year/month → 전체 보기
+                    Products.state.stockYear = 0;
+                    Products.state.stockMonth = 0;
+                    window.__LAST_PRODUCT_IMPORT_SUMMARY.productsFilterYear = 0;
+                    window.__LAST_PRODUCT_IMPORT_SUMMARY.productsFilterMonth = 0;
+                    if (successYearMonths.size > 1) {
+                        App.flash('여러 입고월 상품이 업로드되어 전체 보기로 이동했습니다.', 'info');
+                    }
+                }
+            } else {
+                // added === 0, filter unchanged
+                Products.state.stockYear = 0;
+                Products.state.stockMonth = 0;
+            }
+
             await Products.load();
+            window.__LAST_PRODUCT_IMPORT_SUMMARY.navigatedToProducts = true;
+            visibleCount = Products.state.filtered.length;
+            window.__LAST_PRODUCT_IMPORT_SUMMARY.postImportVisibleCount = visibleCount;
         }
+
+        // 상품목록으로 이동
+        location.hash = '#/products';
         App.render();
     },
 

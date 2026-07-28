@@ -134,6 +134,10 @@ const Products = {
         }
         const list = this.state.filtered;
         const totalStock = list.reduce((sum, p) => sum + (p.current_stock || 0), 0);
+        // BLOCKER-FIX-4: 현재 필터 정보 표시
+        const filterYear = this.state.stockYear;
+        const filterMonth = this.state.stockMonth;
+        const filterText = filterYear > 0 && filterMonth > 0 ? `${filterYear}년 ${filterMonth}월` : filterYear > 0 ? `${filterYear}년` : filterMonth > 0 ? `${filterMonth}월` : '전체';
         let html = `
             <div class="card">
                 <div class="action-bar">
@@ -151,6 +155,7 @@ const Products = {
                         <div class="stat-label">${t('products', 'total_count')}</div>
                         <div class="stat-value">${list.length} / ${this.state.products.length}</div>
                         <div class="text-muted" style="font-size:0.7rem; margin-top:0.15rem;">${t('products', 'displayed_vs_total')}</div>
+                        <div class="text-muted" style="font-size:0.7rem; margin-top:0.1rem;">현재 필터: ${filterText}</div>
                         <i class="fas fa-tshirt stat-icon"></i>
                     </div>
                     <div class="stat-card">
