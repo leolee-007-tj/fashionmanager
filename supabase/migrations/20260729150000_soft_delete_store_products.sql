@@ -52,31 +52,8 @@ BEGIN
         RAISE EXCEPTION 'Insufficient permissions' USING ERRCODE = '42501';
     END IF;
 
-    -- 4. Soft delete all non-deleted products in the store
+    -- 4. Soft delete all non-deleted products in the store (single UPDATE)
     v_now := now();
-    WITH updated AS (
-        UPDATE public.products
-        SET
-            deleted_at = v_now,
-            updated_by = v_uid,
-            updated_at = v_now,
-            version = public.products.version + 1
-        WHERE public.products.store_id = p_store_id
-          AND public.products.deleted_at IS NULL
-        RETURNING
-            public.products.id,
-            public.products.legacy_id,
-            public.products.store_id,
-            public.products.product_code,
-            public.products.original_title,
-            public.products.brand,
-            public.products.deleted_at,
-            public.products.updated_by,
-            public.products.updated_at
-    )
-    SELECT COUNT(*) INTO v_count FROM updated;
-
-    -- 5. Return updated rows
     RETURN QUERY
     WITH updated AS (
         UPDATE public.products
@@ -96,10 +73,23 @@ BEGIN
             public.products.brand,
             public.products.deleted_at,
             public.products.updated_by,
-            public.products.updated_at,
-            v_count AS deleted_count
+            public.products.updated_at
+    ),
+    counted AS (
+        SELECT COUNT(*) AS cnt FROM updated
     )
-    SELECT * FROM updated;
+    SELECT
+        u.id,
+        u.legacy_id,
+        u.store_id,
+        u.product_code,
+        u.original_title,
+        u.brand,
+        u.deleted_at,
+        u.updated_by,
+        u.updated_at,
+        c.cnt AS deleted_count
+    FROM updated u, counted c;
 END;
 $$;
 

@@ -297,16 +297,20 @@ const ExcelManager = {
         // 기존 모든 product_code 수집
         const existingCodes = [];
         if (isRemote && Array.isArray(existingProducts)) {
+            // BLOCKER-FIX-8: remote 모드에서는 listProducts() 결과만 사용.
+            // DB.getProducts()는 로컬 캐시로 stale 상태일 수 있어 사용하지 않는다.
             for (const p of existingProducts) {
                 if (p.product_code) existingCodes.push(p.product_code);
             }
+        } else {
+            // local 모드에서만 DB.getProducts() 사용
+            try {
+                const localProducts = DB.getProducts();
+                for (const p of localProducts) {
+                    if (p.product_code) existingCodes.push(p.product_code);
+                }
+            } catch (e) { /* ignore */ }
         }
-        try {
-            const localProducts = DB.getProducts();
-            for (const p of localProducts) {
-                if (p.product_code) existingCodes.push(p.product_code);
-            }
-        } catch (e) { /* ignore */ }
 
         const usedCodes = new Set(existingCodes);
         const prefixMax = new Map();
@@ -483,10 +487,37 @@ const ExcelManager = {
         let nextProductId = DB.getNextId('products');
         try {
             existingProducts = await dataSource.listProducts();
-            const maxRemoteLegacyId = existingProducts.reduce((max, p) => {
+            let maxRemoteLegacyId = existingProducts.reduce((max, p) => {
                 const lid = Number(p.legacy_id);
                 return Number.isFinite(lid) && lid > max ? lid : max;
             }, 0);
+
+            // BLOCKER-FIX-7: soft-delete된 상품도 legacy_id가 unique_products_legacy_id
+            // 제약조건에 걸리므로, deleted_at 관계없이 전체 max legacy_id를 조회한다.
+            try {
+                const supabaseClient = window.LESOULSupabase && window.LESOULSupabase.getClient();
+                if (supabaseClient) {
+                    const storeId = window.LESOULAppBootstrap?.getContext?.()?.activeMembership?.storeId;
+                    if (storeId) {
+                        const { data: maxLegacyRows } = await supabaseClient
+                            .from('products')
+                            .select('legacy_id')
+                            .eq('store_id', storeId)
+                            .not('legacy_id', 'is', null)
+                            .order('legacy_id', { ascending: false })
+                            .limit(1);
+                        if (maxLegacyRows && maxLegacyRows.length > 0) {
+                            const maxLegacyFromAll = Number(maxLegacyRows[0].legacy_id);
+                            if (Number.isFinite(maxLegacyFromAll) && maxLegacyFromAll > maxRemoteLegacyId) {
+                                maxRemoteLegacyId = maxLegacyFromAll;
+                            }
+                        }
+                    }
+                }
+            } catch (e) {
+                // fallback: active-only max 사용
+            }
+
             const localNextId = DB.getNextId('products');
             nextProductId = Math.max(maxRemoteLegacyId + 1, localNextId);
         } catch (e) {
@@ -531,7 +562,7 @@ const ExcelManager = {
                     skippedDetails.push({ ...nr, reason: 'REMOTE_CREATE_FAILED' });
                 }
             } catch (e) {
-                const is409 = e && (e.code === '409' || String(e.message || e.details || '').includes('409') || String(e.message || e.details || '').includes('Conflict'));
+                const is409 = e && (e.code === '409' || e.code === '23505' || String(e.message || e.details || '').includes('409') || String(e.message || e.details || '').includes('Conflict') || String(e.message || e.details || '').includes('duplicate'));
                 if (is409 && nr.product.product_code) {
                     productCodeDuplicateCount++;
                     skipped++;

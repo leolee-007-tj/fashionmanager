@@ -51,8 +51,8 @@ function normalizeRow(raw) {
     const koreaCost = parseInt(raw['한국매입원가(KRW)'] || raw['한국매입원가'] || raw['korea_cost'] || 0) || 0;
     const currentStock = parseInt(raw['초기재고'] || raw['현재재고'] || raw['재고'] || raw['수량'] || raw['stock'] || raw['current_stock'] || 0) || 0;
     const reservedStock = parseInt(raw['예약재고'] || raw['reserved_stock'] || 0) || 0;
-    const stockYear = String(raw['년도'] || raw['stock_year'] || '').trim();
-    const stockMonth = String(raw['월'] || raw['stock_month'] || '').trim();
+    const stockYear = String(raw['입고년도'] || raw['년도'] || raw['stock_year'] || '').trim();
+    const stockMonth = String(raw['입고월'] || raw['월'] || raw['stock_month'] || '').trim();
     const productCode = String(raw['상품코드'] || raw['product_code'] || '').trim();
     const category = String(raw['카테고리'] || raw['category'] || '').trim();
     const material = String(raw['소재'] || raw['material'] || '').trim();
@@ -150,8 +150,7 @@ function analyzeRows(rawRows) {
         duplicateIdentityGroups: duplicateIdentity.length,
         duplicateTitleOnlyCount: titleDupSet.size,
         uniqueProductCodeCount: productCodes.size,
-        productCodeDuplicateCount: valid.length - productCodes.size,
-        validRows: valid
+        productCodeDuplicateCount: valid.length - productCodes.size
     };
 }
 

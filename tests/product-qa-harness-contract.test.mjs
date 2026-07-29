@@ -47,8 +47,8 @@ function normalizeRow(raw) {
     const size = String(raw['사이즈'] || raw['size'] || '').trim();
     const koreaCost = parseInt(raw['한국매입원가(KRW)'] || raw['한국매입원가'] || raw['korea_cost'] || 0) || 0;
     const currentStock = parseInt(raw['초기재고'] || raw['현재재고'] || raw['재고'] || raw['수량'] || raw['stock'] || raw['current_stock'] || 0) || 0;
-    const stockYear = String(raw['년도'] || raw['stock_year'] || '').trim();
-    const stockMonth = String(raw['월'] || raw['stock_month'] || '').trim();
+    const stockYear = String(raw['입고년도'] || raw['년도'] || raw['stock_year'] || '').trim();
+    const stockMonth = String(raw['입고월'] || raw['월'] || raw['stock_month'] || '').trim();
 
     return {
         original_title: title,
