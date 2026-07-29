@@ -9864,7 +9864,9 @@ if (dataTarget === 'products') Products.toggleSelect(id);
 
 - `tests/product-import-count-integrity-contract.test.mjs` 신규: 17 tests, 0 fail
 - `tests/product-universal-delete-contract.test.mjs` 신규: 17 tests, 0 fail
-- 합계: 34 tests, 0 fail
+- `tests/product-delete-and-import-stabilization-contract.test.mjs` 신규: 22 tests, 0 fail
+- `tests/metrics-source-of-truth-contract.test.mjs` 신규: 8 tests, 0 fail
+- 합계: 64 tests, 0 fail
 
 ### Preflight 결과
 
