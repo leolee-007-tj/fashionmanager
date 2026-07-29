@@ -130,6 +130,19 @@ const DB = {
         return results;
     },
 
+    /**
+     * Store 내 모든 제품을 soft delete한다 (Supabase RPC).
+     * owner/manager만 가능. hard delete 금지.
+     * @returns {Promise<{deletedCount: number, error: string|null}>}
+     */
+    async deleteAllProductsAsync() {
+        const ds = this.getProductsDataSource();
+        if (ds.name !== 'SupabaseProductsDataSource') {
+            throw new Error('deleteAllProductsAsync is only available in remote mode');
+        }
+        return ds.deleteAllProducts();
+    },
+
     async batchUpdateProductsAsync(ids, updates) {
         const results = { success: [], failed: [], errors: [] };
         for (const id of ids) {
@@ -668,6 +681,32 @@ const DB = {
                         return true;
                     })
                     .catch(err => _wrapWriteError('deleteProduct', err));
+            },
+
+            /**
+             * Store 내 모든 제품을 soft delete한다.
+             * owner/manager만 가능. hard delete 금지.
+             * @returns {Promise<{deletedCount: number, error: string|null}>}
+             */
+            deleteAllProducts() {
+                _validateWriteContext('deleteAllProducts');
+                return client.rpc('soft_delete_store_products', {
+                    p_store_id: context.storeId
+                })
+                .then(response => {
+                    if (response.error) {
+                        const err = new Error('SupabaseProductsDataSource.deleteAllProducts RPC failed');
+                        if (response.error.code) err.code = response.error.code;
+                        if (response.error.message) err.details = response.error.message;
+                        throw err;
+                    }
+                    const raw = response.data;
+                    const deletedCount = Array.isArray(raw) && raw.length > 0
+                        ? Number(raw[0].deleted_count) || 0
+                        : 0;
+                    return { deletedCount, error: null };
+                })
+                .catch(err => _wrapWriteError('deleteAllProducts', err));
             }
         };
     },

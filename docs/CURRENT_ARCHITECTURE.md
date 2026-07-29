@@ -9874,4 +9874,14 @@ if (dataTarget === 'products') Products.toggleSelect(id);
 
 ### 실제 remote mutation
 
-- **NO** - migration 파일만 생성, remote db push 금지
+- `supabase/migrations/20260711001800_soft_delete_product_by_id.sql` → **적용 완료** (사용자 승인)
+- `supabase/migrations/20260729150000_soft_delete_store_products.sql` → **적용 완료** (사용자 승인)
+- `soft_delete_store_products` RPC: store 내 모든 제품 soft delete. owner/manager only. hard delete 금지.
+- `js/db.js`: `DB.deleteAllProductsAsync()` 추가
+
+### 486개 제품 정리
+
+- **soft delete 완료** (사용자 승인)
+- 486개 제품 모두 `deleted_at = now()` 설정
+- UI "총 상품 0/0" 확인
+- hard delete 사용 안 함
