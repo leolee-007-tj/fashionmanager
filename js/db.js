@@ -619,23 +619,38 @@ const DB = {
             },
 
             /**
-             * Local-only controlled soft delete via RPC (3-5L).
-             * 실제 DELETE 대신 soft_delete_product RPC 호출.
-             * legacy_id + store_id 조건으로 제한.
+             * BLOCKER-FIX-6: Universal soft delete via RPC.
+             * 실제 DELETE 대신 RPC 호출.
+             * id가 uuid 형식이면 remote_id (product uuid)로 soft_delete_product_by_id 호출.
+             * id가 숫자면 legacy_id로 기존 soft_delete_product 호출.
              */
             deleteProduct(id) {
                 _validateWriteContext('deleteProduct');
-                // BLOCKER-FIX-2: legacy_id 검증 추가
+                // uuid 형식 감지 (8-4-4-4-12 hex 패턴)
+                const isUuid = typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
                 const numericId = Number(id);
-                if (!id || !Number.isFinite(numericId) || numericId <= 0) {
-                    throw new Error('SupabaseProductsDataSource.deleteProduct requires valid legacy_id (positive integer)');
-                }
-                const payload = {
-                    p_store_id: context.storeId,
-                    p_legacy_id: numericId
-                };
+                const isNumeric = Number.isFinite(numericId) && numericId > 0;
 
-                return client.rpc('soft_delete_product', payload)
+                if (!isUuid && !isNumeric) {
+                    throw new Error('SupabaseProductsDataSource.deleteProduct requires valid product_id (uuid) or legacy_id (positive integer)');
+                }
+
+                let rpcName, payload;
+                if (isUuid) {
+                    rpcName = 'soft_delete_product_by_id';
+                    payload = {
+                        p_store_id: context.storeId,
+                        p_product_id: id
+                    };
+                } else {
+                    rpcName = 'soft_delete_product';
+                    payload = {
+                        p_store_id: context.storeId,
+                        p_legacy_id: numericId
+                    };
+                }
+
+                return client.rpc(rpcName, payload)
                     .then(response => {
                         if (response.error) {
                             const err = new Error('SupabaseProductsDataSource.deleteProduct RPC failed');

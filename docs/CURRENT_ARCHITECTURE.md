@@ -9763,3 +9763,113 @@ if (dataTarget === 'products') Products.toggleSelect(id);
 
 - **NO** - 실제 상품 대량 삭제/수정/등록 수행하지 않음
 - 테스트/예시 상품 삭제도 사용자 승인 전 금지
+
+---
+
+## BLOCKER-FIX-6: Product import count integrity and universal delete guard (2026-07-29)
+
+### 275 vs 250 분석
+
+- **275 input rows** (template_products001.xlsx)
+- title-only unique ≈ 249 (상품명 중복으로 인한 차이)
+- 상품명 only dedupe 금지: 상품명만 같다고 skip하지 않음
+- 정확한 import identity key: `brand + original_title + color + size + korea_cost + stock_year + stock_month`
+- title-only unique가 249라는 것은 import count가 275가 아닌 이유가 **title-only dedupe**일 가능성을 시사
+- 추가 원인: **product_code collision** — 같은 brand prefix가 많은 batch에서 기존 `DB.generateProductCode()`가 batch 내 중복 코드 생성
+
+### product_code batch allocator
+
+- `_buildProductCodeAllocator(isRemote, existingProducts)` 구현
+- 기존 DB의 모든 product_code 수집 → prefix별 maxNum 분석
+- batch 내에서 할당된 코드도 `usedCodes` Set에 추가하여 중복 방지
+- `_normalizeProductImportRow`에 `codeAllocator` 전달
+- row에 `product_code`가 있으면 우선 사용하되, 기존/배치 중복이면 자동 새 코드 부여 (`PRODUCT_CODE_REPLACED`)
+- `DB.generateProductCode()` 직접 호출 금지
+
+### Import duplicate policy
+
+- **brand+title-only dedupe 제거** (너무 공격적이어서 데이터 손실)
+- duplicate 판단 key: `brand + original_title + color + size + korea_cost + stock_year + stock_month`
+- 완전 동일 key가 existing DB에 있어도 `DUPLICATE_CANDIDATE`로만 기록, **자동 skip하지 않음**
+- 사용자가 나중에 정리 가능
+
+### Import summary (`window.__LAST_PRODUCT_IMPORT_SUMMARY`)
+
+| 필드 | 설명 |
+|---|---|
+| `inputRows` | 원본 데이터 행 수 |
+| `normalizedValidRows` | 정규화 성공 행 수 |
+| `added` | 실제 추가된 상품 수 |
+| `skipped` | 건너뛴 상품 수 |
+| `failed` | 실패한 상품 수 |
+| `duplicateCandidateCount` | 완전 동일 key 중복 후보 수 |
+| `productCodeGeneratedCount` | 자동 생성된 product_code 수 |
+| `productCodeReplacedCount` | 대체된 product_code 수 |
+| `productCodeDuplicateCount` | 중복 product_code로 인한 실패 수 |
+| `expectedDatasourceCountAfter` | `beforeDatasourceCount + added` |
+| `postImportDatasourceCount` | 실제 업로드 후 데이터소스 수 |
+| `countDeltaMatchesAdded` | `postImportDatasourceCount === expectedDatasourceCountAfter` |
+| `totalInitialStockInFile` | 원본 파일의 초기재고 합계 |
+| `totalCurrentStockAdded` | 추가된 상품의 current_stock 합계 |
+| `successYearMonths` | 성공한 상품들의 year/month 목록 |
+
+### Stock count policy
+
+- `totalInitialStockInFile`: raw file data 기준 (`초기재고` 합계)
+- `totalCurrentStockAdded`: normalized product의 `current_stock` 합계
+- post-import: `totalStock` = 모든 loaded product의 `current_stock` 합계
+- `availableStock` = `totalStock - reservedStock`
+- dashboard 기준: `deleted_at IS NULL` 조건
+
+### Universal delete policy
+
+- 삭제 키 우선순위: `remote_id` > `legacy_id` > `id`
+- `remote_id` = products.id (uuid) → `soft_delete_product_by_id` RPC
+- `legacy_id` = positive integer → `soft_delete_product` RPC
+- 삭제 가능 대상:
+  - 수동 등록 상품 (legacy_id)
+  - 엑셀 업로드 상품 (remote_id or legacy_id)
+  - 예시상품 (remote_id or legacy_id)
+  - remote_id만 있는 상품 (remote_id)
+  - legacy_id만 있는 상품 (legacy_id)
+  - local numeric id 상품 (id → legacy_id)
+- 삭제 불가: 식별자 없는 상품만 (`MISSING_DELETE_ID`)
+
+### Delete summary (`window.__LAST_PRODUCT_DELETE_SUMMARY__`)
+
+| 필드 | 설명 |
+|---|---|
+| `mode` | `remote` / `local` |
+| `requestedCount` | 요청된 삭제 수 |
+| `successCount` | 성공 수 |
+| `failCount` | 실패 수 |
+| `failReasons` | 실패 사유 목록 (safe string only) |
+| `datasourceCountBefore` | 삭제 전 데이터소스 수 |
+| `datasourceCountAfter` | 삭제 후 데이터소스 수 |
+| `visibleCountAfter` | 삭제 후 표시 상품 수 |
+| `usedRemoteIdCount` | remote_id(uuid) 사용 수 |
+| `usedLegacyIdCount` | legacy_id(number) 사용 수 |
+| `missingIdentifierCount` | 식별자 누락 수 |
+| `countDeltaMatchesSuccess` | `afterCount === beforeCount - successCount` |
+
+### Migration 필요 여부
+
+- **REQUIRES_USER_APPROVAL_FOR_REMOTE_MIGRATION: true**
+- `supabase/migrations/20260711001800_soft_delete_product_by_id.sql` 신규 생성
+- `soft_delete_product_by_id(p_store_id uuid, p_product_id uuid)` RPC
+- SECURITY DEFINER, owner/manager only, soft delete only
+- remote db push는 사용자 승인 전 금지
+
+### Tests 결과
+
+- `tests/product-import-count-integrity-contract.test.mjs` 신규: 17 tests, 0 fail
+- `tests/product-universal-delete-contract.test.mjs` 신규: 17 tests, 0 fail
+- 합계: 34 tests, 0 fail
+
+### Preflight 결과
+
+- `bash scripts/remote-deployment-preflight.sh`: **PASS**
+
+### 실제 remote mutation
+
+- **NO** - migration 파일만 생성, remote db push 금지

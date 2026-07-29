@@ -104,12 +104,14 @@ const Products = {
         if (!product) return { type: 'invalid', value: null, reason: 'PRODUCT_NOT_FOUND' };
         const isRemote = this.isRemoteProductsMode();
         if (isRemote) {
+            // BLOCKER-FIX-6: remote_id 우선 (uuid). remote_id = products.id = product.remote_id
+            // SupabaseProductsDataSource.deleteProduct는 uuid를 감지하여 soft_delete_product_by_id RPC 호출
+            if (product.remote_id) {
+                return { type: 'remote_id', value: product.remote_id };
+            }
             const legacyId = product.legacy_id != null ? Number(product.legacy_id) : null;
             if (Number.isFinite(legacyId) && legacyId > 0) {
                 return { type: 'legacy_id', value: legacyId };
-            }
-            if (product.remote_id) {
-                return { type: 'remote_id', value: product.remote_id, reason: 'REMOTE_ID_ONLY_NO_RPC' };
             }
             return { type: 'invalid', value: null, reason: 'MISSING_DELETE_ID' };
         }
@@ -321,7 +323,8 @@ const Products = {
                 const actionKey = Products._getProductActionKey(p);
                 const actionArg = JSON.stringify(actionKey);
                 const deleteTarget = Products._getProductDeleteTarget(p);
-                const canDelete = deleteTarget.type === 'legacy_id';
+                // BLOCKER-FIX-6: remote_id + legacy_id 모두 삭제 가능
+                const canDelete = deleteTarget.type === 'legacy_id' || deleteTarget.type === 'remote_id';
                 const deleteDisabledAttr = canDelete ? '' : 'disabled title="삭제 불가: ' + deleteTarget.reason + '"';
                 html += `
                     <tr>
@@ -554,11 +557,7 @@ const Products = {
                 failReasons.push(deleteTarget.reason || 'invalid delete target');
                 continue;
             }
-            if (deleteTarget.type === 'remote_id') {
-                failCount++;
-                failReasons.push('REMOTE_ID_ONLY_NO_RPC');
-                continue;
-            }
+            // BLOCKER-FIX-6: remote_id (uuid) 또는 legacy_id 모두 지원
             try {
                 await DB.deleteProductAsync(deleteTarget.value);
                 successCount++;
@@ -573,19 +572,20 @@ const Products = {
         if (failCount > 0) msg += ' (' + failCount + t('common', 'failed') + ')';
         App.flash(msg, failCount > 0 ? 'warning' : 'success');
 
-        // BLOCKER-FIX-5: delete summary 저장
-        const afterCount = typeof DB.getProductsAsync === 'function'
-            ? (await DB.getProductsAsync()).length
-            : this.state.products.length - successCount;
-        window.__LAST_PRODUCT_BATCH_DELETE_SUMMARY__ = {
+        // BLOCKER-FIX-6: delete summary 저장 (enhanced fields)
+        window.__LAST_PRODUCT_DELETE_SUMMARY__ = {
             mode: this.isRemoteProductsMode() ? 'remote' : 'local',
-            requested: selectedKeys.length,
-            success: successCount,
-            failed: failCount,
+            requestedCount: selectedKeys.length,
+            successCount,
+            failCount,
             failReasons: failReasons.length > 0 ? failReasons : undefined,
-            beforeCount,
-            afterCount,
-            visibleCount: 0
+            datasourceCountBefore: beforeCount,
+            datasourceCountAfter: 0,
+            visibleCountAfter: 0,
+            usedRemoteIdCount: 0,
+            usedLegacyIdCount: 0,
+            missingIdentifierCount: 0,
+            countDeltaMatchesSuccess: false
         };
 
         if (failCount > 0) {
@@ -594,8 +594,10 @@ const Products = {
         // BLOCKER-FIX-2: 삭제 후 reload
         this.state.loaded = false;
         await this.load();
-        if (window.__LAST_PRODUCT_BATCH_DELETE_SUMMARY__) {
-            window.__LAST_PRODUCT_BATCH_DELETE_SUMMARY__.visibleCount = this.state.filtered.length;
+        if (window.__LAST_PRODUCT_DELETE_SUMMARY__) {
+            window.__LAST_PRODUCT_DELETE_SUMMARY__.datasourceCountAfter = this.state.products.length;
+            window.__LAST_PRODUCT_DELETE_SUMMARY__.visibleCountAfter = this.state.filtered.length;
+            window.__LAST_PRODUCT_DELETE_SUMMARY__.countDeltaMatchesSuccess = (this.state.products.length === beforeCount - successCount);
         }
         App.render();
     },
@@ -604,7 +606,22 @@ const Products = {
         if (!confirm(t('common', 'confirm_delete') + '?')) return;
         const isRemote = this.isRemoteProductsMode();
         const beforeCount = this.state.products.length;
-        let deleteSummary = { mode: isRemote ? 'remote' : 'local', actionKey: String(id), success: false, reason: null, beforeCount, afterCount: 0, visibleCount: 0 };
+        // BLOCKER-FIX-6: enhanced delete summary
+        let deleteSummary = {
+            mode: isRemote ? 'remote' : 'local',
+            requestedCount: 1,
+            successCount: 0,
+            failCount: 0,
+            failReasons: [],
+            datasourceCountBefore: beforeCount,
+            datasourceCountAfter: 0,
+            visibleCountAfter: 0,
+            usedRemoteIdCount: 0,
+            usedLegacyIdCount: 0,
+            missingIdentifierCount: 0,
+            countDeltaMatchesSuccess: false,
+            actionKey: String(id)
+        };
 
         // BLOCKER-FIX-5: _findProductByActionKey로 상품 찾기
         const product = this._findProductByActionKey(id);
@@ -614,40 +631,40 @@ const Products = {
             if (Number.isFinite(numericId) && numericId > 0) {
                 try {
                     await DB.deleteProductAsync(numericId);
-                    deleteSummary.success = true;
+                    deleteSummary.successCount = 1;
+                    deleteSummary.usedLegacyIdCount = 1;
                 } catch (e) {
+                    deleteSummary.failCount = 1;
+                    deleteSummary.failReasons.push(e.message || 'unknown error');
                     App.flash('상품 삭제에 실패했습니다: ' + (e.message || 'unknown error'), 'error');
-                    deleteSummary.reason = e.message || 'unknown error';
                     window.__LAST_PRODUCT_DELETE_SUMMARY__ = deleteSummary;
                     return;
                 }
             } else {
+                deleteSummary.missingIdentifierCount = 1;
                 App.flash('상품을 찾을 수 없거나 유효하지 않은 식별값입니다.', 'error');
-                deleteSummary.reason = 'PRODUCT_NOT_FOUND';
                 window.__LAST_PRODUCT_DELETE_SUMMARY__ = deleteSummary;
                 return;
             }
         } else {
             const deleteTarget = this._getProductDeleteTarget(product);
             if (deleteTarget.type === 'invalid') {
+                deleteSummary.failCount = 1;
+                deleteSummary.failReasons.push(deleteTarget.reason || 'MISSING_DELETE_ID');
                 App.flash('이 상품은 삭제할 수 없는 상태입니다. (' + deleteTarget.reason + ')', 'error');
-                deleteSummary.reason = deleteTarget.reason;
                 window.__LAST_PRODUCT_DELETE_SUMMARY__ = deleteSummary;
                 return;
             }
-            if (deleteTarget.type === 'remote_id') {
-                App.flash('이 상품은 remote_id만 있어 현재 삭제 RPC가 필요합니다. DB migration 승인 후 처리할 수 있습니다.', 'error');
-                console.warn('Products.delete: remote_id-only product, no delete RPC available', { hasRemoteId: true });
-                deleteSummary.reason = 'REMOTE_ID_ONLY_NO_RPC';
-                window.__LAST_PRODUCT_DELETE_SUMMARY__ = deleteSummary;
-                return;
-            }
+            // BLOCKER-FIX-6: remote_id (uuid) 또는 legacy_id 모두 지원
             try {
                 await DB.deleteProductAsync(deleteTarget.value);
-                deleteSummary.success = true;
+                deleteSummary.successCount = 1;
+                if (deleteTarget.type === 'remote_id') deleteSummary.usedRemoteIdCount = 1;
+                if (deleteTarget.type === 'legacy_id') deleteSummary.usedLegacyIdCount = 1;
             } catch (e) {
+                deleteSummary.failCount = 1;
+                deleteSummary.failReasons.push(e.message || 'unknown error');
                 App.flash('상품 삭제에 실패했습니다: ' + (e.message || 'unknown error'), 'error');
-                deleteSummary.reason = e.message || 'unknown error';
                 window.__LAST_PRODUCT_DELETE_SUMMARY__ = deleteSummary;
                 return;
             }
@@ -657,8 +674,9 @@ const Products = {
         this.state.loaded = false;
         this.state.selected.clear();
         await this.load();
-        deleteSummary.afterCount = this.state.products.length;
-        deleteSummary.visibleCount = this.state.filtered.length;
+        deleteSummary.datasourceCountAfter = this.state.products.length;
+        deleteSummary.visibleCountAfter = this.state.filtered.length;
+        deleteSummary.countDeltaMatchesSuccess = (this.state.products.length === beforeCount - deleteSummary.successCount);
         window.__LAST_PRODUCT_DELETE_SUMMARY__ = deleteSummary;
 
         App.flash(t('common', 'delete') + '!', 'success');
