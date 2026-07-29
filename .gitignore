@@ -32,5 +32,8 @@ data_export_*.json
 # Node modules (if added later)
 node_modules/
 
+# Test results (QA automation)
+test-results/
+
 # Logs
 *.log

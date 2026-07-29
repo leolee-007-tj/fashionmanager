@@ -9885,3 +9885,41 @@ if (dataTarget === 'products') Products.toggleSelect(id);
 - 486개 제품 모두 `deleted_at = now()` 설정
 - UI "총 상품 0/0" 확인
 - hard delete 사용 안 함
+
+## 76. Product QA Automation Harness (2026-07-29)
+
+### 목적
+
+Excel 기반 상품 업로드 자동 검증 시스템. 사용자가 엑셀 파일을 준비하면 TRAE가 자동으로 preview/execute를 실행하여 에러를 조기에 발견한다.
+
+### 핵심 정책
+
+- **Preview only가 기본값**: 실제 데이터 변경 없이 파일 분석만 수행
+- **275 hard-code 금지**: 모든 상품 수는 엑셀 파일에서 동적으로 계산
+- **Remote execute는 명시 플래그와 delete capability 필요**: `RUN_PRODUCT_IMPORT_EXECUTE=1` + `RUN_REMOTE_PRODUCT_IMPORT_EXECUTE=1`
+- **Product count는 파일 행 수에 따라 동적 계산**: identity key 기준 중복 검출
+
+### 파일 구조
+
+| 파일 | 역할 |
+|---|---|
+| `scripts/product-qa-harness.mjs` | Excel 파싱, row 분석, preview/report 생성 |
+| `tests/product-qa-harness-contract.test.mjs` | Contract 테스트 (13개) |
+| `docs/PRODUCT_QA_AUTOMATION.md` | 사용법 문서 |
+
+### Identity Key
+
+중복 판단 기준: `brand + original_title + color + size + korea_cost + stock_year + stock_month`
+
+### 안전 장치
+
+1. **Browser Environment Gate**: 서버 접근 가능 및 SupabaseProductsDataSource 활성화 확인
+2. **Delete Capability Gate**: `soft_delete_product_by_id` RPC 코드/마이그레이션 존재 확인
+3. **Preview Only 기본값**: 명시 플래그 없이 업로드 실행 금지
+4. **Repeated Upload Guard**: 기본 모드에서 append explosion 방지
+
+### 상품목록 먼저, 다른 화면은 Read-only Smoke
+
+- 상품목록 자동 검증이 PASS해야 함
+- 그 후 Customers/Orders/Analytics read-only smoke 진행
+- Orders write smoke는 상품목록 안정화 후에만 허용

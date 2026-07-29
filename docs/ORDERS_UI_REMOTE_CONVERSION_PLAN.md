@@ -250,7 +250,7 @@ remote mode에서는 다음 작업이 절대 금지된다:
 | 우선순위 | 단계 | 내용 | 상태 |
 |---|---|---|---|
 | 1 | 3-8A.10-A | Manager/Staff browser smoke | ✅ 완료 (계정 unavailable) |
-| 2 | 3-8A.10-B | Remote UI post-bugfix smoke (recommended) | 🔜 BLOCKER-FIX-3 (Dashboard/product list datasource mismatch) 완료 (2026-07-27). BLOCKER-FIX-4 (Product import year/month visibility guard) 완료 (2026-07-28). BLOCKER-FIX-5 (Product CRUD identity/delete/metrics integrity) 완료 (2026-07-29). BLOCKER-FIX-6 (Product import count integrity / product_code collision / universal delete) 완료 (2026-07-29). Product UI blocker 6건 모두 해결 후 재개 |
+| 2 | 3-8A.10-B | Remote UI post-bugfix smoke (recommended) | 🔜 BLOCKER-FIX-3 ~ BLOCKER-FIX-6 해결 완료. **Product QA automation harness** (2026-07-29) 구축 완료 후 재개. Product list QA 자동 검증 PASS 후 Customers/Orders/Analytics read-only smoke 진행. Orders write smoke는 상품목록 안정화 후에만 허용. |
 | 3 | 3-8B | Analytics/Customers remote integration audit | 🔜 예정 |
 | 4 | 3-9 | Backup/export/import policy | 🔜 예정 |
 
