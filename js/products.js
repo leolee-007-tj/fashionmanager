@@ -51,6 +51,76 @@ const Products = {
         }
     },
 
+    // BLOCKER-FIX-5: Product identity helpers
+
+    /**
+     * 상품 객체에서 안전한 action key (string)를 반환한다.
+     * 우선순위: legacy_id > id > remote_id
+     * @param {Object} product
+     * @returns {string} 빈 문자열이면 identity 없음
+     */
+    _getProductActionKey(product) {
+        if (!product) return '';
+        if (Number.isFinite(Number(product.legacy_id)) && Number(product.legacy_id) > 0) return String(product.legacy_id);
+        if (Number.isFinite(Number(product.id)) && Number(product.id) > 0) return String(product.id);
+        if (product.remote_id) return 'remote:' + String(product.remote_id);
+        return '';
+    },
+
+    /**
+     * action key로 this.state.products에서 상품을 찾는다.
+     * @param {string} key
+     * @returns {Object|null}
+     */
+    _findProductByActionKey(key) {
+        if (!key || !this.state.products) return null;
+        // Try legacy_id and id matching first
+        const numericKey = Number(key);
+        if (Number.isFinite(numericKey) && numericKey > 0) {
+            const byLegacyId = this.state.products.find(p => Number(p.legacy_id) === numericKey);
+            if (byLegacyId) return byLegacyId;
+            const byId = this.state.products.find(p => Number(p.id) === numericKey);
+            if (byId) return byId;
+        }
+        // Try remote: prefix
+        if (key.startsWith('remote:')) {
+            const uuid = key.slice(7);
+            return this.state.products.find(p => String(p.remote_id) === uuid) || null;
+        }
+        // Try direct string match
+        return this.state.products.find(p =>
+            String(p.id) === key ||
+            String(p.legacy_id) === key ||
+            String(p.remote_id) === key
+        ) || null;
+    },
+
+    /**
+     * 상품의 delete target을 반환한다.
+     * @param {Object} product
+     * @returns {Object} { type: 'legacy_id'|'remote_id'|'invalid', value, reason? }
+     */
+    _getProductDeleteTarget(product) {
+        if (!product) return { type: 'invalid', value: null, reason: 'PRODUCT_NOT_FOUND' };
+        const isRemote = this.isRemoteProductsMode();
+        if (isRemote) {
+            const legacyId = product.legacy_id != null ? Number(product.legacy_id) : null;
+            if (Number.isFinite(legacyId) && legacyId > 0) {
+                return { type: 'legacy_id', value: legacyId };
+            }
+            if (product.remote_id) {
+                return { type: 'remote_id', value: product.remote_id, reason: 'REMOTE_ID_ONLY_NO_RPC' };
+            }
+            return { type: 'invalid', value: null, reason: 'MISSING_DELETE_ID' };
+        }
+        // Local mode: numeric id
+        const localId = product.id != null ? Number(product.id) : null;
+        if (Number.isFinite(localId) && localId > 0) {
+            return { type: 'legacy_id', value: localId };
+        }
+        return { type: 'invalid', value: null, reason: 'MISSING_LOCAL_ID' };
+    },
+
     // 모든 상품에 대해 분류키워드 자동 적용
     // - DB에 저장된 분류값이 있으면 그대로 사용
     // - 없으면 original_title로 실시간 분류하여 DB에 저장
@@ -247,13 +317,15 @@ const Products = {
                 const colorClass = p.color ? 'classification-badge color' : 'classification-badge unclassified';
                 const sizeClass = p.size ? 'classification-badge size' : 'classification-badge unclassified';
                 const tooltipInfo = classified._source === 'computed' ? ` (${t('common', 'auto_classified')})` : '';
-                // BLOCKER-FIX-2: actionKey를 안전하게 string 변환하여 JSON.stringify로 onclick 인자 전달
-                const actionKey = String(p.id ?? p.legacy_id ?? p.remote_id ?? '');
+                // BLOCKER-FIX-5: 상품 identity resolver로 actionKey 생성
+                const actionKey = Products._getProductActionKey(p);
                 const actionArg = JSON.stringify(actionKey);
-                const hasValidId = !!(p.id || p.legacy_id);
+                const deleteTarget = Products._getProductDeleteTarget(p);
+                const canDelete = deleteTarget.type === 'legacy_id';
+                const deleteDisabledAttr = canDelete ? '' : 'disabled title="삭제 불가: ' + deleteTarget.reason + '"';
                 html += `
                     <tr>
-                        <td><input type="checkbox" class="row-checkbox" data-id="${p.id}" data-target="products" ${this.state.selected.has(Number(p.id || p.legacy_id)) ? 'checked' : ''}></td>
+                        <td><input type="checkbox" class="row-checkbox" data-id="${actionKey}" data-target="products" ${this.state.selected.has(actionKey) ? 'checked' : ''}></td>
                         <td>${p.image ? `<img src="${p.image}" class="product-thumb">` : '-'}</td>
                         <td><strong>${p.brand || '-'}</strong></td>
                         <td>${p.original_title || '-'}</td>
@@ -270,7 +342,7 @@ const Products = {
                             <button type="button" class="btn btn-sm btn-secondary" onclick="Products.editProduct(${actionArg})" title="${t('products', 'edit')}">
                                 <i class="fas fa-edit"></i>
                             </button>
-                            <button class="btn btn-sm btn-danger" onclick="Products.delete(${actionArg})" ${hasValidId ? '' : 'disabled title="삭제 불가: legacy_id 없음"'}>
+                            <button class="btn btn-sm btn-danger" onclick="Products.delete(${actionArg})" ${deleteDisabledAttr}>
                                 <i class="fas fa-trash"></i>
                             </button>
                         </td>
@@ -341,23 +413,29 @@ const Products = {
     },
 
     toggleSelect(id) {
-        const numId = Number(id);
-        if (this.state.selected.has(numId)) {
-            this.state.selected.delete(numId);
+        const key = String(id);
+        if (this.state.selected.has(key)) {
+            this.state.selected.delete(key);
         } else {
-            this.state.selected.add(numId);
+            this.state.selected.add(key);
         }
         App.renderPage();
     },
 
     toggleSelectAll() {
         const total = this.state.filtered.length;
-        const selectedCount = this.state.filtered.filter(p => this.state.selected.has(Number(p.id))).length;
+        const selectedCount = this.state.filtered.filter(p => {
+            const key = this._getProductActionKey(p);
+            return this.state.selected.has(key);
+        }).length;
         if (selectedCount === total) {
             this.state.selected.clear();
         } else {
             this.state.selected.clear();
-            this.state.filtered.forEach(p => this.state.selected.add(Number(p.id)));
+            this.state.filtered.forEach(p => {
+                const key = this._getProductActionKey(p);
+                if (key) this.state.selected.add(key);
+            });
         }
         App.renderPage();
     },
@@ -369,20 +447,13 @@ const Products = {
         }
         if (!confirm(this.state.selected.size + t('common', 'confirm_reclassify_items'))) return;
         const isRemote = this.isRemoteProductsMode();
-        const selectedIds = Array.from(this.state.selected);
+        const selectedKeys = Array.from(this.state.selected);
         let successCount = 0;
         let failCount = 0;
-        for (const id of selectedIds) {
-            // BLOCKER-FIX-2: remote mode에서는 this.state.products에서 찾기
-            let product;
-            if (isRemote) {
-                product = this.state.products.find(p =>
-                    Number(p.id) === Number(id) || Number(p.legacy_id) === Number(id)
-                );
-            } else {
-                product = DB.getProducts().find(p => p.id === parseInt(id));
-            }
-            if (!product || !product.original_title) continue;
+        for (const key of selectedKeys) {
+            // BLOCKER-FIX-5: _findProductByActionKey로 찾기
+            const product = this._findProductByActionKey(key);
+            if (!product || !product.original_title) { failCount++; continue; }
             try {
                 const result = ClassificationService.classify(product.original_title);
                 const updatePayload = {
@@ -392,19 +463,14 @@ const Products = {
                     material: result.material || '',
                     updated_at: new Date().toISOString()
                 };
-                if (isRemote) {
-                    const legacyId = product.legacy_id || product.id;
-                    if (legacyId && Number.isFinite(Number(legacyId)) && Number(legacyId) > 0) {
-                        updatePayload.legacy_id = Number(legacyId);
-                        await DB.updateProductAsync(Number(legacyId), updatePayload);
-                    } else {
-                        failCount++;
-                        continue;
-                    }
+                const deleteTarget = this._getProductDeleteTarget(product);
+                if (deleteTarget.type === 'legacy_id') {
+                    updatePayload.legacy_id = deleteTarget.value;
+                    await DB.updateProductAsync(deleteTarget.value, updatePayload);
                 } else {
-                    await DB.updateProductAsync(id, updatePayload);
+                    failCount++;
+                    continue;
                 }
-                // this.state.products도 업데이트
                 Object.assign(product, updatePayload);
                 successCount++;
             } catch (e) {
@@ -433,12 +499,17 @@ const Products = {
             App.flash(t('common', 'invalid_input'), 'error');
             return;
         }
-        const selectedIds = Array.from(this.state.selected);
+        const selectedKeys = Array.from(this.state.selected);
         let successCount = 0;
         let failCount = 0;
-        for (const id of selectedIds) {
+        for (const key of selectedKeys) {
+            // BLOCKER-FIX-5: _findProductByActionKey로 찾고 legacy_id로 update
+            const product = this._findProductByActionKey(key);
+            if (!product) { failCount++; continue; }
+            const deleteTarget = this._getProductDeleteTarget(product);
+            if (deleteTarget.type !== 'legacy_id') { failCount++; continue; }
             try {
-                await DB.updateProductAsync(id, {
+                await DB.updateProductAsync(deleteTarget.value, {
                     stock_year: y,
                     stock_month: m,
                     updated_at: new Date().toISOString()
@@ -463,110 +534,133 @@ const Products = {
             return;
         }
         if (!confirm(this.state.selected.size + t('common', 'confirm_delete_items'))) return;
-        const isRemote = this.isRemoteProductsMode();
-        const selectedIds = Array.from(this.state.selected);
+        const selectedKeys = Array.from(this.state.selected);
         let successCount = 0;
         let failCount = 0;
         const failReasons = [];
-        for (const id of selectedIds) {
-            // BLOCKER-FIX-2: remote mode에서 legacy_id 검증
-            if (isRemote) {
-                const target = this.state.products.find(p =>
-                    Number(p.id) === Number(id) || Number(p.legacy_id) === Number(id)
-                );
-                if (target) {
-                    const legacyId = target.legacy_id || target.id;
-                    if (!legacyId || !Number.isFinite(Number(legacyId)) || Number(legacyId) <= 0) {
-                        failCount++;
-                        failReasons.push('legacy_id missing');
-                        continue;
-                    }
-                    try {
-                        await DB.deleteProductAsync(legacyId);
-                        successCount++;
-                    } catch (e) {
-                        failCount++;
-                        failReasons.push(e.message || 'delete failed');
-                    }
-                } else {
-                    failCount++;
-                    failReasons.push('product not found');
-                }
-            } else {
-                try {
-                    await DB.deleteProductAsync(id);
-                    successCount++;
-                } catch (e) {
-                    failCount++;
-                    failReasons.push(e.message || 'delete failed');
-                }
+        const beforeCount = this.state.products.length;
+
+        for (const key of selectedKeys) {
+            // BLOCKER-FIX-5: _findProductByActionKey로 찾기
+            const product = this._findProductByActionKey(key);
+            if (!product) {
+                failCount++;
+                failReasons.push('product not found for key: ' + key);
+                continue;
+            }
+            const deleteTarget = this._getProductDeleteTarget(product);
+            if (deleteTarget.type === 'invalid') {
+                failCount++;
+                failReasons.push(deleteTarget.reason || 'invalid delete target');
+                continue;
+            }
+            if (deleteTarget.type === 'remote_id') {
+                failCount++;
+                failReasons.push('REMOTE_ID_ONLY_NO_RPC');
+                continue;
+            }
+            try {
+                await DB.deleteProductAsync(deleteTarget.value);
+                successCount++;
+            } catch (e) {
+                failCount++;
+                failReasons.push(e.message || 'delete failed');
             }
         }
+
         this.state.selected.clear();
         let msg = successCount + t('common', 'delete') + '!';
         if (failCount > 0) msg += ' (' + failCount + t('common', 'failed') + ')';
         App.flash(msg, failCount > 0 ? 'warning' : 'success');
+
+        // BLOCKER-FIX-5: delete summary 저장
+        const afterCount = typeof DB.getProductsAsync === 'function'
+            ? (await DB.getProductsAsync()).length
+            : this.state.products.length - successCount;
+        window.__LAST_PRODUCT_BATCH_DELETE_SUMMARY__ = {
+            mode: this.isRemoteProductsMode() ? 'remote' : 'local',
+            requested: selectedKeys.length,
+            success: successCount,
+            failed: failCount,
+            failReasons: failReasons.length > 0 ? failReasons : undefined,
+            beforeCount,
+            afterCount,
+            visibleCount: 0
+        };
+
         if (failCount > 0) {
             console.warn('Products.batchDelete failures:', failReasons);
         }
         // BLOCKER-FIX-2: 삭제 후 reload
         this.state.loaded = false;
         await this.load();
+        if (window.__LAST_PRODUCT_BATCH_DELETE_SUMMARY__) {
+            window.__LAST_PRODUCT_BATCH_DELETE_SUMMARY__.visibleCount = this.state.filtered.length;
+        }
         App.render();
     },
 
     async delete(id) {
         if (!confirm(t('common', 'confirm_delete') + '?')) return;
-        // BLOCKER-FIX-2: remote mode에서 legacy_id 검증
         const isRemote = this.isRemoteProductsMode();
-        if (isRemote && typeof DB.deleteProductAsync === 'function') {
-            // this.state.products에서 대상 product 찾기 (id/legacy_id/remote_id)
-            const target = this.state.products.find(p =>
-                String(p.id) === String(id) ||
-                String(p.legacy_id) === String(id) ||
-                String(p.remote_id) === String(id)
-            );
-            if (target) {
-                const legacyId = target.legacy_id || target.id;
-                if (!legacyId || !Number.isFinite(Number(legacyId)) || Number(legacyId) <= 0) {
-                    App.flash('이 상품은 legacy_id가 없어 현재 UI 삭제가 불가능합니다. 별도 cleanup/RPC가 필요합니다.', 'error');
-                    console.warn('Products.delete: cannot delete product without valid legacy_id', { id, hasRemoteId: !!target.remote_id });
-                    return;
-                }
+        const beforeCount = this.state.products.length;
+        let deleteSummary = { mode: isRemote ? 'remote' : 'local', actionKey: String(id), success: false, reason: null, beforeCount, afterCount: 0, visibleCount: 0 };
+
+        // BLOCKER-FIX-5: _findProductByActionKey로 상품 찾기
+        const product = this._findProductByActionKey(id);
+        if (!product) {
+            // 직접 legacy_id로 시도
+            const numericId = Number(id);
+            if (Number.isFinite(numericId) && numericId > 0) {
                 try {
-                    await DB.deleteProductAsync(legacyId);
+                    await DB.deleteProductAsync(numericId);
+                    deleteSummary.success = true;
                 } catch (e) {
                     App.flash('상품 삭제에 실패했습니다: ' + (e.message || 'unknown error'), 'error');
+                    deleteSummary.reason = e.message || 'unknown error';
+                    window.__LAST_PRODUCT_DELETE_SUMMARY__ = deleteSummary;
                     return;
                 }
             } else {
-                // id로 product를 찾을 수 없으면 legacy_id로 간주하고 시도
-                const numericId = Number(id);
-                if (!Number.isFinite(numericId) || numericId <= 0) {
-                    App.flash('상품을 찾을 수 없거나 유효하지 않은 식별값입니다.', 'error');
-                    return;
-                }
-                try {
-                    await DB.deleteProductAsync(numericId);
-                } catch (e) {
-                    App.flash('상품 삭제에 실패했습니다: ' + (e.message || 'unknown error'), 'error');
-                    return;
-                }
-            }
-        } else if (typeof DB.deleteProductAsync === 'function') {
-            try {
-                await DB.deleteProductAsync(id);
-            } catch (e) {
-                App.flash('상품 삭제에 실패했습니다: ' + (e.message || 'unknown error'), 'error');
+                App.flash('상품을 찾을 수 없거나 유효하지 않은 식별값입니다.', 'error');
+                deleteSummary.reason = 'PRODUCT_NOT_FOUND';
+                window.__LAST_PRODUCT_DELETE_SUMMARY__ = deleteSummary;
                 return;
             }
         } else {
-            DB.deleteProduct(id);
+            const deleteTarget = this._getProductDeleteTarget(product);
+            if (deleteTarget.type === 'invalid') {
+                App.flash('이 상품은 삭제할 수 없는 상태입니다. (' + deleteTarget.reason + ')', 'error');
+                deleteSummary.reason = deleteTarget.reason;
+                window.__LAST_PRODUCT_DELETE_SUMMARY__ = deleteSummary;
+                return;
+            }
+            if (deleteTarget.type === 'remote_id') {
+                App.flash('이 상품은 remote_id만 있어 현재 삭제 RPC가 필요합니다. DB migration 승인 후 처리할 수 있습니다.', 'error');
+                console.warn('Products.delete: remote_id-only product, no delete RPC available', { hasRemoteId: true });
+                deleteSummary.reason = 'REMOTE_ID_ONLY_NO_RPC';
+                window.__LAST_PRODUCT_DELETE_SUMMARY__ = deleteSummary;
+                return;
+            }
+            try {
+                await DB.deleteProductAsync(deleteTarget.value);
+                deleteSummary.success = true;
+            } catch (e) {
+                App.flash('상품 삭제에 실패했습니다: ' + (e.message || 'unknown error'), 'error');
+                deleteSummary.reason = e.message || 'unknown error';
+                window.__LAST_PRODUCT_DELETE_SUMMARY__ = deleteSummary;
+                return;
+            }
         }
-        // BLOCKER-FIX-2: 삭제 후 reload
+
+        // BLOCKER-FIX-5: 삭제 후 reload + summary
         this.state.loaded = false;
         this.state.selected.clear();
         await this.load();
+        deleteSummary.afterCount = this.state.products.length;
+        deleteSummary.visibleCount = this.state.filtered.length;
+        window.__LAST_PRODUCT_DELETE_SUMMARY__ = deleteSummary;
+
         App.flash(t('common', 'delete') + '!', 'success');
         App.renderPage();
     },

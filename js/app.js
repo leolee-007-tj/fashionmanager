@@ -72,7 +72,8 @@ const App = {
                     else if (dataTarget === 'expenses') Expenses.toggleSelectAll();
                     else if (dataTarget === 'keywords') App.toggleKeywordSelectAll();
                 } else if (target.classList.contains('row-checkbox')) {
-                    const id = Number(target.dataset.id);
+                    // BLOCKER-FIX-5: string actionKey 보존 (Number 변환 금지)
+                    const id = target.dataset.id;
                     if (dataTarget === 'orders') Orders.toggleSelect(id);
                     else if (dataTarget === 'products') Products.toggleSelect(id);
                     else if (dataTarget === 'customers') Customers.toggleSelect(id);

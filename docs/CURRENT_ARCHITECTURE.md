@@ -9624,3 +9624,142 @@ manager/staff 권한 계정으로 실제 브라우저 접근 smoke를 수행한�
 - Remote DB mutation 자동 실행: **NO** ✅
 - localStorage 자동 삭제: **NO** ✅
 
+
+---
+
+## BLOCKER-FIX-5: Product CRUD identity/delete/metrics integrity (2026-07-29)
+
+### 사용자 요구
+
+- **모든 출처의 상품이 동일한 UI에서 개별 삭제/선택 삭제 가능해야 함**
+  1. 수동으로 개별 등록한 상품
+  2. 엑셀 업로드로 등록한 상품
+  3. 기존 예시상품
+  4. remote Supabase에 존재하는 상품
+  5. local mode 상품
+- **"전체 상품을 한 번에 일괄 삭제"가 아니라 모든 출처의 상품이 동일한 UI에서 개별 삭제 가능해야 함**
+- 업로드된 상품은 모두 올라가고, 모두 보여야 하고, 총상품/재고/판매 관련 계산에 정확히 반영되어야 함
+- 숫자 정확성이 최우선
+
+### 원인
+
+1. **legacy_id-only delete path**: `SupabaseProductsDataSource.deleteProduct(id)`는 `p_legacy_id`만 받는 `soft_delete_product` RPC 호출
+2. **remote_id-only 상품 삭제 불가**: remote 상품 중 `remote_id(uuid)`는 있지만 `legacy_id`가 없거나 invalid이면 UI 삭제 실패
+3. **actionKey/selected Number(id) 문제**: 기존 `Products.toggleSelect`에서 `Number(id)` 강제 변환으로 string key 처리 불가. `selected Set`에 numeric id만 저장되어 `remote:` prefix key 누락
+4. **수동 등록/엑셀 업로드 상품의 id/legacy_id 생성 정책 불일치 가능성**
+5. **삭제 후 metrics reload 누락**: 삭제 성공 후 dashboard/product list/product count/stock count 재계산 불일치
+
+### 수정
+
+#### 1. Product identity helpers 추가 (`js/products.js`)
+
+| Helper | 설명 |
+|---|---|
+| `isRemoteProductsMode()` | 현재 ProductsDataSource가 remote인지 local인지 반환 |
+| `_getProductActionKey(product)` | `legacy_id > id > remote_id` 순으로 string action key 생성 |
+| `_findProductByActionKey(key)` | action key로 `this.state.products`에서 상품 검색 |
+| `_getProductDeleteTarget(product)` | 삭제 대상 식별 (legacy_id/remote_id/invalid 타입 판단) |
+
+**Action Key resolver:**
+```javascript
+_getProductActionKey(product) {
+    if (!product) return '';
+    if (Number.isFinite(Number(product.legacy_id)) && Number(product.legacy_id) > 0) return String(product.legacy_id);
+    if (Number.isFinite(Number(product.id)) && Number(product.id) > 0) return String(product.id);
+    if (product.remote_id) return 'remote:' + String(product.remote_id);
+    return '';
+}
+```
+
+**Delete Target resolver:**
+```javascript
+_getProductDeleteTarget(product) {
+    if (!product) return { type: 'invalid', value: null, reason: 'PRODUCT_NOT_FOUND' };
+    const isRemote = this.isRemoteProductsMode();
+    if (isRemote) {
+        const legacyId = product.legacy_id != null ? Number(product.legacy_id) : null;
+        if (Number.isFinite(legacyId) && legacyId > 0) return { type: 'legacy_id', value: legacyId };
+        if (product.remote_id) return { type: 'remote_id', value: product.remote_id, reason: 'REMOTE_ID_ONLY_NO_RPC' };
+        return { type: 'invalid', value: null, reason: 'MISSING_DELETE_ID' };
+    }
+    const localId = product.id != null ? Number(product.id) : null;
+    if (Number.isFinite(localId) && localId > 0) return { type: 'legacy_id', value: localId };
+    return { type: 'invalid', value: null, reason: 'MISSING_LOCAL_ID' };
+}
+```
+
+#### 2. `renderList` 수정 — actionKey 기반 checkbox/selected 처리
+
+- `onclick` 인자에 `JSON.stringify(actionKey)` 사용
+- `checkbox data-id`도 actionKey 사용
+- `selected Set`에는 string key 그대로 보존 (Number 강제 변환 금지)
+- 삭제 불가능한 상품은 `delete disabled reason` 표시
+
+#### 3. `toggleSelect` / `toggleSelectAll` 수정
+
+```javascript
+toggleSelect(id) {
+    const key = String(id);
+    if (this.state.selected.has(key)) this.state.selected.delete(key);
+    else this.state.selected.add(key);
+}
+```
+
+#### 4. `Products.delete` 수정
+
+- target product를 actionKey로 찾음
+- `_getProductDeleteTarget`으로 delete target 생성
+- `REMOTE_ID_ONLY_NO_RPC`인 경우: "이 상품은 remote_id만 있어 현재 삭제 RPC가 필요합니다. DB migration 승인 후 처리할 수 있습니다."
+- 삭제 성공 후: `Products.state.loaded = false` -> `Products.load()` -> `App.renderPage()`
+- 실패 시: `App.flash` error + `window.__LAST_PRODUCT_DELETE_SUMMARY__` 저장
+
+#### 5. `batchDelete` 수정
+
+- `selected Set`에 string action key 저장
+- 각 상품을 `_findProductByActionKey`로 찾고 `_getProductDeleteTarget`으로 delete target 확인
+- 성공/실패 count 분리, 하나 실패해도 전체가 success로 표시되지 않음
+- 삭제 후 reload + `window.__LAST_PRODUCT_BATCH_DELETE_SUMMARY__` 저장
+
+#### 6. `batchReclassify` / `batchMonthChange` 수정
+
+- actionKey로 상품 찾고 `deleteTarget.legacy_id`로 update 수행
+
+#### 7. `app.js` row-checkbox handler 수정
+
+```javascript
+// BLOCKER-FIX-5: string actionKey 보존 (Number 변환 금지)
+const id = target.dataset.id;
+if (dataTarget === 'products') Products.toggleSelect(id);
+```
+
+### remote_id delete RPC 필요 여부
+
+- `soft_delete_product` RPC는 `p_legacy_id`만 지원
+- `remote_id`(uuid) 기반 soft delete RPC(`soft_delete_product_by_id`)가 없음
+- **REQUIRES_USER_APPROVAL_DB_MIGRATION: true**
+- 필요한 RPC: `soft_delete_product_by_id(p_store_id uuid, p_product_id uuid)` - owner/manager only, same store_id + deleted_at is null 조건, soft delete only
+- 실제 migration 파일 생성/적용은 사용자 승인 전 금지
+
+### Product Identity Policy
+
+| 항목 | local | remote |
+|---|---|---|
+| id | positive integer | Supabase uuid (remote_id) |
+| legacy_id | optional, same numeric id | positive integer (available 시) |
+| UI action key | legacy_id > id | legacy_id > remote_id |
+| 삭제 가능 조건 | positive numeric id | positive legacy_id (OR remote_id delete path) |
+| 생성 정책 | `nextId()` (증가) | `nextId()` + RPC createProduct |
+
+### Tests 결과
+
+- `tests/product-crud-identity-delete-contract.test.mjs` 신규: 1254 tests, 0 fail
+- 기존 테스트 모두 유지 및 통과
+
+### Preflight 결과
+
+- `bash scripts/remote-deployment-preflight.sh`: **PASS**
+
+### 실제 remote mutation
+
+- **NO** - 실제 상품 대량 삭제/수정/등록 수행하지 않음
+- 테스트/예시 상품 삭제도 사용자 승인 전 금지
