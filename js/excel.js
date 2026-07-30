@@ -865,7 +865,7 @@ const ExcelManager = {
                 product = products.find(p => p.original_title === productName);
             }
             const productId = product ? product.id : 0;
-            const convertedCost = product ? (product.actual_converted_cost || product.china_base_price || 0) : 0;
+            const convertedCost = product ? (product.actual_converted_cost || 0) : 0;
             const profit = sellingPrice - convertedCost;
 
             orders.push({
@@ -934,7 +934,11 @@ const ExcelManager = {
             added++;
         });
         DB.setCustomers(customers);
-        App.flash(`${added}건 등록 완료!`, 'success');
+        if (added === 0) {
+            App.flash('등록할 고객이 없습니다. (이름 컬럼 확인 필요)', 'warning');
+        } else {
+            App.flash(`${added}건 등록 완료!`, 'success');
+        }
     },
 
     importKeywords(data) {
@@ -946,6 +950,7 @@ const ExcelManager = {
 
         const keywords = DB.getKeywords();
         let added = 0;
+        let nextKeywordId = DB.getNextId('keywords');
 
         data.forEach(row => {
             const type = row['타입'] || row['type'] || 'brand';
@@ -970,7 +975,7 @@ const ExcelManager = {
             const jaList = jaStr ? jaStr.split(/[,，]/).map(s => s.trim()).filter(Boolean) : [...koList];
 
             keywords.push({
-                id: Date.now() + Math.random(),
+                id: nextKeywordId++,
                 type: type,
                 standard: standard,
                 keyword: standard,
@@ -986,7 +991,11 @@ const ExcelManager = {
             added++;
         });
         DB.setKeywords(keywords);
-        App.flash(`${added}건 등록 완료!`, 'success');
+        if (added === 0) {
+            App.flash('등록할 키워드가 없습니다. (타입/표준명 컬럼 확인 필요)', 'warning');
+        } else {
+            App.flash(`${added}건 등록 완료!`, 'success');
+        }
     },
 
     resetAll() {
