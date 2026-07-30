@@ -965,6 +965,7 @@ const ExcelManager = {
         let added = 0;
         let skippedNoName = 0;
         let skippedDuplicate = 0;
+        const duplicateNames = [];  // 중복된 이름 수집
         let nextCustomerId = DB.getNextId('customers');
 
         // 엑셀 첫 행의 컬럼명 로깅 (디버깅용)
@@ -991,6 +992,7 @@ const ExcelManager = {
             // 중복 검증: 같은 이름의 고객이 이미 존재하거나 이번 배치에서 이미 추가된 경우 스킵
             if (existingNames.has(nameLower) || batchNames.has(nameLower)) {
                 skippedDuplicate++;
+                duplicateNames.push(name);
                 console.log(`[importCustomers] 행 ${idx + 2}: 중복 스킵 - "${name}"`);
                 return;
             }
@@ -1013,6 +1015,9 @@ const ExcelManager = {
         });
         DB.setCustomers(customers);
         console.log(`[importCustomers] 결과: ${added}건 등록, ${skippedNoName}건 이름없음, ${skippedDuplicate}건 중복스킵 (총 ${data.length}행)`);
+        if (duplicateNames.length > 0) {
+            console.log(`[importCustomers] 중복된 이름 목록 (${duplicateNames.length}건):`, duplicateNames);
+        }
         if (added === 0) {
             const msg = skippedNoName > 0
                 ? `등록할 고객이 없습니다. (이름 컬럼 확인 필요, 엑셀 컬럼: ${Object.keys(data[0]).join(', ')})`
@@ -1021,7 +1026,14 @@ const ExcelManager = {
         } else {
             let msg = `${added}건 등록 완료!`;
             if (skippedNoName > 0) msg += ` (${skippedNoName}건 이름없음)`;
-            if (skippedDuplicate > 0) msg += ` (${skippedDuplicate}건 중복)`;
+            if (skippedDuplicate > 0) {
+                // 중복 이름 5개만 표시
+                const preview = duplicateNames.slice(0, 5).join(', ');
+                const more = duplicateNames.length > 5 ? ` 외 ${duplicateNames.length - 5}건` : '';
+                msg += ` (${skippedDuplicate}건 중복: ${preview}${more})`;
+                // 전체 목록은 콘솔에서 확인 가능
+                msg += ` - 콘솔(F12)에서 전체 목록 확인`;
+            }
             App.flash(msg, 'success');
         }
     },

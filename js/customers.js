@@ -5,7 +5,7 @@ const Customers = {
         search: '',
         sortBy: 'total_amount',
         sortOrder: 'desc',
-        year: 2026,
+        year: 2025,
         month: null,
         selected: new Set(),
         editingCustomerId: null,
@@ -475,9 +475,19 @@ const Customers = {
 
     yearOptions() {
         let html = '';
-        for (let y = 2026; y <= 2030; y++) {
+        // 데이터 기반 year 옵션 (주문 날짜에서 추출)
+        const dataYears = new Set();
+        const orders = DB.getOrders();
+        orders.forEach(o => {
+            const ym = this._extractYearMonth(o.order_date || o.created_at);
+            if (ym && ym.year >= 2025) dataYears.add(ym.year);
+        });
+        // 2025~2030 고정 범위와 데이터 year 병합
+        const years = new Set([2025, 2026, 2027, ...dataYears]);
+        const sorted = [...years].filter(y => y >= 2025).sort((a, b) => b - a);
+        sorted.forEach(y => {
             html += `<option value="${y}" ${this.state.year === y ? 'selected' : ''}>${y}${t('common', 'year_suffix')}</option>`;
-        }
+        });
         return html;
     },
 
