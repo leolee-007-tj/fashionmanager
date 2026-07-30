@@ -230,7 +230,7 @@ const ExcelManager = {
                 const wb = XLSX.read(data, { type: 'array' });
                 const sheetName = wb.SheetNames[0];
                 const ws = wb.Sheets[sheetName];
-                const json = XLSX.utils.sheet_to_json(ws, { header: 1 });
+                const json = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true });
                 if (json.length < 2) {
                     App.flash('데이터가 없습니다. (헤더 행 + 데이터 행 필요)', 'warning');
                     return;
@@ -963,20 +963,45 @@ const ExcelManager = {
 
         const customers = DB.getCustomers();
         let added = 0;
+        let skippedNoName = 0;
+        let skippedDuplicate = 0;
         let nextCustomerId = DB.getNextId('customers');
 
-        data.forEach(row => {
-            const name = row['이름'] || row['name'] || row['고객명'] || row['customer_name'] || '';
-            if (!name) return;
-            // 중복 검증: 같은 이름의 고객이 이미 존재하면 스킵
-            if (customers.some(c => c.name === name)) { return; }
+        // 엑셀 첫 행의 컬럼명 로깅 (디버깅용)
+        if (data.length > 0) {
+            console.log('[importCustomers] 엑셀 컬럼명:', Object.keys(data[0]).join(', '));
+        }
+
+        // 이미 존재하는 고객명 목록 (소문자)
+        const existingNames = new Set(customers.map(c => (c.name || '').toLowerCase().trim()));
+        // 이번 배치에서 추가된 이름 목록 (중복 방지)
+        const batchNames = new Set();
+
+        data.forEach((row, idx) => {
+            // 다양한 컬럼명 지원: 이름, name, 고객명, customer_name, 고객이름, 성함, 고객, customer, fullname, full_name
+            const name = (row['이름'] || row['name'] || row['고객명'] || row['customer_name']
+                || row['고객이름'] || row['성함'] || row['고객'] || row['customer']
+                || row['fullname'] || row['full_name'] || '').toString().trim();
+            if (!name) {
+                skippedNoName++;
+                console.log(`[importCustomers] 행 ${idx + 2}: 이름 없음 (컬럼 확인 필요), 행 데이터:`, JSON.stringify(row));
+                return;
+            }
+            const nameLower = name.toLowerCase();
+            // 중복 검증: 같은 이름의 고객이 이미 존재하거나 이번 배치에서 이미 추가된 경우 스킵
+            if (existingNames.has(nameLower) || batchNames.has(nameLower)) {
+                skippedDuplicate++;
+                console.log(`[importCustomers] 행 ${idx + 2}: 중복 스킵 - "${name}"`);
+                return;
+            }
+            batchNames.add(nameLower);
             customers.push({
                 id: nextCustomerId++,
                 name: name,
-                wechat_nickname: row['위챗닉네임'] || row['wechat_nickname'] || '',
-                phone: row['전화번호'] || row['phone'] || row['연락처'] || '',
-                address: row['주소'] || row['address'] || '',
-                notes: row['메모'] || row['notes'] || row['비고'] || '',
+                wechat_nickname: (row['위챗닉네임'] || row['wechat_nickname'] || row['wechat'] || '').toString().trim(),
+                phone: (row['전화번호'] || row['phone'] || row['연락처'] || '').toString().trim(),
+                address: (row['주소'] || row['address'] || '').toString().trim(),
+                notes: (row['메모'] || row['notes'] || row['비고'] || '').toString().trim(),
                 total_amount: 0,
                 total_profit: 0,
                 order_count: 0,
@@ -987,10 +1012,17 @@ const ExcelManager = {
             added++;
         });
         DB.setCustomers(customers);
+        console.log(`[importCustomers] 결과: ${added}건 등록, ${skippedNoName}건 이름없음, ${skippedDuplicate}건 중복스킵 (총 ${data.length}행)`);
         if (added === 0) {
-            App.flash('등록할 고객이 없습니다. (이름 컬럼 확인 필요)', 'warning');
+            const msg = skippedNoName > 0
+                ? `등록할 고객이 없습니다. (이름 컬럼 확인 필요, 엑셀 컬럼: ${Object.keys(data[0]).join(', ')})`
+                : '등록할 고객이 없습니다. (모든 이름이 이미 존재하거나 중복입니다)';
+            App.flash(msg, 'warning');
         } else {
-            App.flash(`${added}건 등록 완료!`, 'success');
+            let msg = `${added}건 등록 완료!`;
+            if (skippedNoName > 0) msg += ` (${skippedNoName}건 이름없음)`;
+            if (skippedDuplicate > 0) msg += ` (${skippedDuplicate}건 중복)`;
+            App.flash(msg, 'success');
         }
     },
 
