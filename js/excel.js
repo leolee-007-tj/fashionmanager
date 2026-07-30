@@ -54,12 +54,18 @@ const ExcelManager = {
                     </div>
                     <div class="row">
                         <div class="form-group col-md-6">
-                            <label>입고년도</label>
-                            <select id="importYear" class="form-control">${yearOpts}</select>
+                            <label>입고년도 <small class="text-muted">(선택 - 엑셀값 우선)</small></label>
+                            <select id="importYear" class="form-control">
+                                <option value="">엑셀값 사용</option>
+                                ${yearOpts}
+                            </select>
                         </div>
                         <div class="form-group col-md-6">
-                            <label>입고월</label>
-                            <select id="importMonth" class="form-control">${monthOpts}</select>
+                            <label>입고월 <small class="text-muted">(선택 - 엑셀값 우선)</small></label>
+                            <select id="importMonth" class="form-control">
+                                <option value="">엑셀값 사용</option>
+                                ${monthOpts}
+                            </select>
                         </div>
                     </div>
                     <button class="btn btn-primary" onclick="ExcelManager.importData()">
@@ -276,18 +282,70 @@ const ExcelManager = {
         };
     },
 
-    // BLOCKER-FIX-4: row 값 > UI 선택값 fallback 정책
+    // year/month resolver: Excel 셀 값 우선 → UI 선택값 fallback → 현재 날짜 최종 fallback
     _resolveProductImportYearMonth(row, selected) {
-        const rowYear = parseInt(row['입고년도'] || row['년도'] || row['stock_year'] || '', 10);
-        const rowMonth = parseInt(row['입고월'] || row['월'] || row['stock_month'] || '', 10);
+        let rowYear = null;
+        let rowMonth = null;
 
-        const rowYearValid = Number.isFinite(rowYear) && rowYear >= 2025;
-        const rowMonthValid = Number.isFinite(rowMonth) && rowMonth >= 1 && rowMonth <= 12;
+        // 1) 입고년도 + 입고월 각각 컬럼
+        const rawYear = parseInt(row['입고년도'] || row['년도'] || row['stock_year'] || '', 10);
+        const rawMonth = parseInt(row['입고월'] || row['월'] || row['stock_month'] || '', 10);
 
+        if (Number.isFinite(rawYear) && rawYear >= 2025 && Number.isFinite(rawMonth) && rawMonth >= 1 && rawMonth <= 12) {
+            rowYear = rawYear;
+            rowMonth = rawMonth;
+        }
+
+        // 2) 입고월 컬럼이 "YYYY-MM" 형식인 경우 (예: "2025-06", "2025.06", "2025/06")
+        if (!rowYear || !rowMonth) {
+            const stockMonthStr = String(row['입고월'] || row['월'] || row['stock_month'] || '');
+            const ymMatch = stockMonthStr.match(/(\d{4})\s*[\.\-\/년]\s*(\d{1,2})/);
+            if (ymMatch) {
+                const y = parseInt(ymMatch[1], 10);
+                const m = parseInt(ymMatch[2], 10);
+                if (y >= 2025 && m >= 1 && m <= 12) {
+                    rowYear = y;
+                    rowMonth = m;
+                }
+            }
+        }
+
+        // 3) 입고일/입고날짜 컬럼에서 year/month 추출
+        if (!rowYear || !rowMonth) {
+            const dateVal = row['입고일'] || row['입고날짜'] || row['stock_date'] || row['date'] || '';
+            if (dateVal) {
+                const d = this._parseExcelDate(dateVal);
+                if (d && !isNaN(d.getTime())) {
+                    const y = d.getFullYear();
+                    const m = d.getMonth() + 1;
+                    if (y >= 2025) {
+                        rowYear = y;
+                        rowMonth = m;
+                    }
+                }
+            }
+        }
+
+        // 4) UI 선택값 fallback
+        if (!rowYear || !rowMonth) {
+            if (selected.year && selected.month) {
+                rowYear = selected.year;
+                rowMonth = selected.month;
+            }
+        }
+
+        // 5) 최종 fallback: 현재 날짜
+        if (!rowYear || !rowMonth) {
+            const now = new Date();
+            rowYear = now.getFullYear();
+            rowMonth = now.getMonth() + 1;
+        }
+
+        const fromExcel = (rawYear && rawMonth) || (rowYear && rowMonth && !(selected.year && selected.month && rowYear === selected.year && rowMonth === selected.month));
         return {
-            stockYear: rowYearValid ? rowYear : (selected.year || null),
-            stockMonth: rowMonthValid ? rowMonth : (selected.month || null),
-            source: (rowYearValid && rowMonthValid) ? 'row' : 'ui'
+            stockYear: rowYear,
+            stockMonth: rowMonth,
+            source: fromExcel ? 'row' : 'ui'
         };
     },
 
@@ -586,17 +644,12 @@ const ExcelManager = {
         }
         if (!confirm(data.length + ' ' + t('excel', 'confirm_import_count') + '?')) return;
 
-        // BLOCKER-FIX-4: UI 선택값 읽기
+        // UI 선택값 읽기 (선택사항: 엑셀 셀 값이 우선됨)
         const selectedYM = this._getSelectedImportYearMonth();
         const selYear = selectedYM.year;
         const selMonth = selectedYM.month;
 
-        // UI 선택값이 없으면 전체 import 중단
-        if (!selYear || !selMonth) {
-            App.flash('입고년도/입고월을 선택하세요.', 'warning');
-            return;
-        }
-
+        // UI 선택값이 없어도 엑셀 셀 값이나 현재 날짜로 fallback하므로 차단하지 않음
         let nextProductId = DB.getNextId('products');
 
         // BLOCKER-FIX-6: batch-aware product_code allocator (normalize 전에 build)
