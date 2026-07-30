@@ -492,7 +492,7 @@ const Products = {
             App.flash(t('common', 'please_select'), 'warning');
             return;
         }
-        const year = prompt(t('common', 'stock_year') + ' (2026~):');
+        const year = prompt(t('common', 'stock_year') + ' (2025~):');
         if (!year) return;
         const month = prompt(t('common', 'stock_month') + ' (1~12):');
         if (!month) return;

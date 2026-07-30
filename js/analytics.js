@@ -1,6 +1,6 @@
 const Analytics = {
     state: {
-        year: 2026,
+        year: 2025,
         liveExchangeRate: null,
         liveRateUpdatedAt: null
     },
@@ -76,7 +76,7 @@ const Analytics = {
         }
         const p = products.find(x => x.id === order.product_id || x.id === Number(order.product_id));
         if (p) {
-            return p.actual_converted_cost || p.china_base_price || 0;
+            return (p.actual_converted_cost != null) ? p.actual_converted_cost : 0;
         }
         return 0;
     },
@@ -528,7 +528,7 @@ const Analytics = {
 
     yearOptions() {
         let html = '';
-        for (let y = 2026; y <= 2030; y++) {
+        for (let y = 2025; y <= 2030; y++) {
             html += `<option value="${y}" ${this.state.year === y ? 'selected' : ''}>${y}${t('common', 'year_suffix')}</option>`;
         }
         return html;
