@@ -154,7 +154,7 @@ const App = {
                     else content = Customers.renderList();
                     break;
                 case 'analytics':
-                    content = Analytics.render();
+                    content = await Analytics.renderAsync();
                     break;
                 case 'expenses':
                     if (args[0] === 'add') content = Expenses.renderAdd();
@@ -301,7 +301,7 @@ const App = {
                     <a href="#/customers" class="stat-card-link">
                         <div class="stat-card">
                             <div class="stat-label" data-i18n="dashboard.total_customers">${t('dashboard', 'total_customers')}</div>
-                            <div class="stat-value">${customers.length}<span data-i18n="dashboard.items"> ${t('dashboard', 'items')}</span></div>
+                            <div class="stat-value">${customers.length}<span data-i18n="customers.count_unit"> ${t('customers', 'count_unit')}</span></div>
                             <i class="fas fa-users stat-icon"></i>
                         </div>
                     </a>
