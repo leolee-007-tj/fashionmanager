@@ -205,7 +205,41 @@ const Products = {
             this.applyFilters();
         }
         const list = this.state.filtered;
-        const totalStock = list.reduce((sum, p) => sum + (p.current_stock || 0), 0);
+
+        // UI dedupe: identity key 기준으로 하나의 row만 표시, current_stock 합산
+        const identityMap = new Map();
+        const duplicateGroups = [];
+        for (const p of list) {
+            const key = (typeof ExcelManager !== 'undefined' && ExcelManager.getProductIdentityKey)
+                ? ExcelManager.getProductIdentityKey(p)
+                : [p.brand, p.original_title, p.color, p.size, p.korea_cost, p.stock_year, p.stock_month].map(v => String(v || '').trim().toLowerCase()).join('|');
+            if (identityMap.has(key)) {
+                const existing = identityMap.get(key);
+                existing.displayStock += (p.current_stock || 0);
+                existing.duplicateCount++;
+                if (existing.duplicateCount === 2) {
+                    duplicateGroups.push(key);
+                }
+            } else {
+                identityMap.set(key, {
+                    product: p,
+                    displayStock: p.current_stock || 0,
+                    duplicateCount: 1
+                });
+            }
+        }
+        const dedupedList = Array.from(identityMap.values());
+        const totalStock = dedupedList.reduce((sum, entry) => sum + entry.displayStock, 0);
+
+        // Duplicate summary
+        window.__PRODUCT_LIST_DEDUPE_SUMMARY = {
+            totalRawRows: list.length,
+            dedupedRows: dedupedList.length,
+            duplicateGroupCount: duplicateGroups.length,
+            duplicateGroups,
+            hasDuplicates: duplicateGroups.length > 0
+        };
+
         // BLOCKER-FIX-4: 현재 필터 정보 표시
         const filterYear = this.state.stockYear;
         const filterMonth = this.state.stockMonth;
@@ -222,10 +256,15 @@ const Products = {
                         </a>
                     </div>
                 </div>
+                ${duplicateGroups.length > 0 ? `<div class="info-box" style="background:#fff8e1; border:1px solid #f0ad4e; margin-bottom:1rem;">
+                    <i class="fas fa-exclamation-triangle" style="color:#f0ad4e;"></i>
+                    중복 상품 그룹이 ${duplicateGroups.length}개 있습니다. 목록에는 병합 표시됩니다. 정리 기능이 필요합니다.
+                    <small class="text-muted">(원본 ${list.length}행 → 병합 ${dedupedList.length}행)</small>
+                </div>` : ''}
                 <div class="stats-grid">
                     <div class="stat-card">
                         <div class="stat-label">${t('products', 'total_count')}</div>
-                        <div class="stat-value">${list.length} / ${this.state.products.length}</div>
+                        <div class="stat-value">${dedupedList.length} / ${this.state.products.length}</div>
                         <div class="text-muted" style="font-size:0.7rem; margin-top:0.15rem;">${t('products', 'displayed_vs_total')}</div>
                         <div class="text-muted" style="font-size:0.7rem; margin-top:0.1rem;">현재 필터: ${filterText}</div>
                         <i class="fas fa-tshirt stat-icon"></i>
@@ -269,7 +308,7 @@ const Products = {
                     </div>
                 </div>
         `;
-        if (list.length === 0) {
+        if (dedupedList.length === 0) {
             html += `
                 <div class="empty-state">
                     <i class="fas fa-tshirt"></i>
@@ -306,34 +345,32 @@ const Products = {
                     </thead>
                     <tbody>
             `;
-            list.forEach(p => {
-                const available = (p.current_stock || 0) - (p.reserved_stock || 0);
+            dedupedList.forEach(({ product: p, displayStock, duplicateCount }) => {
+                const available = displayStock - (p.reserved_stock || 0);
                 const stockStatus = available <= 0 ? 'text-danger' : available <= 5 ? 'text-warning' : '';
-                // 분류키워드 자동 적용 결과
                 const classified = ClassificationService.classifyProduct(p);
                 const categoryClass = p.category ? 'classification-badge category' : 'classification-badge unclassified';
                 const colorClass = p.color ? 'classification-badge color' : 'classification-badge unclassified';
                 const sizeClass = p.size ? 'classification-badge size' : 'classification-badge unclassified';
                 const tooltipInfo = classified._source === 'computed' ? ` (${t('common', 'auto_classified')})` : '';
-                // BLOCKER-FIX-5: 상품 identity resolver로 actionKey 생성
                 const actionKey = Products._getProductActionKey(p);
                 const actionArg = actionKey.replace(/'/g, "\\'");
                 const deleteTarget = Products._getProductDeleteTarget(p);
-                // BLOCKER-FIX-6: remote_id + legacy_id 모두 삭제 가능
                 const canDelete = deleteTarget.type === 'legacy_id' || deleteTarget.type === 'remote_id';
                 const deleteDisabledAttr = canDelete ? '' : 'disabled title="삭제 불가: ' + deleteTarget.reason + '"';
+                const dupBadge = duplicateCount > 1 ? ` <span style="background:#f0ad4e;color:#fff;font-size:0.65rem;padding:1px 4px;border-radius:3px;" title="동일 상품 ${duplicateCount}개 병합">×${duplicateCount}</span>` : '';
                 html += `
                     <tr>
                         <td><input type="checkbox" class="row-checkbox" data-id="${actionKey}" data-target="products" ${this.state.selected.has(actionKey) ? 'checked' : ''}></td>
                         <td>${p.image ? `<img src="${p.image}" class="product-thumb">` : '-'}</td>
                         <td><strong>${p.brand || '-'}</strong></td>
-                        <td>${p.original_title || '-'}</td>
+                        <td>${p.original_title || '-'}${dupBadge}</td>
                         <td><span class="${categoryClass}" title="${p.category || '-'}${tooltipInfo}">${p.category || (classified.category || '-')}</span></td>
                         <td><span class="${colorClass}" title="${p.color || '-'}${tooltipInfo}">${p.color || (classified.color || '-')}</span></td>
                         <td><span class="${sizeClass}" title="${p.size || '-'}${tooltipInfo}">${p.size || (classified.size || '-')}</span></td>
                         <td>${(p.korea_cost || 0).toLocaleString()} ${t('common', 'currency_kr')}</td>
                         <td class="font-bold">${(p.china_base_price || 0).toLocaleString()} ${t('common', 'currency')}</td>
-                        <td class="${stockStatus}">${available} / ${p.current_stock || 0}</td>
+                        <td class="${stockStatus}">${available} / ${displayStock}</td>
                         <td>
                             <button class="btn btn-sm btn-info" onclick="Products.reclassify('${actionArg}')" title="${t('common', 'reclassify')}">
                                 <i class="fas fa-magic"></i>

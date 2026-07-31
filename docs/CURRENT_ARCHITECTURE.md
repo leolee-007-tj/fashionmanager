@@ -9923,3 +9923,95 @@ Excel 기반 상품 업로드 자동 검증 시스템. 사용자가 엑셀 파�
 - 상품목록 자동 검증이 PASS해야 함
 - 그 후 Customers/Orders/Analytics read-only smoke 진행
 - Orders write smoke는 상품목록 안정화 후에만 허용
+
+## 17. Product import upsert and single-row list policy
+
+### 목적
+
+상품 엑셀 업로드 시 중복 방지와 단일 목록 표시를 위한 정책 정의.
+
+### 같은 상품 identity 기준
+
+상품 identity key는 다음 7개 필드의 조합으로 결정된다:
+
+```
+brand + original_title + color + size + korea_cost + stock_year + stock_month
+```
+
+- product_code는 identity key가 아니다 (관리 코드일 뿐)
+- id / legacy_id / remote_id는 identity key가 아니다
+- created_at / updated_at은 identity key가 아니다
+- image는 identity key가 아니다
+
+### 같은 상품은 목록에 하나만 표시
+
+- Products.renderList()에서 identity key 기준으로 UI dedupe 수행
+- 같은 identity의 상품이 여러 개 있으면 첫 row만 표시
+- displayStock은 같은 identity group의 current_stock 합산
+- 중복 그룹이 있으면 화면 상단에 경고 표시: "중복 상품 그룹이 N개 있습니다. 목록에는 병합 표시됩니다. 정리 기능이 필요합니다."
+- window.__PRODUCT_LIST_DEDUPE_SUMMARY에 중복 정보 저장
+- UI dedupe는 임시 표시 보호이며, 실제 DB cleanup은 사용자 승인 전 실행하지 않음
+
+### 파일 내부 중복은 병합
+
+- 같은 엑셀 파일 내에서 같은 identity가 여러 번 나오면 한 상품으로 병합
+- 병합 시 current_stock은 합산
+- notes는 비어 있지 않은 값을 보존
+- mergedInBatchCount, mergedRowCount로 기록
+
+### 기존 상품과 같은 identity는 기본 모드에서 추가하지 않음
+
+- Default mode: 신규만 추가
+  - 기존 identity와 같은 상품은 추가하지 않음
+  - skippedExisting으로 기록
+  - 같은 파일 재업로드 시 added = 0이어야 정상
+
+### Import mode
+
+1. **default**: 신규만 추가 (기본값)
+   - 기존 identity와 같은 상품은 추가하지 않음
+   - skippedExistingCount로 기록
+2. **restock mode**: 기존 상품 재고 추가
+   - 기존 identity가 있으면 current_stock += uploaded current_stock
+   - 목록 row는 하나만 유지
+   - updated/restocked count 기록
+3. **replace mode**: 기존 상품 재고 교체
+   - 기존 identity가 있으면 current_stock = uploaded current_stock
+   - 목록 row는 하나만 유지
+   - updated count 기록
+
+### 275 hard-code 금지
+
+- 모든 row 수는 동적으로 계산
+- Array.from, data.length, .filter().length 등 사용
+
+### Header / Template / Guide alignment
+
+- 템플릿 헤더: 브랜드 | 상품명 | 매입원가 | 초기재고 | 입고년도 | 입고월 | 카테고리 | 색상 | 사이즈 | 소재 | 메모
+- 업로드 안내 필수: 브랜드 / 상품명 / 매입원가 / 초기재고 / 입고년도 / 입고월
+- PRODUCT_IMPORT_FIELD_ALIASES로 다양한 컬럼명 별칭 지원
+- _getByAliases(row, aliases)로 값 추출
+- _auditProductImportHeaders로 헤더 감사
+
+### List dedupe summary는 표시 보호이며 cleanup은 별도 승인 필요
+
+- UI dedupe는 데이터 표시 보호 목적
+- 실제 DB cleanup(중복 row 제거)은 사용자 승인 후 별도 진행
+- window.__PRODUCT_LIST_DEDUPE_SUMMARY로 중복 정보 확인 가능
+
+### Import summary
+
+window.__LAST_PRODUCT_IMPORT_SUMMARY 필수 필드:
+
+- mode, importMode
+- inputRows, validRows, invalidRows
+- normalizedProductCount, mergedInBatchCount, mergedRowCount
+- existingExactMatches, skippedExisting
+- inserted, updated, restocked, replaced
+- added, skipped, failed
+- beforeDatasourceCount, expectedDatasourceCountAfter, postImportDatasourceCount
+- countDeltaMatchesExpected
+- totalStockInFile, insertedStockTotal, updatedStockDelta, postImportTotalStock
+- headerAudit
+
+공식: expectedDatasourceCountAfter = beforeDatasourceCount + inserted (default mode)

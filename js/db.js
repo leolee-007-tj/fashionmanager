@@ -540,7 +540,7 @@ const DB = {
                     p_stock_month: row.stock_month || null,
                     p_image: row.image || null,
                     p_notes: row.notes || null,
-                    p_legacy_id: row.legacy_id || Date.now()
+                    p_legacy_id: row.legacy_id != null ? row.legacy_id : DB.getNextId('products')
                 };
 
                 return client.rpc('create_product', payload)

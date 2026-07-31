@@ -88,7 +88,10 @@ const ExcelManager = {
                     <h4><i class="fas fa-info-circle"></i> ${t('excel', 'guide')}</h4>
                     <p>${t('excel', 'guide_text')}</p>
                     <ul>
-                        <li><strong>${t('excel', 'import_products')}</strong>: 브랜드, 상품명, 한국원가(또는 한국매입원가/원가), 입고월(선택), 현재재고(선택), 색상(선택), 사이즈(선택)</li>
+                        <li><strong>${t('excel', 'import_products')}</strong>: 브랜드, 상품명, 매입원가, 초기재고, 입고년도, 입고월 <small class="text-muted">(필수)</small> / 카테고리, 색상, 사이즈, 소재, 메모 <small class="text-muted">(선택)</small></li>
+                        <li class="text-muted" style="font-size:0.8rem; list-style:none; margin-left:-1.5em;">• 컬럼 순서는 달라도 됩니다. 컬럼명은 템플릿과 같아야 합니다.</li>
+                        <li class="text-muted" style="font-size:0.8rem; list-style:none; margin-left:-1.5em;">• 입고연도, 현재재고, 상품수량도 자동 인식합니다.</li>
+                        <li class="text-muted" style="font-size:0.8rem; list-style:none; margin-left:-1.5em;">• 같은 상품(브랜드+상품명+색상+사이즈+원가+입고년월)은 중복 추가되지 않습니다.</li>
                         <li><strong>${t('excel', 'import_orders')}</strong>: 고객명, 브랜드, 상품명, 최종흥정가(위안), 판매일 <small class="text-muted">(신규 고객 자동 등록)</small></li>
                         <li><strong>${t('excel', 'import_customers')}</strong>: 이름, 전화번호(선택), 주소(선택), 메모(선택)</li>
                         <li><strong>${t('excel', 'import_keywords')}</strong>: 타입(brand/category/color/size/material), 키워드, 대체어(선택)</li>
@@ -129,10 +132,10 @@ const ExcelManager = {
 
     downloadProductTemplate() {
         const data = [
-            ['브랜드', '상품명', '한국매입원가(KRW)', '초기재고', '입고년도', '입고월'],
-            ['SYSTEM', '울 니트', '15000', '5', '2025', '6'],
-            ['MIXXO', '자켓', '25000', '3', '2025', '6'],
-            ['ZARA', '코튼 셔츠', '18000', '10', '2025', '7'],
+            ['브랜드', '상품명', '매입원가', '초기재고', '입고년도', '입고월', '카테고리', '색상', '사이즈', '소재', '메모'],
+            ['SYSTEM', '울 니트', '15000', '5', '2025', '6', '니트', 'CREAM', 'FREE', 'WOOL', ''],
+            ['MIXXO', '자켓', '25000', '3', '2025', '6', '자켓', 'BLACK', 'M', 'COTTON', ''],
+            ['ZARA', '코튼 셔츠', '18000', '10', '2025', '7', '셔츠', 'WHITE', 'L', 'COTTON', ''],
         ];
         this._downloadSheet(data, '상품목록', 'template_products.xlsx');
     },
@@ -278,6 +281,114 @@ const ExcelManager = {
         return { year: null, month: null };
     },
 
+    // ========== Product Import Field Aliases ==========
+
+    // Logical field -> array of allowed header names (order-independent)
+    PRODUCT_IMPORT_FIELD_ALIASES: {
+        brand: ['브랜드', 'brand'],
+        title: ['상품명', 'original_title', 'title', 'product_name'],
+        cost: ['매입원가', '한국매입원가(KRW)', '한국매입원가', '한국원가', '원가', 'cost', 'korea_cost'],
+        stock: ['초기재고', '현재재고', '재고', '상품수량', '수량', 'stock', 'quantity', 'current_stock'],
+        stockYear: ['입고년도', '입고연도', '년도', '연도', 'stock_year', 'year'],
+        stockMonth: ['입고월', '월', 'stock_month', 'month'],
+        category: ['카테고리', '종류', 'category'],
+        color: ['색상', '컬러', 'color'],
+        size: ['사이즈', '칫수', 'size'],
+        material: ['소재', '재질', 'material'],
+        notes: ['메모', '비고', 'notes'],
+        productCode: ['상품코드', 'product_code']
+    },
+
+    /**
+     * row 객체에서 alias 배열로 값을 찾는다.
+     * 첫 번째로 매칭되는 alias의 값을 반환.
+     * @param {Object} row - 엑셀 row 객체
+     * @param {Array<string>} aliases - 허용되는 컬럼명 배열
+     * @returns {*} 매칭된 값 또는 null
+     */
+    _getByAliases(row, aliases) {
+        for (const alias of aliases) {
+            if (row.hasOwnProperty(alias) && row[alias] !== '' && row[alias] !== null && row[alias] !== undefined) {
+                return row[alias];
+            }
+        }
+        return null;
+    },
+
+    /**
+     * 헤더 이름을 정규화한다 (trim + lowercase).
+     * @param {string} value
+     * @returns {string}
+     */
+    _normalizeHeaderName(value) {
+        return String(value || '').trim();
+    },
+
+    /**
+     * 업로드된 rows의 헤더를 감사한다.
+     * @param {Array<Object>} rows - 엑셀 row 객체 배열
+     * @param {Object} selectedYM - { year, month }
+     * @returns {Object} 감사 결과
+     */
+    _auditProductImportHeaders(rows, selectedYM) {
+        const firstRow = rows.length > 0 ? rows[0] : {};
+        const headers = Object.keys(firstRow);
+        const matched = {};
+        const missingRequiredLogicalFields = [];
+        const warnings = [];
+
+        const requiredFields = ['brand', 'title', 'cost', 'stock', 'stockYear', 'stockMonth'];
+        const aliases = this.PRODUCT_IMPORT_FIELD_ALIASES;
+
+        for (const field of requiredFields) {
+            const found = aliases[field].some(a => headers.includes(a));
+            matched[field] = found;
+            if (!found) {
+                missingRequiredLogicalFields.push(field);
+            }
+        }
+
+        // Optional fields check
+        for (const field of ['category', 'color', 'size', 'material', 'notes', 'productCode']) {
+            matched[field] = aliases[field].some(a => headers.includes(a));
+        }
+
+        if (missingRequiredLogicalFields.length > 0) {
+            warnings.push('필수 컬럼 누락: ' + missingRequiredLogicalFields.join(', ') + '. 템플릿을 확인해주세요.');
+        }
+
+        return {
+            headers,
+            matched,
+            missingRequiredLogicalFields,
+            warnings,
+            selectedYM
+        };
+    },
+
+    /**
+     * 상품 identity key를 생성한다.
+     * brand + original_title + color + size + korea_cost + stock_year + stock_month
+     * @param {Object} product - 상품 객체
+     * @returns {string} identity key
+     */
+    getProductIdentityKey(product) {
+        const normalize = (v) => String(v || '').trim().toLowerCase();
+        const normalizeNumber = (v) => {
+            const n = Number(v);
+            return Number.isFinite(n) ? String(Math.round(n)) : '0';
+        };
+        return [
+            normalize(product.brand),
+            normalize(product.original_title),
+            normalize(product.color),
+            normalize(product.size),
+            normalizeNumber(product.korea_cost),
+            normalizeNumber(product.stock_year),
+            normalizeNumber(product.stock_month)
+        ].join('|');
+    },
+
     // year/month resolver: Excel 셀 값 우선 → UI 선택값 fallback → 현재 날짜 최종 fallback
     _resolveProductImportYearMonth(row, selected) {
         let rowYear = null;
@@ -400,17 +511,20 @@ const ExcelManager = {
     },
 
     _normalizeProductImportRow(row, idx, nextProductId, selYear, selMonth, codeAllocator) {
-        let koreaCost = row['한국매입원가(KRW)'] || row['한국매입원가'] || row['한국원가'] || row['원가'] || row['cost'] || row['매입가'] || row['korea_cost'] || 0;
+        const aliases = this.PRODUCT_IMPORT_FIELD_ALIASES;
+
+        // _getByAliases로 모든 필드 추출
+        let koreaCost = this._getByAliases(row, aliases.cost) || 0;
         if (typeof koreaCost === 'string') koreaCost = parseInt(String(koreaCost).replace(/,/g, '')) || 0;
 
-        const brand = row['브랜드'] || row['brand'] || '';
-        const title = row['상품명'] || row['original_title'] || row['title'] || row['product_name'] || '';
+        const brand = String(this._getByAliases(row, aliases.brand) || '').trim();
+        const title = String(this._getByAliases(row, aliases.title) || '').trim();
 
         const skipReasons = [];
         if (!koreaCost) skipReasons.push('MISSING_KOREA_COST');
         if (!title) skipReasons.push('MISSING_TITLE');
 
-        // BLOCKER-FIX-4: year/month resolution
+        // year/month resolution (row 값 우선)
         const resolved = this._resolveProductImportYearMonth(row, { year: selYear, month: selMonth });
         if (!resolved.stockYear || !resolved.stockMonth) {
             skipReasons.push('MISSING_STOCK_YEAR_MONTH');
@@ -426,19 +540,19 @@ const ExcelManager = {
         const priceResult = PriceCalculator.calculate(koreaCost);
         const stockYear = resolved.stockYear;
         const stockMonth = resolved.stockMonth;
-        // BLOCKER-FIX-6: batch-aware code allocator 사용. row에 product_code가 있으면 우선 사용하되,
-        // 중복이면 자동 새 코드 부여 (PRODUCT_CODE_REPLACED). allocator 없으면 기존 방식 fallback.
-        const rowHasCode = !!(row['product_code']);
+
+        // product_code 할당 (batch-aware allocator 사용)
+        const rawProductCode = this._getByAliases(row, aliases.productCode);
+        const rowHasCode = !!rawProductCode;
         let productCode, productCodeReplaced = false;
         if (rowHasCode) {
-            const rawCode = row['product_code'];
-            if (codeAllocator && codeAllocator.usedCodes && codeAllocator.usedCodes.has(rawCode)) {
-                productCode = codeAllocator.allocate(row['브랜드'] || row['brand'] || '');
+            if (codeAllocator && codeAllocator.usedCodes && codeAllocator.usedCodes.has(rawProductCode)) {
+                productCode = codeAllocator.allocate(brand);
                 productCodeReplaced = true;
             } else {
-                productCode = rawCode;
+                productCode = rawProductCode;
                 if (codeAllocator && codeAllocator.usedCodes) {
-                    codeAllocator.usedCodes.add(rawCode);
+                    codeAllocator.usedCodes.add(rawProductCode);
                 }
             }
         } else if (codeAllocator && typeof codeAllocator.allocate === 'function') {
@@ -446,12 +560,14 @@ const ExcelManager = {
         } else {
             productCode = DB.generateProductCode(brand, stockYear, stockMonth);
         }
-        const currentStock = parseInt(row['초기재고'] || row['현재재고'] || row['재고'] || row['수량'] || row['stock'] || row['quantity'] || 0) || 0;
 
-        let category = row['종류'] || row['카테고리'] || row['category'] || '';
-        let color = row['색상'] || row['컬러'] || row['color'] || '';
-        let size = row['사이즈'] || row['칫수'] || row['size'] || '';
-        let material = row['소재'] || row['재질'] || row['material'] || '';
+        const currentStock = parseInt(this._getByAliases(row, aliases.stock) || 0) || 0;
+
+        let category = String(this._getByAliases(row, aliases.category) || '').trim();
+        let color = String(this._getByAliases(row, aliases.color) || '').trim();
+        let size = String(this._getByAliases(row, aliases.size) || '').trim();
+        let material = String(this._getByAliases(row, aliases.material) || '').trim();
+
         if (!category || !color || !size) {
             const autoClassified = ClassificationService.classify(title);
             if (!category && autoClassified.category) category = autoClassified.category;
@@ -459,6 +575,8 @@ const ExcelManager = {
             if (!size && autoClassified.size) size = autoClassified.size;
             if (!material && autoClassified.material) material = autoClassified.material;
         }
+
+        const notes = String(this._getByAliases(row, aliases.notes) || '').trim();
 
         const product = {
             id: nextProductId,
@@ -478,7 +596,7 @@ const ExcelManager = {
             stock_year: stockYear,
             stock_month: stockMonth,
             image: null,
-            notes: row['메모'] || row['비고'] || row['notes'] || '',
+            notes: notes,
             title_language: ClassificationService.detectLanguage(title),
             normalized_title: title,
             created_at: new Date().toISOString(),
@@ -490,53 +608,79 @@ const ExcelManager = {
 
     async _importProductsLocal(normalizedRows) {
         const products = DB.getProducts();
-        let added = 0;
+        let inserted = 0;
         let skipped = 0;
-        let duplicateCandidateCount = 0;
+        let skippedExisting = 0;
+        let mergedInBatchCount = 0;
+        let mergedRowCount = 0;
         let productCodeReplacedCount = 0;
         const skippedDetails = [];
         let nextProductId = DB.getNextId('products');
 
-        // BLOCKER-FIX-6: title-only dedup 금지. 완전 동일 key만 duplicate_candidate로 기록.
-        // duplicate 판단 key: brand + original_title + color + size + korea_cost + stock_year + stock_month
-        normalizedRows.forEach((nr) => {
-            if (!nr.valid) {
-                skipped++;
-                skippedDetails.push(nr);
-                return;
+        // Build existing identity map
+        const existingIdentityMap = new Map();
+        for (const p of products) {
+            const key = this.getProductIdentityKey(p);
+            existingIdentityMap.set(key, p);
+        }
+
+        // Normalize valid rows
+        const validRows = normalizedRows.filter(nr => nr.valid);
+        const invalidRows = normalizedRows.filter(nr => !nr.valid);
+        invalidRows.forEach(nr => { skipped++; skippedDetails.push(nr); });
+
+        // Batch merge: 같은 identity는 하나로 병합, current_stock 합산
+        const batchMergedMap = new Map();
+        for (const nr of validRows) {
+            const key = this.getProductIdentityKey(nr.product);
+            if (batchMergedMap.has(key)) {
+                const existing = batchMergedMap.get(key);
+                existing.product.current_stock += nr.product.current_stock;
+                existing.product.notes = existing.product.notes || nr.product.notes;
+                mergedRowCount++;
+            } else {
+                batchMergedMap.set(key, nr);
             }
-            const identityKey = (nr.product.brand || '') + '|||' + (nr.product.original_title || '') + '|||' + (nr.product.color || '') + '|||' + (nr.product.size || '') + '|||' + String(nr.product.korea_cost || 0) + '|||' + String(nr.product.stock_year || 0) + '|||' + String(nr.product.stock_month || 0);
-            const exactDup = products.some(p => {
-                const pk = (p.brand || '') + '|||' + (p.original_title || '') + '|||' + (p.color || '') + '|||' + (p.size || '') + '|||' + String(p.korea_cost || 0) + '|||' + String(p.stock_year || 0) + '|||' + String(p.stock_month || 0);
-                return pk === identityKey;
-            });
-            if (exactDup) {
-                duplicateCandidateCount++;
-                skippedDetails.push({ ...nr, reason: 'DUPLICATE_CANDIDATE' });
-                // exact duplicate는 자동 skip하지 않고 모두 import (중복 방지 우선)
-                // 사용자가 나중에 정리 가능
-            }
+        }
+        mergedInBatchCount = validRows.length - batchMergedMap.size;
+
+        // Process merged products against existing DB
+        for (const [key, nr] of batchMergedMap) {
             if (nr.product.productCodeReplaced) productCodeReplacedCount++;
+
+            if (existingIdentityMap.has(key)) {
+                // Default mode: skip existing identity
+                skippedExisting++;
+                skippedDetails.push({ ...nr, reason: 'EXISTING_IDENTITY_SKIP' });
+                continue;
+            }
+
             nr.product.id = nextProductId++;
             products.push(nr.product);
-            added++;
-        });
+            inserted++;
+        }
 
         DB.setProducts(products);
-        return { added, skipped, skippedDetails, failed: 0, duplicateCandidateCount, productCodeReplacedCount };
+        return {
+            inserted, skipped, skippedExisting, failed: 0,
+            mergedInBatchCount, mergedRowCount, productCodeReplacedCount,
+            skippedDetails
+        };
     },
 
     async _importProductsRemote(normalizedRows) {
         const dataSource = DB.getProductsDataSource();
-        let added = 0;
+        let inserted = 0;
         let skipped = 0;
+        let skippedExisting = 0;
         let failed = 0;
-        let duplicateCandidateCount = 0;
+        let mergedInBatchCount = 0;
+        let mergedRowCount = 0;
         let productCodeReplacedCount = 0;
         let productCodeDuplicateCount = 0;
         const skippedDetails = [];
 
-        // BLOCKER-FIX-5: Supabase 기존 상품을 한 번만 조회하여 legacy_id 중복 방지
+        // 기존 상품 한 번만 조회
         let existingProducts = [];
         let nextProductId = DB.getNextId('products');
         try {
@@ -546,8 +690,6 @@ const ExcelManager = {
                 return Number.isFinite(lid) && lid > max ? lid : max;
             }, 0);
 
-            // BLOCKER-FIX-7: soft-delete된 상품도 legacy_id가 unique_products_legacy_id
-            // 제약조건에 걸리므로, deleted_at 관계없이 전체 max legacy_id를 조회한다.
             try {
                 const supabaseClient = window.LESOULSupabase && window.LESOULSupabase.getClient();
                 if (supabaseClient) {
@@ -568,9 +710,7 @@ const ExcelManager = {
                         }
                     }
                 }
-            } catch (e) {
-                // fallback: active-only max 사용
-            }
+            } catch (e) { /* fallback */ }
 
             const localNextId = DB.getNextId('products');
             nextProductId = Math.max(maxRemoteLegacyId + 1, localNextId);
@@ -578,39 +718,52 @@ const ExcelManager = {
             nextProductId = DB.getNextId('products');
         }
 
-        // BLOCKER-FIX-6: brand+title-only dedup 금지. product_code는 allocator가 이미 처리.
-        // duplicate candidate만 추적 (exact match by full identity key)
-        const existingIdentityKeys = new Set(
-            existingProducts.map(p => {
-                return (p.brand || '') + '|||' + (p.original_title || '') + '|||' + (p.color || '') + '|||' + (p.size || '') + '|||' + String(p.korea_cost || 0) + '|||' + String(p.stock_year || 0) + '|||' + String(p.stock_month || 0);
-            })
-        );
+        // Build existing identity map
+        const existingIdentityMap = new Map();
+        for (const p of existingProducts) {
+            const key = this.getProductIdentityKey(p);
+            existingIdentityMap.set(key, p);
+        }
 
-        for (const nr of normalizedRows) {
-            if (!nr.valid) {
-                skipped++;
-                skippedDetails.push(nr);
+        // Normalize valid rows
+        const validRows = normalizedRows.filter(nr => nr.valid);
+        const invalidRows = normalizedRows.filter(nr => !nr.valid);
+        invalidRows.forEach(nr => { skipped++; skippedDetails.push(nr); });
+
+        // Batch merge: 같은 identity는 하나로 병합, current_stock 합산
+        const batchMergedMap = new Map();
+        for (const nr of validRows) {
+            const key = this.getProductIdentityKey(nr.product);
+            if (batchMergedMap.has(key)) {
+                const existing = batchMergedMap.get(key);
+                existing.product.current_stock += nr.product.current_stock;
+                existing.product.notes = existing.product.notes || nr.product.notes;
+                mergedRowCount++;
+            } else {
+                batchMergedMap.set(key, nr);
+            }
+        }
+        mergedInBatchCount = validRows.length - batchMergedMap.size;
+
+        // Process merged products against existing DB
+        for (const [key, nr] of batchMergedMap) {
+            if (nr.product.productCodeReplaced) productCodeReplacedCount++;
+
+            if (existingIdentityMap.has(key)) {
+                // Default mode: skip existing identity
+                skippedExisting++;
+                skippedDetails.push({ ...nr, reason: 'EXISTING_IDENTITY_SKIP' });
                 continue;
             }
 
-            // BLOCKER-FIX-6: 완전 동일 키만 duplicate_candidate로 기록 (skip하지 않음)
-            const identityKey = (nr.product.brand || '') + '|||' + (nr.product.original_title || '') + '|||' + (nr.product.color || '') + '|||' + (nr.product.size || '') + '|||' + String(nr.product.korea_cost || 0) + '|||' + String(nr.product.stock_year || 0) + '|||' + String(nr.product.stock_month || 0);
-            if (existingIdentityKeys.has(identityKey)) {
-                duplicateCandidateCount++;
-                skippedDetails.push({ ...nr, reason: 'DUPLICATE_CANDIDATE' });
-            }
-
-            // BLOCKER-FIX-5: legacy_id 명시적 할당
             nr.product.id = nextProductId;
             nr.product.legacy_id = nextProductId;
             nextProductId++;
 
-            if (nr.product.productCodeReplaced) productCodeReplacedCount++;
-
             try {
                 const result = await dataSource.createProduct(nr.product);
                 if (result) {
-                    added++;
+                    inserted++;
                 } else {
                     failed++;
                     skippedDetails.push({ ...nr, reason: 'REMOTE_CREATE_FAILED' });
@@ -630,7 +783,11 @@ const ExcelManager = {
                 }
             }
         }
-        return { added, skipped, failed, duplicateCandidateCount, productCodeReplacedCount, productCodeDuplicateCount, skippedDetails };
+        return {
+            inserted, skipped, skippedExisting, failed,
+            mergedInBatchCount, mergedRowCount, productCodeReplacedCount, productCodeDuplicateCount,
+            skippedDetails
+        };
     },
 
     async importProducts(data) {
@@ -640,16 +797,30 @@ const ExcelManager = {
         }
         if (!confirm(data.length + ' ' + t('excel', 'confirm_import_count') + '?')) return;
 
-        // UI 선택값 읽기 (선택사항: 엑셀 셀 값이 우선됨)
         const selectedYM = this._getSelectedImportYearMonth();
         const selYear = selectedYM.year;
         const selMonth = selectedYM.month;
 
-        // UI 선택값이 없어도 엑셀 셀 값이나 현재 날짜로 fallback하므로 차단하지 않음
-        let nextProductId = DB.getNextId('products');
-
-        // BLOCKER-FIX-6: batch-aware product_code allocator (normalize 전에 build)
         const isRemote = this._isRemoteProductsMode();
+
+        // Header audit
+        const headerAudit = this._auditProductImportHeaders(data, selectedYM);
+        window.__LAST_PRODUCT_IMPORT_HEADER_AUDIT = headerAudit;
+
+        // Before count
+        let beforeDatasourceCount = 0;
+        if (isRemote) {
+            try {
+                const ds = DB.getProductsDataSource();
+                const existingProducts = await ds.listProducts();
+                beforeDatasourceCount = existingProducts.length;
+            } catch (e) { /* ignore */ }
+        } else {
+            beforeDatasourceCount = DB.getProducts().length;
+        }
+
+        // Build code allocator
+        let nextProductId = DB.getNextId('products');
         let codeAllocator = null;
         if (isRemote) {
             try {
@@ -663,11 +834,12 @@ const ExcelManager = {
             codeAllocator = this._buildProductCodeAllocator(false);
         }
 
-        // 모든 행을 정규화 (resolver가 row > UI fallback 처리)
+        // Normalize all rows
         const normalizedRows = data.map((row, idx) => {
             return this._normalizeProductImportRow(row, idx, nextProductId + idx, selYear, selMonth, codeAllocator);
         });
 
+        // Import
         let result;
         if (isRemote) {
             result = await this._importProductsRemote(normalizedRows);
@@ -675,93 +847,106 @@ const ExcelManager = {
             result = await this._importProductsLocal(normalizedRows);
         }
 
-        // BLOCKER-FIX-6: totalInitialStockInFile 계산 (raw data 기준)
-        const totalInitialStockInFile = data.reduce((sum, row) => {
-            const stock = parseInt(row['초기재고'] || row['현재재고'] || row['재고'] || row['수량'] || row['stock'] || row['quantity'] || 0) || 0;
+        const inserted = result.inserted || 0;
+        const skippedExisting = result.skippedExisting || 0;
+        const totalSkipped = (result.skipped || 0) + skippedExisting;
+        const failed = result.failed || 0;
+        const mergedInBatchCount = result.mergedInBatchCount || 0;
+        const mergedRowCount = result.mergedRowCount || 0;
+
+        // Input stats
+        const inputRows = data.length;
+        const validRows = normalizedRows.filter(nr => nr.valid).length;
+        const invalidRows = inputRows - validRows;
+        const normalizedProductCount = validRows - mergedRowCount;
+
+        // Total stock in file (raw data)
+        const totalStockInFile = data.reduce((sum, row) => {
+            const stock = parseInt(this._getByAliases(row, this.PRODUCT_IMPORT_FIELD_ALIASES.stock) || 0) || 0;
             return sum + stock;
         }, 0);
 
-        // BLOCKER-FIX-6: normalizedValidRows count
-        const normalizedValidRows = normalizedRows.filter(nr => nr.valid).length;
-
-        // 업로드 후 read-only count (local/remote 공통)
-        const beforeDatasourceCount = isRemote ? 0 : DB.getProducts().length;
+        // Post-import count
         let datasourceCount = 0;
-        let visibleCount = 0;
         if (typeof DB.getProductsAsync === 'function') {
             try {
                 const allProducts = await DB.getProductsAsync();
                 datasourceCount = allProducts.length;
-            } catch (e) {
-                // fallback
-            }
+            } catch (e) { /* fallback */ }
         } else {
             datasourceCount = DB.getProducts().length;
         }
 
-        // BLOCKER-FIX-6: expectedDatasourceCountAfter = beforeDatasourceCount + added
-        const expectedDatasourceCountAfter = beforeDatasourceCount + result.added;
-        const countDeltaMatchesAdded = datasourceCount === expectedDatasourceCountAfter;
+        const expectedDatasourceCountAfter = beforeDatasourceCount + inserted;
+        const countDeltaMatchesExpected = datasourceCount === expectedDatasourceCountAfter;
 
-        // 성공한 상품들의 year/month 집계
+        // Success year/month tracking
         const successYearMonths = new Set();
         let firstSuccessYear = null;
         let firstSuccessMonth = null;
-        if (result.added > 0) {
-            // 성공한 normalizedRows에서 year/month 추출
-            normalizedRows.forEach((nr, idx) => {
-                if (nr.valid && idx < (result.added + (result.skipped || 0))) {
+        if (inserted > 0) {
+            normalizedRows.forEach((nr) => {
+                if (nr.valid && nr.product && nr.product.stock_year && nr.product.stock_month) {
                     const p = nr.product;
-                    if (p && p.stock_year && p.stock_month) {
-                        successYearMonths.add(String(p.stock_year) + '-' + String(p.stock_month).padStart(2, '0'));
-                        if (!firstSuccessYear) { firstSuccessYear = p.stock_year; firstSuccessMonth = p.stock_month; }
-                    }
+                    successYearMonths.add(String(p.stock_year) + '-' + String(p.stock_month).padStart(2, '0'));
+                    if (!firstSuccessYear) { firstSuccessYear = p.stock_year; firstSuccessMonth = p.stock_month; }
                 }
             });
         }
 
-        // BLOCKER-FIX-6: totalCurrentStockAdded 계산 (added된 상품의 재고 합)
-        let totalCurrentStockAdded = 0;
+        // Inserted stock total
+        let insertedStockTotal = 0;
         normalizedRows.forEach((nr) => {
             if (nr.valid && nr.product) {
-                totalCurrentStockAdded += (nr.product.current_stock || 0);
+                insertedStockTotal += (nr.product.current_stock || 0);
             }
         });
 
-        // window.__LAST_PRODUCT_IMPORT_SUMMARY 저장
+        // Enhanced import summary
         window.__LAST_PRODUCT_IMPORT_SUMMARY = {
             mode: isRemote ? 'remote' : 'local',
-            inputRows: data.length,
-            normalizedValidRows: normalizedValidRows,
-            selectedYear: selYear,
-            selectedMonth: selMonth,
-            added: result.added,
-            skipped: result.skipped,
-            failed: result.failed || 0,
-            duplicateCandidateCount: result.duplicateCandidateCount || 0,
-            productCodeGeneratedCount: normalizedValidRows - (result.productCodeReplacedCount || 0),
+            importMode: 'default',
+            inputRows,
+            validRows,
+            invalidRows,
+            normalizedProductCount,
+            mergedInBatchCount,
+            mergedRowCount,
+            existingExactMatches: skippedExisting,
+            skippedExisting,
+            inserted,
+            updated: 0,
+            restocked: 0,
+            replaced: 0,
+            added: inserted,
+            skipped: totalSkipped,
+            failed,
+            beforeDatasourceCount,
+            expectedDatasourceCountAfter,
+            postImportDatasourceCount: datasourceCount,
+            countDeltaMatchesExpected,
+            totalStockInFile,
+            insertedStockTotal,
+            updatedStockDelta: 0,
+            postImportTotalStock: 0,
+            productsFilterYear: null,
+            productsFilterMonth: null,
+            postImportVisibleCount: 0,
+            headerAudit,
+            productCodeGeneratedCount: validRows - (result.productCodeReplacedCount || 0),
             productCodeReplacedCount: result.productCodeReplacedCount || 0,
             productCodeDuplicateCount: result.productCodeDuplicateCount || 0,
-            expectedDatasourceCountAfter: expectedDatasourceCountAfter,
-            postImportDatasourceCount: datasourceCount,
-            countDeltaMatchesAdded: countDeltaMatchesAdded,
-            totalInitialStockInFile: totalInitialStockInFile,
-            totalCurrentStockAdded: totalCurrentStockAdded,
+            successYearMonths: Array.from(successYearMonths).sort(),
             skippedDetails: result.skippedDetails ? result.skippedDetails.map(d => ({
                 rowIndex: d.rowIndex,
                 reason: d.reason,
                 hasTitle: d.hasTitle,
                 hasKoreaCost: d.hasKoreaCost
             })) : [],
-            successYearMonths: Array.from(successYearMonths).sort(),
-            postImportDatasourceCount: datasourceCount,
-            postImportVisibleCount: visibleCount,
-            productsFilterYear: null,
-            productsFilterMonth: null,
             navigatedToProducts: false
         };
 
-        if (!countDeltaMatchesAdded) {
+        if (!countDeltaMatchesExpected) {
             console.error('Product import count mismatch: expected', expectedDatasourceCountAfter, 'got', datasourceCount);
         }
 
@@ -770,32 +955,35 @@ const ExcelManager = {
         }
 
         // UI 메시지
-        if (result.added === 0 && result.skipped === 0 && (result.failed || 0) === 0) {
-            App.flash('0건 등록 (한국매입원가(KRW) 컬럼 확인 필요)', 'warning');
+        if (inserted === 0 && totalSkipped === 0 && failed === 0) {
+            App.flash('0건 등록 (컬럼명 확인 필요)', 'warning');
         } else {
-            let msg = `${result.added}건 등록 완료!`;
-            const extra = [];
-            if (result.skipped > 0) extra.push(`${result.skipped}건 스킵`);
-            if (result.failed > 0) extra.push(`${result.failed}건 실패`);
-            if (extra.length > 0) msg += ` (${extra.join(', ')})`;
-            if (result.skipped > 0 || result.failed > 0) msg += ' 콘솔에서 스킵 사유 확인.';
-            App.flash(msg, result.failed > 0 ? 'warning' : 'success');
+            const parts = [];
+            if (inserted > 0) parts.push(`신규 ${inserted}개`);
+            if (skippedExisting > 0) parts.push(`기존 중복 ${skippedExisting}개`);
+            if (mergedInBatchCount > 0) parts.push(`파일 내 병합 ${mergedInBatchCount}건`);
+            if ((result.skipped || 0) > 0) parts.push(`스킵 ${result.skipped}건`);
+            if (failed > 0) parts.push(`실패 ${failed}건`);
+
+            let msg = parts.join(', ');
+            if (inserted === 0 && skippedExisting > 0) {
+                msg = `신규 0개, 기존 중복 ${skippedExisting}개 — 같은 상품은 목록에 중복 추가하지 않았습니다.`;
+            }
+            App.flash(`상품 업로드 완료: ${msg}`, failed > 0 ? 'warning' : 'success');
         }
 
-        // BLOCKER-FIX-4: 업로드 후 상품목록 자동 필터 이동
+        // Navigate to products
         if (typeof Products !== 'undefined') {
             Products.state.loaded = false;
             Products.state.search = '';
 
-            if (result.added > 0) {
+            if (inserted > 0) {
                 if (successYearMonths.size === 1 && firstSuccessYear && firstSuccessMonth) {
-                    // 단일 year/month → 해당 년월로 필터
                     Products.state.stockYear = firstSuccessYear;
                     Products.state.stockMonth = firstSuccessMonth;
                     window.__LAST_PRODUCT_IMPORT_SUMMARY.productsFilterYear = firstSuccessYear;
                     window.__LAST_PRODUCT_IMPORT_SUMMARY.productsFilterMonth = firstSuccessMonth;
                 } else {
-                    // 여러 year/month → 전체 보기
                     Products.state.stockYear = 0;
                     Products.state.stockMonth = 0;
                     window.__LAST_PRODUCT_IMPORT_SUMMARY.productsFilterYear = 0;
@@ -805,14 +993,13 @@ const ExcelManager = {
                     }
                 }
             } else {
-                // added === 0, filter unchanged
                 Products.state.stockYear = 0;
                 Products.state.stockMonth = 0;
             }
 
             await Products.load();
             window.__LAST_PRODUCT_IMPORT_SUMMARY.navigatedToProducts = true;
-            visibleCount = Products.state.filtered.length;
+            const visibleCount = Products.state.filtered.length;
             window.__LAST_PRODUCT_IMPORT_SUMMARY.postImportVisibleCount = visibleCount;
         }
 
@@ -829,7 +1016,8 @@ const ExcelManager = {
         if (!confirm(data.length + ' ' + t('excel', 'confirm_import_count') + '?')) return;
 
         if (data.length > 0) {
-            console.log('[importOrders] 엑셀 컬럼명:', Object.keys(data[0]).join(', '));
+            const orderHeaders = Object.keys(data[0]).join(', ');
+            console.log('[importOrders] 엑셀 컬럼명:', orderHeaders);
         }
 
         if (this._isRemoteOrdersMode()) {
@@ -1086,7 +1274,8 @@ const ExcelManager = {
         if (!confirm(data.length + ' ' + t('excel', 'confirm_import_count') + '?')) return;
 
         if (data.length > 0) {
-            console.log('[importCustomers] 엑셀 컬럼명:', Object.keys(data[0]).join(', '));
+            const custHeaders = Object.keys(data[0]).join(', ');
+            console.log('[importCustomers] 엑셀 컬럼명:', custHeaders);
         }
 
         if (this._isRemoteCustomersMode()) {
