@@ -52,22 +52,6 @@ const ExcelManager = {
                             <option value="keywords">${t('excel', 'import_keywords')}</option>
                         </select>
                     </div>
-                    <div class="row">
-                        <div class="form-group col-md-6">
-                            <label>입고년도 <small class="text-muted">(선택 - 엑셀값 우선)</small></label>
-                            <select id="importYear" class="form-control">
-                                <option value="">엑셀값 사용</option>
-                                ${yearOpts}
-                            </select>
-                        </div>
-                        <div class="form-group col-md-6">
-                            <label>입고월 <small class="text-muted">(선택 - 엑셀값 우선)</small></label>
-                            <select id="importMonth" class="form-control">
-                                <option value="">엑셀값 사용</option>
-                                ${monthOpts}
-                            </select>
-                        </div>
-                    </div>
                     <button class="btn btn-primary" onclick="ExcelManager.importData()">
                         <i class="fas fa-upload"></i> ${t('excel', 'start_import')}
                     </button>
@@ -105,7 +89,7 @@ const ExcelManager = {
                     <p>${t('excel', 'guide_text')}</p>
                     <ul>
                         <li><strong>${t('excel', 'import_products')}</strong>: 브랜드, 상품명, 한국원가(또는 한국매입원가/원가), 입고월(선택), 현재재고(선택), 색상(선택), 사이즈(선택)</li>
-                        <li><strong>${t('excel', 'import_orders')}</strong>: 고객명, 브랜드, 상품명, 최종흥정가(위안), 판매일</li>
+                        <li><strong>${t('excel', 'import_orders')}</strong>: 고객명, 브랜드, 상품명, 최종흥정가(위안), 판매일 <small class="text-muted">(신규 고객 자동 등록)</small></li>
                         <li><strong>${t('excel', 'import_customers')}</strong>: 이름, 전화번호(선택), 주소(선택), 메모(선택)</li>
                         <li><strong>${t('excel', 'import_keywords')}</strong>: 타입(brand/category/color/size/material), 키워드, 대체어(선택)</li>
                     </ul>
@@ -270,16 +254,9 @@ const ExcelManager = {
         }
     },
 
-    // BLOCKER-FIX-4: UI importYear/importMonth select 값을 읽어온다.
+    // 입고년도/월은 엑셀 셀 값에서 자동 감지 (UI 선택 없음)
     _getSelectedImportYearMonth() {
-        const yearEl = document.getElementById('importYear');
-        const monthEl = document.getElementById('importMonth');
-        const selectedYear = parseInt(yearEl && yearEl.value, 10);
-        const selectedMonth = parseInt(monthEl && monthEl.value, 10);
-        return {
-            year: Number.isFinite(selectedYear) && selectedYear >= 2025 ? selectedYear : null,
-            month: Number.isFinite(selectedMonth) && selectedMonth >= 1 && selectedMonth <= 12 ? selectedMonth : null
-        };
+        return { year: null, month: null };
     },
 
     // year/month resolver: Excel 셀 값 우선 → UI 선택값 fallback → 현재 날짜 최종 fallback
