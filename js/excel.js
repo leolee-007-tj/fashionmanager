@@ -832,6 +832,11 @@ const ExcelManager = {
         }
         if (!confirm(data.length + ' ' + t('excel', 'confirm_import_count') + '?')) return;
 
+        // 엑셀 컬럼명 로깅
+        if (data.length > 0) {
+            console.log('[importOrders] 엑셀 컬럼명:', Object.keys(data[0]).join(', '));
+        }
+
         const orders = DB.getOrders();
         const customers = DB.getCustomers();
         const products = DB.getProducts();
@@ -857,6 +862,7 @@ const ExcelManager = {
             const orderDateStr = this._formatDate(dateObj);
             if (!customerName || !productName) {
                 skipped++;
+                console.log(`[importOrders] 행 ${idx + 2}: 스킵 - 고객명="${customerName || '(없음)'}", 상품명="${productName || '(없음)'}", 데이터:`, JSON.stringify(row));
                 return;
             }
             const key = (customerName.toLowerCase()) + '|' + (brand.toLowerCase()) + '|' + (productName.toLowerCase());
@@ -948,9 +954,10 @@ const ExcelManager = {
         });
         DB.setCustomers(customers);
         DB.setOrders(orders);
+        console.log(`[importOrders] 결과: ${added}건 등록, ${skipped}건 스킵, ${replaced}건 덮어쓰기 (총 ${data.length}행)`);
         let msg = `${added}건 등록 완료!`;
         if (replaced > 0) msg += ` (기존 ${replaced}건 덮어쓰기)`;
-        if (skipped > 0) msg += ` (${skipped}건 스킵)`;
+        if (skipped > 0) msg += ` (${skipped}건 스킵 - 콘솔에서 사유 확인)`;
         App.flash(msg, 'success');
     },
 
