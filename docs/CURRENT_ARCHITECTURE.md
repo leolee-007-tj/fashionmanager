@@ -10015,3 +10015,88 @@ window.__LAST_PRODUCT_IMPORT_SUMMARY 필수 필드:
 - headerAudit
 
 공식: expectedDatasourceCountAfter = beforeDatasourceCount + inserted (default mode)
+
+## 77. Sales list single-row and delete/cancel policy (2026-07-31)
+
+### 목적
+
+판매목록 UI를 상품목록처럼 단일 행으로 안정화하고, 선택/삭제/취소 흐름을 신뢰할 수 있게 만든다.
+
+### 판매목록은 상품목록처럼 한 주문 한 행
+
+- `_renderListBody`는 compact table로 렌더링
+- 한 주문 아래에 두 번째 `<tr>`을 만들지 않음
+- `<td colspan="...">` 안에 수정 form을 넣는 구조 금지
+- `orderEditForm`을 list table 안에 넣는 구조 금지
+- `editingOrderId`로 목록 안에서 form을 펼치는 구조 금지
+
+### Inline edit form 금지
+
+- 수정 버튼 클릭 시 `#/orders/:id/edit` 경로로 이동
+- `Orders.editOrder(actionKey)`는 `location.hash`로 navigate
+- `renderEdit(id)`는 별도 card form으로 렌더링
+- 저장/취소 후 `#/orders`로 복귀
+
+### Action key 정책
+
+- `_getOrderActionKey(order)` helper 사용
+- 우선순위: `remote_id > legacy_id > id`
+- 반환값은 항상 `String()`
+- UUID를 `Number()`로 변환하지 않음
+- checkbox `data-id`는 항상 string action key
+- `selected` Set에는 항상 string key 저장
+
+### Remote 삭제는 cancelOrder soft cancel
+
+- remote mode에서 삭제 버튼은 실제 hard delete가 아님
+- `ds.cancelOrder(remoteId, { notes })` 호출
+- PENDING 주문만 cancel 가능
+- PENDING이 아닌 주문은 삭제 버튼 disabled
+- `_cancelRemote(id)`와 `_batchCancelRemote()`로 처리
+
+### CANCELLED 기본 제외 정책
+
+- 기본 목록은 `cancelledExcluded = true`
+- `applyFilters`에서 `o.status !== 'CANCELLED'` 필터링
+- cancel 성공 후 목록에서 사라지고 count 감소
+- "표시 N건 / 전체 M건 · 취소 제외" 표시
+
+### 선택 key는 string action key
+
+- `toggleSelect(id)`: `const key = String(id)`
+- `toggleSelectAll()`: `visibleKeys = filtered.map(o => this._getOrderActionKey(o))`
+- `selected.has(key)`, `selected.add(key)`, `selected.delete(key)` 모두 string key 사용
+- `Number(id)` 변환 금지
+
+### UUID Number 변환 금지
+
+- `Number(o.id)`, `Number(o.remote_id)` 사용 금지
+- 모든 비교는 `String(o.remote_id) === key` 패턴
+
+### Count 감소는 reload 후 확인
+
+- `_batchCancelRemote`에서 `beforeActiveCount` / `afterActiveCount` 계산
+- `countDelta`와 `countDeltaMatchesSuccess` 검증
+- `_refreshOrdersAfterRemoteMutation()` 호출로 데이터 reload
+- CANCELLED 제외 정책이면 `afterCount = beforeCount - successCount`
+
+### Error handling
+
+- `cancelOrder` RPC 실패 시 성공 flash 금지
+- 실패 시 `failCount++`, `failReasons`에 기록
+- `__LAST_ORDER_DELETE_SUMMARY`에 전체 결과 저장
+- summary에는 UUID/token/key/password/email 포함 금지
+- 사용자에게는 "판매 삭제/취소 실패: 주문 상태 또는 권한/RPC를 확인해야 합니다." 표시
+
+### __LAST_ORDER_DELETE_SUMMARY 구조
+
+```javascript
+window.__LAST_ORDER_DELETE_SUMMARY = {
+    mode: 'remote',
+    requestedCount, successCount, failCount,
+    skippedAlreadyCancelled, skippedNotPending, invalidIdCount,
+    beforeActiveCount, afterActiveCount,
+    countDelta, countDeltaMatchesSuccess,
+    selectedCountAfter, failReasons
+};
+```

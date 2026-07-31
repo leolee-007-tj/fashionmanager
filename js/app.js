@@ -145,6 +145,7 @@ const App = {
                     if (args[0] === 'add') content = Orders.renderAdd();
                     else if (args[0] === 'ship' && args[1]) content = await Orders.renderShip(args[1]);
                     else if (args[1] === 'ship') content = await Orders.renderShip(args[0]);
+                    else if (args[1] === 'edit') content = await Orders.renderEdit(args[0]);
                     else content = await Orders.renderList();
                     break;
                 case 'customers':

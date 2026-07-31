@@ -7,7 +7,19 @@ const Orders = {
         sortBy: 'order_date',
         sortOrder: 'desc',
         selected: new Set(),
-        editingOrderId: null
+        editingOrderId: null,
+        cancelledExcluded: true
+    },
+
+    /**
+     * 주문 action key를 반환한다. remote_id 우선 → legacy_id → id.
+     * UUID를 Number로 변환하지 않는다.
+     * @param {Object} order
+     * @returns {string}
+     */
+    _getOrderActionKey(order) {
+        if (!order) return '';
+        return String(order.remote_id || order.legacy_id || order.id || '');
     },
 
     /**
@@ -111,6 +123,10 @@ const Orders = {
 
     applyFilters() {
         let list = [...this.state.orders];
+        // CANCELLED 제외 (기본 정책)
+        if (this.state.cancelledExcluded) {
+            list = list.filter(o => o.status !== 'CANCELLED');
+        }
         if (this.state.year) {
             list = list.filter(o => {
                 const ym = this._extractYearMonth(o.order_date || o.created_at);
@@ -166,6 +182,10 @@ const Orders = {
             COMPLETED: ['completed', 'badge-completed'],
             CANCELLED: ['cancelled', 'badge-cancelled']
         };
+
+        const filterText = this.state.year > 0 && this.state.month > 0 ? `${this.state.year}년 ${this.state.month}월`
+            : this.state.year > 0 ? `${this.state.year}년` : '전체';
+
         let html = `
             <div class="card">
                 <div class="action-bar">
@@ -190,6 +210,9 @@ const Orders = {
                         <div class="stat-value">${totalAmt.toLocaleString()}</div>
                         <i class="fas fa-won-sign stat-icon"></i>
                     </div>
+                </div>
+                <div class="text-muted" style="font-size:0.7rem; margin-bottom:0.5rem;">
+                    표시 ${list.length}건 / 전체 ${this.state.orders.length}건 · 현재 필터: ${filterText}${this.state.cancelledExcluded ? ' · 취소 제외' : ''}
                 </div>
                 <div class="filter-row">
                     <div class="form-group">
@@ -233,66 +256,35 @@ const Orders = {
                                 ${t('orders', 'selling_price')}
                                 <i class="fas fa-sort-${this.state.sortOrder === 'asc' ? 'up' : 'down'}"></i>
                             </th>
+                            <th>${t('common', 'status')}</th>
                             <th>${t('common', 'action')}</th>
                         </tr>
                     </thead>
                     <tbody>
             `;
             list.forEach(o => {
-                const product = products.find(p => p.id === o.product_id);
-                const customer = customers.find(c => c.id === o.customer_id);
-                const isEditing = String(this.state.editingOrderId) === String(o.id);
+                const product = products.find(p => p.id === o.product_id || p.remote_id === o.product_uuid);
+                const customer = customers.find(c => c.id === o.customer_id || c.remote_id === o.customer_uuid);
+                const actionKey = this._getOrderActionKey(o);
+                const statusLabel = statusLabels[o.status] || ['', ''];
+                const isPending = o.status === 'PENDING';
+                // PENDING이 아닌 주문은 삭제 버튼 disabled
+                const deleteDisabled = this.isRemoteOrdersMode() && !isPending ? 'disabled title="PENDING 상태만 취소 가능"' : '';
                 html += `
-                    <tr${isEditing ? ' style="background:#eef3ff;"' : ''}>
-                        <td><input type="checkbox" class="row-checkbox" data-id="${o.id}" data-target="orders" ${this.state.selected.has(Number(o.id)) ? 'checked' : ''}></td>
+                    <tr>
+                        <td><input type="checkbox" class="row-checkbox" data-id="${actionKey}" data-target="orders" ${this.state.selected.has(actionKey) ? 'checked' : ''}></td>
                         <td>${this._formatOrderDate(o.order_date) || this._formatOrderDate(o.created_at) || '-'}</td>
-                        <td>${customer ? customer.name : '-'}</td>
-                        <td>${product ? product.brand : '-'}</td>
-                        <td>${product ? product.original_title : '-'}</td>
+                        <td>${customer ? customer.name : (o.customer_name || '-')}</td>
+                        <td>${product ? product.brand : (o.brand || '-')}</td>
+                        <td>${product ? product.original_title : (o.product_name || o.product_title || '-')}</td>
                         <td class="font-bold">${(o.selling_price || 0).toLocaleString()} ${t('common', 'currency')}</td>
+                        <td><span class="badge ${statusLabel[1]}">${statusLabel[0]}</span></td>
                         <td>
-                            <button class="btn btn-sm ${isEditing ? 'btn-warning' : 'btn-secondary'}" onclick="Orders.toggleEdit(${o.id})"><i class="fas fa-edit"></i></button>
-                            <button class="btn btn-sm btn-danger" onclick="Orders.delete(${o.id})"><i class="fas fa-trash"></i></button>
+                            <button class="btn btn-sm btn-secondary" onclick="Orders.editOrder('${actionKey}')"><i class="fas fa-edit"></i></button>
+                            <button class="btn btn-sm btn-danger" onclick="Orders.delete('${actionKey}')" ${deleteDisabled}><i class="fas fa-trash"></i></button>
                         </td>
                     </tr>
                 `;
-                if (isEditing) {
-                    html += `
-                        <tr style="background:#f8f9fa;">
-                            <td colspan="7">
-                                <form id="orderEditForm_${o.id}" onsubmit="Orders.submitEdit(event, ${o.id})" style="padding:12px 8px;">
-                                    <div class="form-row">
-                                        <div class="form-group">
-                                            <label>${t('orders', 'sale_date')}</label>
-                                            <input type="date" class="form-control" name="order_date" value="${this._formatOrderDate(o.order_date) || this._formatOrderDate(o.created_at) || ''}">
-                                        </div>
-                                        <div class="form-group">
-                                            <label>${t('orders', 'customer')}</label>
-                                            <input type="text" class="form-control" name="customer_name" value="${customer?.name || o.customer_name || ''}">
-                                        </div>
-                                        <div class="form-group">
-                                            <label>${t('orders', 'selling_price')} (${t('common', 'currency')})</label>
-                                            <input type="number" class="form-control" name="selling_price" value="${o.selling_price || 0}" min="0">
-                                        </div>
-                                        <div class="form-group">
-                                            <label>${t('common', 'status')}</label>
-                                            <select class="form-control" name="status">
-                                                <option value="COMPLETED"${o.status === 'COMPLETED' ? ' selected' : ''}>${t('orders', 'status_completed') || '완료'}</option>
-                                                <option value="SHIPPED"${o.status === 'SHIPPED' ? ' selected' : ''}>${t('orders', 'status_shipped') || '출고'}</option>
-                                                <option value="PENDING"${o.status === 'PENDING' ? ' selected' : ''}>${t('orders', 'status_pending') || '대기'}</option>
-                                                <option value="CANCELLED"${o.status === 'CANCELLED' ? ' selected' : ''}>${t('orders', 'status_cancelled') || '취소'}</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="d-flex gap-2 ml-auto">
-                                        <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-save"></i> ${t('common', 'save')}</button>
-                                        <button type="button" class="btn btn-secondary btn-sm" onclick="Orders.cancelEdit()">${t('common', 'cancel')}</button>
-                                    </div>
-                                </form>
-                            </td>
-                        </tr>
-                    `;
-                }
             });
             html += '</tbody></table></div>';
         }
@@ -347,23 +339,23 @@ const Orders = {
     },
 
     toggleSelect(id) {
-        const numId = Number(id);
-        if (this.state.selected.has(numId)) {
-            this.state.selected.delete(numId);
+        const key = String(id);
+        if (this.state.selected.has(key)) {
+            this.state.selected.delete(key);
         } else {
-            this.state.selected.add(numId);
+            this.state.selected.add(key);
         }
         App.renderPage();
     },
 
     toggleSelectAll() {
-        const total = this.state.filtered.length;
-        const selectedCount = this.state.filtered.filter(o => this.state.selected.has(Number(o.id))).length;
-        if (selectedCount === total) {
-            this.state.selected.clear();
+        const visibleKeys = this.state.filtered.map(o => this._getOrderActionKey(o));
+        const selectedCount = visibleKeys.filter(k => this.state.selected.has(k)).length;
+        if (selectedCount === visibleKeys.length && visibleKeys.length > 0) {
+            visibleKeys.forEach(k => this.state.selected.delete(k));
         } else {
             this.state.selected.clear();
-            this.state.filtered.forEach(o => this.state.selected.add(Number(o.id)));
+            visibleKeys.forEach(k => this.state.selected.add(k));
         }
         App.renderPage();
     },
@@ -374,15 +366,17 @@ const Orders = {
             return;
         }
         if (!confirm(this.state.selected.size + t('common', 'confirm_delete_items'))) return;
-        // 3-8A.9-C: remote mode batch delete → 각 주문 cancelOrder (hard delete 금지)
+        // remote mode batch cancel → 각 주문 cancelOrder (hard delete 금지)
         if (this.isRemoteOrdersMode()) {
             return this._batchCancelRemote();
         }
         // local mode — 기존 sync 흐름
         const products = DB.getProducts();
         const orders = DB.getOrders();
+        const selectedKeys = [...this.state.selected];
         orders.forEach(o => {
-            if (this.state.selected.has(o.id) && o.status === 'PENDING') {
+            const key = this._getOrderActionKey(o);
+            if (selectedKeys.includes(key) && o.status === 'PENDING') {
                 const product = products.find(p => p.id === o.product_id);
                 if (product) {
                     product.reserved_stock = Math.max(0, (product.reserved_stock || 0) - (o.quantity || 0));
@@ -390,7 +384,7 @@ const Orders = {
             }
         });
         DB.setProducts(products);
-        const remaining = orders.filter(o => !this.state.selected.has(o.id));
+        const remaining = orders.filter(o => !selectedKeys.includes(this._getOrderActionKey(o)));
         DB.setOrders(remaining);
         this.state.selected.clear();
         App.flash(t('common', 'delete') + '!', 'success');
@@ -398,100 +392,230 @@ const Orders = {
     },
 
     /**
-     * 3-8A.9-C: remote mode 일괄 취소.
+     * Remote mode 일괄 취소.
      * 선택된 각 PENDING 주문에 대해 ds.cancelOrder 호출.
-     * hard delete, DB.setOrders, DB.setProducts 금지.
+     * 실패 시 성공 flash 금지, count 감소는 실제 성공한 건만 반영.
      */
     async _batchCancelRemote() {
         const orders = this.state.orders || [];
-        const selectedIds = [...this.state.selected];
+        const selectedKeys = [...this.state.selected];
+        const beforeActiveCount = orders.filter(o => o.status !== 'CANCELLED').length;
+
         let successCount = 0;
         let failCount = 0;
+        let skippedAlreadyCancelled = 0;
+        let skippedNotPending = 0;
+        let invalidIdCount = 0;
+        const failReasons = [];
 
-        for (const id of selectedIds) {
-            const order = orders.find(o => o.id === id || o.remote_id === id);
-            if (!order || order.status !== 'PENDING') continue;
+        for (const key of selectedKeys) {
+            // key로 order 찾기
+            const order = orders.find(o =>
+                String(o.remote_id) === key ||
+                String(o.legacy_id) === key ||
+                String(o.id) === key
+            );
+            if (!order) {
+                invalidIdCount++;
+                failReasons.push('ORDER_NOT_FOUND');
+                continue;
+            }
+
+            if (order.status === 'CANCELLED') {
+                skippedAlreadyCancelled++;
+                this.state.selected.delete(key);
+                continue;
+            }
+
+            if (order.status !== 'PENDING') {
+                skippedNotPending++;
+                failReasons.push('ORDER_NOT_PENDING');
+                continue;
+            }
+
             const remoteId = order.remote_id;
-            if (!remoteId || typeof remoteId !== 'string') continue;
+            if (!remoteId || typeof remoteId !== 'string' || !/^[0-9a-f]{8}-/i.test(remoteId)) {
+                invalidIdCount++;
+                failReasons.push('INVALID_ORDER_REMOTE_ID');
+                continue;
+            }
+
             try {
                 const ds = DB.getOrdersDataSource();
-                await ds.cancelOrder(remoteId, { notes: '' });
+                await ds.cancelOrder(remoteId, { notes: 'cancelled from sales list' });
                 successCount++;
+                this.state.selected.delete(key);
             } catch (e) {
-                console.error('Batch cancel order failed:', e);
                 failCount++;
+                const msg = (e.message || '').slice(0, 100);
+                failReasons.push('RPC_FAILED');
+                console.error('Batch cancel order failed:', msg);
             }
         }
-        this.state.selected.clear();
-        if (failCount > 0) {
-            App.flash(successCount + t('orders', 'cancelled') + ', ' + failCount + ' ' + t('common', 'fail'), successCount > 0 ? 'warning' : 'error');
-        } else {
-            App.flash(successCount + t('common', 'delete') + '!', 'success');
-        }
+
+        // Reload data
         await this._refreshOrdersAfterRemoteMutation();
+
+        const afterActiveCount = (this.state.orders || []).filter(o => o.status !== 'CANCELLED').length;
+        const countDelta = afterActiveCount - beforeActiveCount;
+        const countDeltaMatchesSuccess = (beforeActiveCount - afterActiveCount) === successCount;
+
+        // Summary 저장
+        window.__LAST_ORDER_DELETE_SUMMARY = {
+            mode: 'remote',
+            requestedCount: selectedKeys.length,
+            successCount,
+            failCount,
+            skippedAlreadyCancelled,
+            skippedNotPending,
+            invalidIdCount,
+            beforeActiveCount,
+            afterActiveCount,
+            countDelta,
+            countDeltaMatchesSuccess,
+            selectedCountAfter: this.state.selected.size,
+            failReasons: failReasons.slice(0, 20)
+        };
+
+        // UI 메시지
+        if (successCount > 0 && failCount === 0) {
+            App.flash(`${successCount}건 취소 완료!`, 'success');
+        } else if (successCount > 0) {
+            App.flash(`${successCount}건 취소, ${failCount}건 실패 — 콘솔에서 사유 확인`, 'warning');
+        } else if (failCount > 0) {
+            App.flash('판매 삭제/취소 실패: 주문 상태 또는 권한/RPC를 확인해야 합니다.', 'error');
+        } else {
+            App.flash('취소할 주문이 없습니다.', 'info');
+        }
     },
 
     selectDuplicates() {
         const list = this.state.filtered;
         const seen = new Map();
-        const dupIds = [];
+        const dupKeys = [];
         list.forEach(o => {
-            const key = String(o.customer_id) + '|' + String(o.product_id) + '|' + this._formatOrderDate(o.order_date || o.created_at);
-            if (seen.has(key)) {
-                dupIds.push(o.id);
+            const dupKey = String(o.customer_id || '') + '|' + String(o.product_id || '') + '|' + this._formatOrderDate(o.order_date || o.created_at);
+            if (seen.has(dupKey)) {
+                dupKeys.push(this._getOrderActionKey(o));
             } else {
-                seen.set(key, o.id);
+                seen.set(dupKey, this._getOrderActionKey(o));
             }
         });
         this.state.selected.clear();
-        dupIds.forEach(id => this.state.selected.add(Number(id)));
-        App.flash(t('orders', 'duplicates_found') + ': ' + dupIds.length + t('orders', 'items_selected'), dupIds.length > 0 ? 'info' : 'warning');
+        dupKeys.forEach(k => this.state.selected.add(k));
+        App.flash(t('orders', 'duplicates_found') + ': ' + dupKeys.length + t('orders', 'items_selected'), dupKeys.length > 0 ? 'info' : 'warning');
         App.renderPage();
     },
 
-    toggleEdit(orderId) {
-        if (String(this.state.editingOrderId) === String(orderId)) {
-            this.state.editingOrderId = null;
+    editOrder(actionKey) {
+        location.hash = '#/orders/' + encodeURIComponent(actionKey) + '/edit';
+    },
+
+    /**
+     * 주문 수정 폼 렌더링 (route: #/orders/:id/edit).
+     * remote/local 모두 단일 폼으로 처리.
+     */
+    async renderEdit(id) {
+        let order, product, customer;
+        if (this.isRemoteOrdersMode()) {
+            if (!this.state.orders || this.state.orders.length === 0) {
+                await this._loadRemoteDataForRender();
+            }
+            order = (this.state.orders || []).find(o =>
+                String(o.remote_id) === String(id) ||
+                String(o.legacy_id) === String(id) ||
+                String(o.id) === String(id)
+            );
+            product = (this.state._remoteProducts || []).find(p =>
+                String(p.id) === String(order?.product_id) || p.remote_id === order?.product_uuid
+            );
+            customer = (this.state._remoteCustomers || []).find(c =>
+                String(c.id) === String(order?.customer_id) || c.remote_id === order?.customer_uuid
+            );
         } else {
-            this.state.editingOrderId = Number(orderId);
+            this.load();
+            order = this.state.orders.find(o =>
+                String(o.legacy_id) === String(id) ||
+                String(o.id) === String(id)
+            );
+            const products = DB.getProducts();
+            const customers = DB.getCustomers();
+            product = products.find(p => p.id === order?.product_id);
+            customer = customers.find(c => c.id === order?.customer_id);
         }
-        App.renderPage();
-    },
 
-    cancelEdit() {
-        this.state.editingOrderId = null;
-        App.renderPage();
+        if (!order) {
+            App.flash(t('orders', 'order_not_found'), 'error');
+            location.hash = '#/orders';
+            return '';
+        }
+
+        const orderDate = this._formatOrderDate(order.order_date) || this._formatOrderDate(order.created_at) || '';
+        const isRemote = this.isRemoteOrdersMode();
+        const canEdit = !isRemote || order.status === 'PENDING';
+
+        return `
+            <div class="card">
+                <h2><i class="fas fa-edit"></i> ${t('common', 'edit')}</h2>
+                ${!canEdit ? `<div class="info-box" style="background:#fff8e1; border:1px solid #f0ad4e;">
+                    <i class="fas fa-exclamation-triangle"></i> PENDING 상태의 주문만 수정할 수 있습니다.
+                </div>` : ''}
+                <div class="info-box mb-4">
+                    <p><strong>${t('orders', 'order_number')}:</strong> #${order.order_number || '-'}</p>
+                    <p><strong>${t('orders', 'customer')}:</strong> ${customer?.name || order.customer_name || '-'}</p>
+                    <p><strong>${t('orders', 'product')}:</strong> ${product?.original_title || order.product_name || order.product_title || '-'}</p>
+                    <p><strong>${t('products', 'brand')}:</strong> ${product?.brand || order.brand || '-'}</p>
+                </div>
+                <form id="orderEditForm" onsubmit="return Orders.submitEdit(event, '${String(id).replace(/'/g, "\\'")}')">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>${t('orders', 'sale_date')}</label>
+                            <input type="date" class="form-control" name="order_date" value="${orderDate}" ${canEdit ? '' : 'disabled'}>
+                        </div>
+                        <div class="form-group">
+                            <label>${t('orders', 'selling_price')} (${t('common', 'currency')})</label>
+                            <input type="number" class="form-control" name="selling_price" value="${order.selling_price || 0}" min="0" ${canEdit ? '' : 'disabled'}>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>${t('products', 'color')}</label>
+                            <input type="text" class="form-control" name="color" value="${order.color || ''}" ${canEdit ? '' : 'disabled'}>
+                        </div>
+                        <div class="form-group">
+                            <label>${t('products', 'size')}</label>
+                            <input type="text" class="form-control" name="size" value="${order.size || ''}" ${canEdit ? '' : 'disabled'}>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2 mt-4">
+                        ${canEdit ? `<button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> ${t('common', 'save')}</button>` : ''}
+                        <a href="#/orders" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> ${t('common', 'cancel')}</a>
+                    </div>
+                </form>
+            </div>
+        `;
     },
 
     submitEdit(e, orderId) {
         e.preventDefault();
-        // 3-8A.9-C: remote mode edit → ds.updatePendingOrder
         if (this.isRemoteOrdersMode()) {
             return this._submitEditRemote(e, orderId);
         }
-        // local mode — text input 기반
+        // local mode
         const form = e.target;
         const orders = DB.getOrders();
-        const idx = orders.findIndex(o => String(o.id) === String(orderId));
+        const idx = orders.findIndex(o => String(o.id) === String(orderId) || String(o.legacy_id) === String(orderId));
         if (idx === -1) return;
         const order = orders[idx];
         order.order_date = form.order_date.value;
-        const customerName = (form.customer_name?.value || '').trim();
-        if (customerName) {
-            let customer = DB.findCustomerByName(customerName);
-            if (!customer) {
-                customer = DB.addCustomer({ name: customerName, wechat_nickname: '', phone: '' });
-            }
-            order.customer_id = customer.id;
-            order.customer_name = customer.name;
-        }
         order.selling_price = Number(form.selling_price.value) || 0;
-        order.status = form.status.value || order.status;
+        order.color = form.color?.value || order.color || '';
+        order.size = form.size?.value || order.size || '';
         orders[idx] = order;
         DB.setOrders(orders);
-        this.state.editingOrderId = null;
         App.flash(t('common', 'save') + '!', 'success');
-        App.render();
+        location.hash = '#/orders';
+        return false;
     },
 
     /**
@@ -502,33 +626,36 @@ const Orders = {
      */
     async _submitEditRemote(e, orderId) {
         const form = e.target;
-        const order = (this.state.orders || []).find(o => o.id === orderId || o.remote_id === orderId);
+        const order = (this.state.orders || []).find(o =>
+            String(o.remote_id) === String(orderId) ||
+            String(o.legacy_id) === String(orderId) ||
+            String(o.id) === String(orderId)
+        );
         if (!order) {
             App.flash(t('orders', 'order_not_found'), 'error');
-            return;
+            return false;
         }
         if (order.status !== 'PENDING') {
             App.flash(t('orders', 'only_pending_edit'), 'error');
-            return;
+            return false;
         }
         const remoteId = order.remote_id;
         if (!remoteId || typeof remoteId !== 'string') {
             App.flash(t('orders', 'order_not_found'), 'error');
-            return;
+            return false;
         }
 
         const customerUuid = order.customer_uuid;
         const productUuid = order.product_uuid;
         if (!customerUuid || !productUuid) {
             App.flash('customer_uuid 또는 product_uuid가 없습니다.', 'error');
-            return;
+            return false;
         }
 
-        const quantity = parseInt(form.quantity?.value) || order.quantity || 1;
         const sellingPrice = parseFloat(form.selling_price?.value) || order.selling_price || 0;
-        if (quantity <= 0 || sellingPrice <= 0) {
+        if (sellingPrice <= 0) {
             App.flash(t('orders', 'enter_qty_price'), 'error');
-            return;
+            return false;
         }
 
         try {
@@ -536,31 +663,32 @@ const Orders = {
             await ds.updatePendingOrder(remoteId, {
                 customer_uuid: customerUuid,
                 product_uuid: productUuid,
-                quantity: quantity,
+                quantity: order.quantity || 1,
                 selling_price: sellingPrice,
                 order_date: form.order_date?.value || order.order_date || '',
                 color: form.color?.value || order.color || undefined,
                 size: form.size?.value || order.size || undefined,
                 notes: undefined
             });
-            this.state.editingOrderId = null;
             App.flash(t('common', 'save') + '!', 'success');
-            await this._refreshOrdersAfterRemoteMutation();
+            location.hash = '#/orders';
         } catch (e) {
-            console.error('Remote update order failed:', e);
-            App.flash(t('common', 'save') + ' ' + t('common', 'fail') + ': ' + (e.message || ''), 'error');
+            console.error('Remote update order failed:', (e.message || '').slice(0, 100));
+            App.flash(t('common', 'save') + ' ' + t('common', 'fail'), 'error');
         }
+        return false;
     },
 
     delete(orderId) {
         if (!confirm(t('common', 'confirm_delete'))) return;
-        // 3-8A.9-C: remote mode delete → cancelOrder (hard delete 금지)
+        // remote mode delete → cancelOrder (hard delete 금지)
         if (this.isRemoteOrdersMode()) {
             return this._cancelRemote(orderId);
         }
         // local mode — 기존 sync 흐름
+        const key = String(orderId);
         const orders = DB.getOrders();
-        const order = orders.find(o => String(o.id) === String(orderId));
+        const order = orders.find(o => String(o.id) === key || String(o.legacy_id) === key);
         if (order && order.status === 'PENDING') {
             const products = DB.getProducts();
             const product = products.find(p => p.id === order.product_id);
@@ -569,9 +697,9 @@ const Orders = {
             }
             DB.setProducts(products);
         }
-        const remaining = orders.filter(o => String(o.id) !== String(orderId));
+        const remaining = orders.filter(o => String(o.id) !== key && String(o.legacy_id) !== key);
         DB.setOrders(remaining);
-        this.state.selected.delete(Number(orderId));
+        this.state.selected.delete(key);
         App.flash(t('common', 'delete') + '!', 'success');
         App.render();
     },
@@ -800,47 +928,55 @@ const Orders = {
 
     cancel(id) {
         if (!confirm(t('common', 'confirm_delete') + '?')) return;
-        // 3-8A.9-C: remote mode cancel → ds.cancelOrder
         if (this.isRemoteOrdersMode()) {
             return this._cancelRemote(id);
         }
         // local mode — 기존 sync 흐름
-        const order = DB.getOrders().find(o => o.id === id);
+        const key = String(id);
+        const order = DB.getOrders().find(o => String(o.id) === key || String(o.legacy_id) === key);
         if (!order) return;
         const product = DB.getProducts().find(p => p.id === order.product_id);
         if (product) {
             DB.updateProduct(product.id, { reserved_stock: Math.max(0, (product.reserved_stock || 0) - (order.quantity || 0)) });
         }
-        DB.updateOrder(id, { status: 'CANCELLED' });
+        DB.updateOrder(order.id, { status: 'CANCELLED' });
         App.flash(t('orders', 'cancelled') + '!', 'success');
         App.render();
     },
 
     /**
-     * 3-8A.9-C: remote mode 주문 취소.
-     * SupabaseOrdersDataSource.cancelOrder(remoteId)만 사용한다.
-     * DB.updateProduct, DB.updateOrder, DB.setOrders 금지.
-     * product stock side effect는 cancel_order RPC에 맡긴다.
+     * Remote mode 주문 취소.
+     * cancelOrder RPC 사용. 실패 시 성공 flash 금지.
      */
     async _cancelRemote(id) {
-        const order = (this.state.orders || []).find(o => o.id === id || o.remote_id === id);
+        const key = String(id);
+        const order = (this.state.orders || []).find(o =>
+            String(o.remote_id) === key ||
+            String(o.legacy_id) === key ||
+            String(o.id) === key
+        );
         if (!order) {
             App.flash(t('orders', 'order_not_found'), 'error');
             return;
         }
+        if (order.status !== 'PENDING') {
+            App.flash('PENDING 상태의 주문만 취소할 수 있습니다.', 'error');
+            return;
+        }
         const remoteId = order.remote_id;
-        if (!remoteId || typeof remoteId !== 'string') {
+        if (!remoteId || typeof remoteId !== 'string' || !/^[0-9a-f]{8}-/i.test(remoteId)) {
             App.flash(t('orders', 'order_not_found'), 'error');
             return;
         }
         try {
             const ds = DB.getOrdersDataSource();
-            await ds.cancelOrder(remoteId, { notes: '' });
-            App.flash(t('orders', 'cancelled') + '!', 'success');
+            await ds.cancelOrder(remoteId, { notes: 'cancelled from sales list' });
+            this.state.selected.delete(key);
+            App.flash('취소 완료!', 'success');
             await this._refreshOrdersAfterRemoteMutation();
         } catch (e) {
-            console.error('Remote cancel order failed:', e);
-            App.flash(t('common', 'fail') + ': ' + (e.message || ''), 'error');
+            console.error('Remote cancel order failed:', (e.message || '').slice(0, 100));
+            App.flash('판매 삭제/취소 실패: 주문 상태 또는 권한/RPC를 확인해야 합니다.', 'error');
         }
     },
 
@@ -863,7 +999,8 @@ const Orders = {
             return;
         }
         // local mode — 기존 sync 흐름
-        DB.updateOrder(id, { status: 'COMPLETED' });
+        const key = String(id);
+        DB.updateOrder(parseInt(key) || key, { status: 'COMPLETED' });
         Customers.recalculateAll();
         App.flash(t('orders', 'completed') + '!', 'success');
         App.render();
@@ -872,11 +1009,14 @@ const Orders = {
     /**
      * 3-8A.9-D: remote mode 주문 완료.
      * SupabaseOrdersDataSource.completeOrder(remoteId)만 사용한다.
-     * DB.updateOrder, DB.setOrders 금지.
-     * SHIPPED 상태 주문만 완료 허용.
      */
     async _completeRemote(id) {
-        const order = (this.state.orders || []).find(o => o.id === id || o.remote_id === id);
+        const key = String(id);
+        const order = (this.state.orders || []).find(o =>
+            String(o.remote_id) === key ||
+            String(o.legacy_id) === key ||
+            String(o.id) === key
+        );
         if (!order) {
             App.flash(t('orders', 'order_not_found'), 'error');
             return;
@@ -896,8 +1036,8 @@ const Orders = {
             App.flash(t('orders', 'completed') + '!', 'success');
             await this._refreshOrdersAfterRemoteMutation();
         } catch (e) {
-            console.error('Remote complete order failed:', e);
-            App.flash(t('common', 'fail') + ': ' + (e.message || ''), 'error');
+            console.error('Remote complete order failed:', (e.message || '').slice(0, 100));
+            App.flash(t('common', 'fail'), 'error');
         }
     },
 

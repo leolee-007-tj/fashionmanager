@@ -245,12 +245,24 @@ remote mode에서는 다음 작업이 절대 금지된다:
 | 3-8A.9-E.1 | submit/ship route bugfix | ✅ |
 | 3-8A.9-F | local mode regression smoke | ✅ |
 
+### Sales List Stabilization (2026-07-31)
+
+| 항목 | 내용 | 상태 |
+|---|---|---|
+| 판매목록 단일 행 UI | inline edit form 제거, 한 주문 = 한 행 | ✅ |
+| Action key 정책 | remote_id > legacy_id > id, String key, UUID Number 변환 금지 | ✅ |
+| 선택 유지 | selected Set string key, toggleSelectAll visibleKeys | ✅ |
+| Remote delete/cancel | cancelOrder soft cancel, PENDING-only, 실패 처리 | ✅ |
+| CANCELLED 제외 | 기본 목록에서 CANCELLED 숨김, count 재계산 | ✅ |
+| __LAST_ORDER_DELETE_SUMMARY | cancel 결과 저장, UUID/민감정보 제외 | ✅ |
+| Contract tests | 38개 테스트, orders-sales-list-delete-selection-contract.test.mjs | ✅ |
+
 ### Remaining Stages
 
 | 우선순위 | 단계 | 내용 | 상태 |
 |---|---|---|---|
 | 1 | 3-8A.10-A | Manager/Staff browser smoke | ✅ 완료 (계정 unavailable) |
-| 2 | 3-8A.10-B | Remote UI post-bugfix smoke (recommended) | 🔜 BLOCKER-FIX-3 ~ BLOCKER-FIX-6 해결 완료. **Product QA automation harness** (2026-07-29) 구축 완료 후 재개. Product list QA 자동 검증 PASS 후 Customers/Orders/Analytics read-only smoke 진행. Orders write smoke는 상품목록 안정화 후에만 허용. |
+| 2 | 3-8A.10-B | Remote UI post-bugfix smoke (recommended) | 🔜 BLOCKER-FIX-3 ~ BLOCKER-FIX-6 해결 완료. **Product QA automation harness** (2026-07-29) 구축 완료 후 재개. Product list QA 자동 검증 PASS 후 Customers/Orders/Analytics read-only smoke 진행. Orders write smoke는 상품목록 안정화 후에만 허용. **Sales list stabilization (2026-07-31)**: 판매목록 UI/선택/삭제 blocker 해결 완료. |
 | 3 | 3-8B | Analytics/Customers remote integration audit | 🔜 예정 |
 | 4 | 3-9 | Backup/export/import policy | 🔜 예정 |
 

@@ -149,3 +149,54 @@ window.__LAST_PRODUCT_BATCH_DELETE_SUMMARY__ = {
 - `remote_id`는 boolean 또는 masked 형태만 기록
 - `token/key/password` 출력 금지
 - `service_role` 사용 금지
+
+## Order Count and Delete Policy
+
+### 판매목록 count 기준
+
+- 판매목록 count는 **active orders** 기준 (CANCELLED 제외)
+- 기본 목록 필터: `cancelledExcluded = true`
+- `applyFilters()`에서 `o.status !== 'CANCELLED'` 적용
+- 화면 표시: "표시 N건 / 전체 M건 · 취소 제외"
+
+### 표시 count 분리
+
+- `list.length`: 현재 필터(연도/월/CANCELLED 제외) 적용된 주문 수
+- `this.state.orders.length`: 전체 주문 수 (CANCELLED 포함)
+- `totalQty`: filtered 주문의 quantity 합계
+- `totalAmt`: filtered 주문의 selling_price * quantity 합계
+
+### 판매일은 order_date 기준
+
+- `_extractYearMonth(o.order_date || o.created_at)` 사용
+- `order_date` 우선, 없으면 `created_at` fallback
+- 연도/월 필터는 `order_date` 기준으로만 적용
+
+### Remote delete 취소 정책
+
+- remote mode 삭제는 hard delete가 아닌 `cancelOrder` RPC 호출
+- PENDING 상태 주문만 cancel 가능
+- cancel 성공 시 CANCELLED 상태로 변경
+- CANCELLED 주문은 기본 목록에서 제외 → count 자동 감소
+- PENDING이 아닌 주문은 삭제 버튼 disabled
+
+### Cancel 후 count 검증
+
+- `beforeActiveCount`: cancel 전 active orders (CANCELLED 제외)
+- `afterActiveCount`: reload 후 active orders
+- `countDelta = afterActiveCount - beforeActiveCount`
+- `countDeltaMatchesSuccess = (beforeActiveCount - afterActiveCount) === successCount`
+- 불일치 시 개발자 콘솔에서 확인 가능 (`__LAST_ORDER_DELETE_SUMMARY`)
+
+### Order Delete Summary
+
+```javascript
+window.__LAST_ORDER_DELETE_SUMMARY = {
+    mode: 'remote',
+    requestedCount, successCount, failCount,
+    skippedAlreadyCancelled, skippedNotPending, invalidIdCount,
+    beforeActiveCount, afterActiveCount,
+    countDelta, countDeltaMatchesSuccess,
+    selectedCountAfter, failReasons
+};
+```
