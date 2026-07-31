@@ -473,4 +473,148 @@ describe('Sales List Single-Row and Delete/Selection Contract', function () {
         assert.doesNotMatch(DB_JS, /contentscript/, 'db.js should not contain contentscript');
         assert.doesNotMatch(APP_JS, /ObjectMultiplex/, 'app.js should not contain ObjectMultiplex');
     });
+
+    // ============================================================
+    // SL51-SL65: ds scope bug fix + cancel_order 400 error classification
+    // ============================================================
+
+    it('SL51: _batchCancelRemote declares ds before try block', function () {
+        const batchStart = ORDERS_JS.indexOf('_batchCancelRemote()');
+        const batchEnd = ORDERS_JS.indexOf('selectDuplicates', batchStart);
+        const batchSection = ORDERS_JS.slice(batchStart, batchEnd > batchStart ? batchEnd : batchStart + 2000);
+        // ds must be declared before the try block (not inside try)
+        const dsDecl = batchSection.match(/const ds\s*=\s*DB\.getOrdersDataSource/);
+        assert.ok(dsDecl, '_batchCancelRemote should declare ds');
+        const tryStart = batchSection.indexOf('try {');
+        assert.ok(dsDecl.index < tryStart, 'ds should be declared before try block in _batchCancelRemote');
+    });
+
+    it('SL52: _cancelRemote declares ds before try block', function () {
+        const cancelRemoteStart = ORDERS_JS.indexOf('_cancelRemote(id) {');
+        const refreshStart = ORDERS_JS.indexOf('_refreshOrdersAfterRemoteMutation()');
+        const cancelRemoteSection = ORDERS_JS.slice(cancelRemoteStart, refreshStart > cancelRemoteStart ? refreshStart : cancelRemoteStart + 3000);
+        const dsDecl = cancelRemoteSection.match(/const ds\s*=\s*DB\.getOrdersDataSource/);
+        assert.ok(dsDecl, '_cancelRemote should declare ds');
+        const tryStart = cancelRemoteSection.indexOf('try {');
+        assert.ok(dsDecl.index < tryStart, 'ds should be declared before try block in _cancelRemote');
+    });
+
+    it('SL53: _batchCancelRemote catch uses typeof ds.classifyCancelOrderError === function', function () {
+        const batchStart = ORDERS_JS.indexOf('_batchCancelRemote()');
+        const batchEnd = ORDERS_JS.indexOf('selectDuplicates', batchStart);
+        const batchSection = ORDERS_JS.slice(batchStart, batchEnd > batchStart ? batchEnd : batchStart + 2000);
+        assert.match(batchSection, /typeof ds\.classifyCancelOrderError === 'function'/, '_batchCancelRemote should check typeof classifier');
+    });
+
+    it('SL54: _cancelRemote catch uses typeof ds.classifyCancelOrderError === function', function () {
+        const cancelRemoteStart = ORDERS_JS.indexOf('_cancelRemote(id) {');
+        const refreshStart = ORDERS_JS.indexOf('_refreshOrdersAfterRemoteMutation()');
+        const cancelRemoteSection = ORDERS_JS.slice(cancelRemoteStart, refreshStart > cancelRemoteStart ? refreshStart : cancelRemoteStart + 3000);
+        assert.match(cancelRemoteSection, /typeof ds\.classifyCancelOrderError === 'function'/, '_cancelRemote should check typeof classifier');
+    });
+
+    it('SL55: _batchCancelRemote has top-level try/catch wrapping loop', function () {
+        const batchStart = ORDERS_JS.indexOf('_batchCancelRemote()');
+        const batchEnd = ORDERS_JS.indexOf('selectDuplicates', batchStart);
+        const batchSection = ORDERS_JS.slice(batchStart, batchEnd > batchStart ? batchEnd : batchStart + 2000);
+        assert.match(batchSection, /let fnError\s*=\s*null/, '_batchCancelRemote should have fnError tracker');
+        assert.match(batchSection, /fnError\s*=\s*e/, '_batchCancelRemote should assign fnError on catch');
+        assert.match(batchSection, /fnError\s*\?/, '_batchCancelRemote should check fnError for flash');
+        assert.match(batchSection, /App\.renderPage/, '_batchCancelRemote should call App.renderPage');
+    });
+
+    it('SL56: _batchCancelRemote summary includes fnError field', function () {
+        const batchStart = ORDERS_JS.indexOf('_batchCancelRemote()');
+        const batchEnd = ORDERS_JS.indexOf('selectDuplicates', batchStart);
+        const batchSection = ORDERS_JS.slice(batchStart, batchEnd > batchStart ? batchEnd : batchStart + 2000);
+        const summaryStart = batchSection.indexOf('__LAST_ORDER_DELETE_SUMMARY');
+        const summaryEnd = batchSection.indexOf('};', summaryStart + 100);
+        const summarySection = batchSection.slice(summaryStart, summaryEnd > summaryStart ? summaryEnd + 1 : summaryStart + 800);
+        assert.match(summarySection, /fnError/, 'summary should include fnError');
+    });
+
+    it('SL57: console.error in catch shows code/status/details/hint', function () {
+        const batchStart = ORDERS_JS.indexOf('_batchCancelRemote()');
+        const batchEnd = ORDERS_JS.indexOf('selectDuplicates', batchStart);
+        const batchSection = ORDERS_JS.slice(batchStart, batchEnd > batchStart ? batchEnd : batchStart + 2000);
+        // Should log e.code, e.status, e.details, e.hint without UUID
+        assert.match(batchSection, /e\.code/, 'console.error should show error code');
+        assert.match(batchSection, /e\.status/, 'console.error should show error status');
+        assert.match(batchSection, /e\.details/, 'console.error should show error details');
+        assert.match(batchSection, /e\.hint/, 'console.error should show error hint');
+        assert.doesNotMatch(batchSection, /console\.error.*\.\.\.e/, 'should not log full error object');
+    });
+
+    it('SL58: _wrapCreateOrderError preserves details/hint/status', function () {
+        assert.ok(DB_JS, 'db.js should exist');
+        const wrapStart = DB_JS.indexOf('function _wrapCreateOrderError');
+        const wrapEnd = DB_JS.indexOf('_writeDisabledMsg', wrapStart);
+        const wrapSection = DB_JS.slice(wrapStart, wrapEnd > wrapStart ? wrapEnd : wrapStart + 800);
+        assert.match(wrapSection, /wrapped\.details\s*=\s*err\.details/, 'should preserve err.details');
+        assert.match(wrapSection, /wrapped\.hint\s*=\s*err\.hint/, 'should preserve err.hint');
+        assert.match(wrapSection, /wrapped\.status\s*=\s*err\.status/, 'should preserve err.status');
+    });
+
+    it('SL59: sales batch delete button calls Orders.batchDelete', function () {
+        const renderBodyStart = ORDERS_JS.indexOf('_renderListBody(products, customers)');
+        const renderBodyEnd = ORDERS_JS.indexOf('toggleSelect(id)', renderBodyStart);
+        const renderBodySection = ORDERS_JS.slice(renderBodyStart, renderBodyEnd > renderBodyStart ? renderBodyEnd : renderBodyStart + 2000);
+        assert.match(renderBodySection, /Orders\.batchDelete/, 'sales batch delete should call Orders.batchDelete');
+        assert.doesNotMatch(renderBodySection, /Products\.batchDelete/, 'sales batch delete should not call Products.batchDelete');
+    });
+
+    it('SL60: products batch delete button calls Products.batchDelete', function () {
+        const PRODUCTS_JS = readFile('js/products.js');
+        assert.ok(PRODUCTS_JS, 'products.js should exist');
+        assert.match(PRODUCTS_JS, /Products\.batchDelete/, 'products batch delete should call Products.batchDelete');
+        const renderBodyStart = PRODUCTS_JS.indexOf('_renderProductsListBody');
+        const renderBodySection = PRODUCTS_JS.slice(renderBodyStart, 2000);
+        assert.doesNotMatch(renderBodySection, /Orders\.batchDelete/, 'products batch delete should not call Orders.batchDelete');
+    });
+
+    it('SL61: orders row checkbox data-target is orders', function () {
+        const renderBodyStart = ORDERS_JS.indexOf('_renderListBody(products, customers)');
+        const renderBodyEnd = ORDERS_JS.indexOf('toggleSelect(id)', renderBodyStart);
+        const renderBodySection = ORDERS_JS.slice(renderBodyStart, renderBodyEnd > renderBodyStart ? renderBodyEnd : renderBodyStart + 2000);
+        assert.match(renderBodySection, /row-checkbox.*data-target="orders"/, 'orders row checkbox should have data-target="orders"');
+    });
+
+    it('SL62: products row checkbox data-target is products', function () {
+        const PRODUCTS_JS = readFile('js/products.js');
+        assert.ok(PRODUCTS_JS, 'products.js should exist');
+        assert.match(PRODUCTS_JS, /row-checkbox.*data-target="products"/, 'products row checkbox should have data-target="products"');
+    });
+
+    it('SL63: cancelOrder failure does not throw ReferenceError for ds', function () {
+        // Static check: ds should not be referenced after being scoped inside try
+        const batchStart = ORDERS_JS.indexOf('_batchCancelRemote()');
+        const batchEnd = ORDERS_JS.indexOf('selectDuplicates', batchStart);
+        const batchSection = ORDERS_JS.slice(batchStart, batchEnd > batchStart ? batchEnd : batchStart + 2000);
+        // ds is declared at function scope level, not inside try
+        const tryBlock = batchSection.match(/try\s*\{([\s\S]*?)\}\s*catch\s*\(/);
+        if (tryBlock) {
+            assert.doesNotMatch(tryBlock[1], /const ds\s*=\s*DB\.getOrdersDataSource/, 'ds should not be declared inside try block');
+        }
+    });
+
+    it('SL64: _cancelRemote failure does not throw ReferenceError for ds', function () {
+        const cancelRemoteStart = ORDERS_JS.indexOf('_cancelRemote(id) {');
+        const refreshStart = ORDERS_JS.indexOf('_refreshOrdersAfterRemoteMutation()');
+        const cancelRemoteSection = ORDERS_JS.slice(cancelRemoteStart, refreshStart > cancelRemoteStart ? refreshStart : cancelRemoteStart + 3000);
+        const tryBlock = cancelRemoteSection.match(/try\s*\{([\s\S]*?)\}\s*catch\s*\(/);
+        if (tryBlock) {
+            assert.doesNotMatch(tryBlock[1], /const ds\s*=\s*DB\.getOrdersDataSource/, 'ds should not be declared inside try block in _cancelRemote');
+        }
+    });
+
+    it('SL65: _callOrderRpcAndMap preserves response.error code/details/hint/status', function () {
+        assert.ok(DB_JS, 'db.js should exist');
+        const rpcStart = DB_JS.indexOf('function _callOrderRpcAndMap');
+        const rpcEnd = DB_JS.indexOf('function _validateOrderUuid', rpcStart);
+        const rpcSection = DB_JS.slice(rpcStart, rpcEnd > rpcStart ? rpcEnd : rpcStart + 800);
+        assert.match(rpcSection, /response\.error\.code/, 'should preserve error.code');
+        assert.match(rpcSection, /response\.error\.details/, 'should preserve error.details');
+        assert.match(rpcSection, /response\.error\.hint/, 'should preserve error.hint');
+        assert.match(rpcSection, /response\.status/, 'should preserve response.status');
+    });
 });

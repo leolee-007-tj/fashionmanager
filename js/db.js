@@ -1191,9 +1191,12 @@ const DB = {
             )) {
                 throw err;
             }
-            const wrapped = new Error('SupabaseOrdersDataSource.createOrder RPC failed');
+            const wrapped = new Error('SupabaseOrdersDataSource RPC failed');
             if (err && err.code) wrapped.code = err.code;
-            if (err && err.message) wrapped.details = err.message;
+            if (err && err.details) wrapped.details = err.details;
+            else if (err && err.message) wrapped.details = err.message;
+            if (err && err.hint) wrapped.hint = err.hint;
+            if (err && err.status) wrapped.status = err.status;
             throw wrapped;
         }
 

@@ -400,6 +400,7 @@ const Orders = {
      * 실패 시 성공 flash 금지, count 감소는 실제 성공한 건만 반영.
      */
     async _batchCancelRemote() {
+        const ds = DB.getOrdersDataSource();
         const orders = this.state.orders || [];
         const selectedKeys = [...this.state.selected];
         const beforeActiveCount = orders.filter(o => o.status !== 'CANCELLED').length;
@@ -410,62 +411,71 @@ const Orders = {
         let skippedNotPending = 0;
         let invalidIdCount = 0;
         const failReasons = [];
+        let fnError = null;
 
-        for (const key of selectedKeys) {
-            // key로 order 찾기
-            const order = orders.find(o =>
-                String(o.remote_id) === key ||
-                String(o.legacy_id) === key ||
-                String(o.id) === key
-            );
-            if (!order) {
-                invalidIdCount++;
-                failReasons.push('ORDER_NOT_FOUND');
-                continue;
+        try {
+            for (const key of selectedKeys) {
+                const order = orders.find(o =>
+                    String(o.remote_id) === key ||
+                    String(o.legacy_id) === key ||
+                    String(o.id) === key
+                );
+                if (!order) {
+                    invalidIdCount++;
+                    failReasons.push('ORDER_NOT_FOUND');
+                    continue;
+                }
+
+                if (order.status === 'CANCELLED') {
+                    skippedAlreadyCancelled++;
+                    this.state.selected.delete(key);
+                    continue;
+                }
+
+                if (order.status !== 'PENDING') {
+                    skippedNotPending++;
+                    failReasons.push('ORDER_NOT_PENDING');
+                    continue;
+                }
+
+                const remoteId = order.remote_id;
+                if (!remoteId || typeof remoteId !== 'string' || !/^[0-9a-f]{8}-/i.test(remoteId)) {
+                    invalidIdCount++;
+                    failReasons.push('INVALID_ORDER_REMOTE_ID');
+                    continue;
+                }
+
+                try {
+                    await ds.cancelOrder(remoteId, { notes: 'cancelled from sales list' });
+                    successCount++;
+                    this.state.selected.delete(key);
+                } catch (e) {
+                    failCount++;
+                    const classifier = ds && typeof ds.classifyCancelOrderError === 'function'
+                        ? ds.classifyCancelOrderError(e)
+                        : 'UNKNOWN_CANCEL_ORDER_ERROR';
+                    failReasons.push(classifier);
+                    console.error('Batch cancel order failed:', classifier, {
+                        code: e.code || null,
+                        status: e.status || null,
+                        details: e.details ? String(e.details).slice(0, 120) : null,
+                        hint: e.hint ? String(e.hint).slice(0, 120) : null
+                    });
+                }
             }
 
-            if (order.status === 'CANCELLED') {
-                skippedAlreadyCancelled++;
-                this.state.selected.delete(key);
-                continue;
-            }
-
-            if (order.status !== 'PENDING') {
-                skippedNotPending++;
-                failReasons.push('ORDER_NOT_PENDING');
-                continue;
-            }
-
-            const remoteId = order.remote_id;
-            if (!remoteId || typeof remoteId !== 'string' || !/^[0-9a-f]{8}-/i.test(remoteId)) {
-                invalidIdCount++;
-                failReasons.push('INVALID_ORDER_REMOTE_ID');
-                continue;
-            }
-
-            try {
-                const ds = DB.getOrdersDataSource();
-                await ds.cancelOrder(remoteId, { notes: 'cancelled from sales list' });
-                successCount++;
-                this.state.selected.delete(key);
-            } catch (e) {
-                failCount++;
-                const classifier = ds && ds.classifyCancelOrderError
-                    ? ds.classifyCancelOrderError(e)
-                    : 'UNKNOWN_CANCEL_ORDER_ERROR';
-                failReasons.push(classifier);
-                console.error('Batch cancel order failed:', classifier, (e.message || '').slice(0, 100));
-            }
+            // Reload data
+            await this._refreshOrdersAfterRemoteMutation();
+        } catch (e) {
+            fnError = e;
+            console.error('_batchCancelRemote unexpected error:', (e.message || '').slice(0, 100));
         }
-
-        // Reload data
-        await this._refreshOrdersAfterRemoteMutation();
 
         const afterActiveCount = (this.state.orders || []).filter(o => o.status !== 'CANCELLED').length;
         const countDelta = afterActiveCount - beforeActiveCount;
         const countDeltaMatchesSuccess = (beforeActiveCount - afterActiveCount) === successCount;
 
-        // Summary 저장
+        // Summary 저장 — 실패 상황에서도 항상 남긴다
         window.__LAST_ORDER_DELETE_SUMMARY = {
             mode: 'remote',
             requestedCount: selectedKeys.length,
@@ -479,11 +489,13 @@ const Orders = {
             countDelta,
             countDeltaMatchesSuccess,
             selectedCountAfter: this.state.selected.size,
-            failReasons: failReasons.slice(0, 20)
+            failReasons: failReasons.slice(0, 20),
+            fnError: fnError ? (fnError.message || '').slice(0, 100) : null
         };
 
-        // UI 메시지
-        if (successCount > 0 && failCount === 0) {
+        if (fnError) {
+            App.flash('판매 삭제/취소 중 오류가 발생했습니다.', 'error');
+        } else if (successCount > 0 && failCount === 0) {
             App.flash(`${successCount}건 취소 완료!`, 'success');
         } else if (successCount > 0) {
             App.flash(`${successCount}건 취소, ${failCount}건 실패 — 콘솔에서 사유 확인`, 'warning');
@@ -492,6 +504,8 @@ const Orders = {
         } else {
             App.flash('취소할 주문이 없습니다.', 'info');
         }
+
+        App.renderPage();
     },
 
     selectDuplicates() {
@@ -962,6 +976,7 @@ const Orders = {
      * cancelOrder RPC 사용. 실패 시 성공 flash 금지.
      */
     async _cancelRemote(id) {
+        const ds = DB.getOrdersDataSource();
         const key = String(id);
         const order = (this.state.orders || []).find(o =>
             String(o.remote_id) === key ||
@@ -982,16 +997,20 @@ const Orders = {
             return;
         }
         try {
-            const ds = DB.getOrdersDataSource();
             await ds.cancelOrder(remoteId, { notes: 'cancelled from sales list' });
             this.state.selected.delete(key);
             App.flash('취소 완료!', 'success');
             await this._refreshOrdersAfterRemoteMutation();
         } catch (e) {
-            const classifier = ds && ds.classifyCancelOrderError
+            const classifier = ds && typeof ds.classifyCancelOrderError === 'function'
                 ? ds.classifyCancelOrderError(e)
                 : 'UNKNOWN_CANCEL_ORDER_ERROR';
-            console.error('Remote cancel order failed:', classifier, (e.message || '').slice(0, 100));
+            console.error('Remote cancel order failed:', classifier, {
+                code: e.code || null,
+                status: e.status || null,
+                details: e.details ? String(e.details).slice(0, 120) : null,
+                hint: e.hint ? String(e.hint).slice(0, 120) : null
+            });
 
             let userMsg = '판매 삭제/취소 실패: 주문 상태 또는 권한/RPC를 확인해야 합니다.';
             if (classifier === 'ORDER_NOT_PENDING') {
