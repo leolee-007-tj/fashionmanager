@@ -231,7 +231,9 @@ const SmartInventoryWorkbookImporter = {
         if (!value) return false;
         const v = String(value).trim().toLowerCase();
         const allPatterns = Object.values(this.SOURCE_LIKE_PATTERNS).flat();
-        return allPatterns.some(p => v === p.toLowerCase() || v.includes(p.toLowerCase()));
+        // exact match only — substring match would filter valid customer names
+        // that happen to contain source-like words (e.g. "김phone", "delivery김")
+        return allPatterns.some(p => v === p.toLowerCase());
     },
 
     // ==================== Product Identity ====================
@@ -589,6 +591,9 @@ const SmartInventoryWorkbookImporter = {
         if (duplicateProductIdentities.length > 0) {
             warnings.push(`파일 내 중복 상품 ${duplicateProductIdentities.length}건은 병합됩니다.`);
         }
+
+        // Store actual customer candidates array in _extractedData for save
+        extractedData._newCustomerCandidates = newCustomerCandidates;
 
         return {
             workbookName: filename,
@@ -949,15 +954,16 @@ const SmartInventoryWorkbookImporter = {
                 }
             }
 
-            // Save customers
-            if ((target === 'customers' || target === 'all') && preview.newCustomerCandidates && preview.newCustomerCandidates.length > 0) {
+            // Save customers — use _extractedData._newCustomerCandidates (actual array)
+            const newCustomerNames = (extractedData._newCustomerCandidates || []);
+            if ((target === 'customers' || target === 'all') && newCustomerNames.length > 0) {
                 const existingNames = new Set();
                 try {
                     const customers = DB.getCustomers();
                     customers.forEach(c => existingNames.add((c.name || '').toLowerCase().trim()));
                 } catch (e) { /* ignore */ }
 
-                const newCustomers = [...new Set(preview.newCustomerCandidates)]
+                const newCustomers = [...new Set(newCustomerNames)]
                     .filter(name => !this._isSourceLikeCustomerName(name))
                     .filter(name => !existingNames.has(name.toLowerCase().trim()));
 

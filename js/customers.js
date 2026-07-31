@@ -363,7 +363,7 @@ const Customers = {
                 <table class="table">
                     <thead>
                         <tr>
-                            <th style="width:40px;"><input type="checkbox" class="select-all-cb" data-target="customers"></th>
+                            <th style="width:40px;"><input type="checkbox" class="select-all-cb" data-target="customers" ${list.length > 0 && list.every(c => this.state.selected.has(Number(c.id))) ? 'checked' : ''}></th>
                             <th>${t('customers', 'avatar') || ''}</th>
                             <th onclick="Customers.sort('name')" class="${this.state.sortBy === 'name' ? 'sort-active' : ''}">
                                 ${t('customers', 'name')}

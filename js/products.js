@@ -324,7 +324,7 @@ const Products = {
                 <table class="table">
                     <thead>
                         <tr>
-                            <th style="width:40px;"><input type="checkbox" class="select-all-cb" data-target="products"></th>
+                            <th style="width:40px;"><input type="checkbox" class="select-all-cb" data-target="products" ${list.length > 0 && list.every(p => this.state.selected.has(this._getProductActionKey(p))) ? 'checked' : ''}></th>
                             <th>${t('common', 'image')}</th>
                             <th onclick="Products.sort('brand')" class="${this.state.sortBy === 'brand' ? 'sort-active' : ''}">
                                 ${t('products', 'brand')}

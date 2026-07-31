@@ -99,7 +99,7 @@ const Expenses = {
                 <table class="table">
                     <thead>
                         <tr>
-                            <th style="width:40px;"><input type="checkbox" class="select-all-cb" data-target="expenses"></th>
+                            <th style="width:40px;"><input type="checkbox" class="select-all-cb" data-target="expenses" ${list.length > 0 && list.every(e => this.state.selected.has(Number(e.id))) ? 'checked' : ''}></th>
                             <th onclick="Expenses.sort('expense_date')" class="${this.state.sortBy === 'expense_date' ? 'sort-active' : ''}">
                                 ${t('expenses', 'date')}
                                 <i class="fas fa-sort-${this.state.sortOrder === 'asc' ? 'up' : 'down'}"></i>

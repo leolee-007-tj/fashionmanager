@@ -247,7 +247,7 @@ const Orders = {
                 <table class="table">
                     <thead>
                         <tr>
-                            <th style="width:40px;"><input type="checkbox" class="select-all-cb" data-target="orders"></th>
+                            <th style="width:40px;"><input type="checkbox" class="select-all-cb" data-target="orders" ${list.length > 0 && list.every(o => this.state.selected.has(this._getOrderActionKey(o))) ? 'checked' : ''}></th>
                             <th onclick="Orders.sort('order_date')" class="${this.state.sortBy === 'order_date' ? 'sort-active' : ''}">
                                 ${t('orders', 'sale_date')}
                                 <i class="fas fa-sort-${this.state.sortOrder === 'asc' ? 'up' : 'down'}"></i>
