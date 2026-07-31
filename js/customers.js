@@ -101,13 +101,16 @@ const Customers = {
                 if (!ym) return false;
                 return ym.year === this.state.year && ym.month === this.state.month;
             });
-            list = list.filter(c => {
-                const nameLower = (c.name || '').toLowerCase();
-                return orders.some(o => {
-                    const oName = (o.customer_name || '').toLowerCase();
-                    return oName === nameLower || String(o.customer_id) === String(c.id);
+            // 주문 데이터가 있는 경우에만 월별 필터 적용, 없으면 전체 고객 표시
+            if (orders.length > 0) {
+                list = list.filter(c => {
+                    const nameLower = (c.name || '').toLowerCase();
+                    return orders.some(o => {
+                        const oName = (o.customer_name || '').toLowerCase();
+                        return oName === nameLower || String(o.customer_id) === String(c.id);
+                    });
                 });
-            });
+            }
             list = list.map(c => {
                 const nameLower = (c.name || '').toLowerCase();
                 const mOrders = orders.filter(o => {
