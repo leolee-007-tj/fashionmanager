@@ -13,6 +13,7 @@ function readFile(relativePath) {
 
 const ORDERS_JS = readFile('js/orders.js');
 const APP_JS = readFile('js/app.js');
+const DB_JS = readFile('js/db.js');
 
 describe('Sales List Single-Row and Delete/Selection Contract', function () {
 
@@ -236,10 +237,9 @@ describe('Sales List Single-Row and Delete/Selection Contract', function () {
 
     it('SL25: _cancelRemote shows error flash on failure, not success', function () {
         const cancelRemoteStart = ORDERS_JS.indexOf('_cancelRemote(id) {');
-        const batchStart = ORDERS_JS.indexOf('_batchCancelRemote()');
-        const cancelRemoteSection = ORDERS_JS.slice(cancelRemoteStart, batchStart > cancelRemoteStart ? batchStart : cancelRemoteStart + 1200);
+        const refreshStart = ORDERS_JS.indexOf('_refreshOrdersAfterRemoteMutation()');
+        const cancelRemoteSection = ORDERS_JS.slice(cancelRemoteStart, refreshStart > cancelRemoteStart ? refreshStart : cancelRemoteStart + 3000);
         assert.match(cancelRemoteSection, /catch\s*\(/, '_cancelRemote should have error handling');
-        // 실패 시 "판매 삭제/취소 실패" 메시지
         assert.match(cancelRemoteSection, /취소.*실패|RPC.*확인/, '_cancelRemote should show failure message');
     });
 
@@ -360,5 +360,117 @@ describe('Sales List Single-Row and Delete/Selection Contract', function () {
         const batchSection = ORDERS_JS.slice(batchStart, batchEnd > batchStart ? batchEnd : batchStart + 2000);
         assert.match(batchSection, /typeof.*string/, '_batchCancelRemote should validate remote_id type');
         assert.match(batchSection, /0-9a-f/, '_batchCancelRemote should validate UUID format');
+    });
+
+    // ============================================================
+    // SL39-SL45: Error classification and cancel_order 400 fix
+    // ============================================================
+
+    it('SL39: classifyCancelOrderError exists in db.js', function () {
+        assert.ok(DB_JS, 'db.js should exist');
+        assert.match(DB_JS, /classifyCancelOrderError/, 'db.js should contain classifyCancelOrderError');
+        assert.match(DB_JS, /RPC_MISSING_OR_SIGNATURE_MISMATCH/, 'classifier should handle RPC_MISSING_OR_SIGNATURE_MISMATCH');
+        assert.match(DB_JS, /ORDER_NOT_FOUND/, 'classifier should handle ORDER_NOT_FOUND');
+        assert.match(DB_JS, /ORDER_NOT_PENDING/, 'classifier should handle ORDER_NOT_PENDING');
+        assert.match(DB_JS, /PERMISSION_DENIED/, 'classifier should handle PERMISSION_DENIED');
+        assert.match(DB_JS, /RLS_DENIED/, 'classifier should handle RLS_DENIED');
+        assert.match(DB_JS, /INVALID_REMOTE_ID/, 'classifier should handle INVALID_REMOTE_ID');
+        assert.match(DB_JS, /NETWORK_OR_SESSION_ERROR/, 'classifier should handle NETWORK_OR_SESSION_ERROR');
+        assert.match(DB_JS, /UNKNOWN_CANCEL_ORDER_ERROR/, 'classifier should handle UNKNOWN_CANCEL_ORDER_ERROR');
+    });
+
+    it('SL40: classifyCancelOrderError is exposed on SupabaseOrdersDataSource', function () {
+        assert.match(DB_JS, /classifyCancelOrderError/, 'classifyCancelOrderError should be in returned object');
+    });
+
+    it('SL41: _callOrderRpcAndMap preserves response.error details', function () {
+        assert.match(DB_JS, /response\.error\.code/, '_callOrderRpcAndMap should preserve error.code');
+        assert.match(DB_JS, /response\.error\.details.*response\.error\.message/, '_callOrderRpcAndMap should preserve error.details');
+        assert.match(DB_JS, /response\.error\.hint/, '_callOrderRpcAndMap should preserve error.hint');
+        assert.match(DB_JS, /response\.status/, '_callOrderRpcAndMap should preserve response.status');
+    });
+
+    it('SL42: _batchCancelRemote uses classifyCancelOrderError', function () {
+        const batchStart = ORDERS_JS.indexOf('_batchCancelRemote()');
+        const batchEnd = ORDERS_JS.indexOf('selectDuplicates', batchStart);
+        const batchSection = ORDERS_JS.slice(batchStart, batchEnd > batchStart ? batchEnd : batchStart + 2000);
+        assert.match(batchSection, /classifyCancelOrderError/, '_batchCancelRemote should use classifyCancelOrderError');
+        assert.match(batchSection, /UNKNOWN_CANCEL_ORDER_ERROR/, '_batchCancelRemote should have fallback for missing classifier');
+    });
+
+    it('SL43: _cancelRemote uses classifyCancelOrderError', function () {
+        const cancelRemoteStart = ORDERS_JS.indexOf('_cancelRemote(id) {');
+        const refreshStart = ORDERS_JS.indexOf('_refreshOrdersAfterRemoteMutation()');
+        const cancelRemoteSection = ORDERS_JS.slice(cancelRemoteStart, refreshStart > cancelRemoteStart ? refreshStart : cancelRemoteStart + 3000);
+        assert.match(cancelRemoteSection, /classifyCancelOrderError/, '_cancelRemote should use classifyCancelOrderError');
+        assert.match(cancelRemoteSection, /ORDER_NOT_PENDING/, '_cancelRemote should show PENDING-specific message');
+        assert.match(cancelRemoteSection, /PERMISSION_DENIED/, '_cancelRemote should show permission message');
+        assert.match(cancelRemoteSection, /RPC_MISSING_OR_SIGNATURE_MISMATCH/, '_cancelRemote should show RPC mismatch message');
+    });
+
+    it('SL44: delete button disabled for SHIPPED/COMPLETED in both modes', function () {
+        const renderBodyStart = ORDERS_JS.indexOf('_renderListBody(products, customers)');
+        const renderBodyEnd = ORDERS_JS.indexOf('toggleSelect(id)', renderBodyStart);
+        const renderBodySection = ORDERS_JS.slice(renderBodyStart, renderBodyEnd > renderBodyStart ? renderBodyEnd : renderBodyStart + 2000);
+        // PENDING이 아닌 주문은 disabled
+        assert.match(renderBodySection, /!isPending/, 'delete button should be disabled for non-PENDING');
+        assert.match(renderBodySection, /disabled title.*PENDING/, 'delete button should have PENDING title');
+    });
+
+    it('SL45: local mode delete also checks PENDING status', function () {
+        const deleteStart = ORDERS_JS.indexOf('delete(orderId)');
+        const deleteEnd = ORDERS_JS.indexOf('renderAdd', deleteStart);
+        const deleteSection = ORDERS_JS.slice(deleteStart, deleteEnd > deleteStart ? deleteEnd : deleteStart + 800);
+        assert.match(deleteSection, /status !== 'PENDING'/, 'local delete should check PENDING status');
+        assert.match(deleteSection, /PENDING 상태의 주문만/, 'local delete should show PENDING-only message');
+        assert.match(deleteSection, /order_not_found.*error/, 'local delete should handle not found');
+    });
+
+    // ============================================================
+    // SL46-SL50: Extension noise and count verification
+    // ============================================================
+
+    it('SL46: cancel failure does not show success flash', function () {
+        const batchStart = ORDERS_JS.indexOf('_batchCancelRemote()');
+        const batchEnd = ORDERS_JS.indexOf('selectDuplicates', batchStart);
+        const batchSection = ORDERS_JS.slice(batchStart, batchEnd > batchStart ? batchEnd : batchStart + 2000);
+        // failCount > 0 + successCount === 0 → error flash
+        assert.match(batchSection, /failCount > 0/, '_batchCancelRemote should check failCount');
+        assert.match(batchSection, /실패.*주문.*상태.*권한.*RPC/, 'all-fail should show error message');
+    });
+
+    it('SL47: cancel failure keeps count unchanged', function () {
+        const batchStart = ORDERS_JS.indexOf('_batchCancelRemote()');
+        const batchEnd = ORDERS_JS.indexOf('selectDuplicates', batchStart);
+        const batchSection = ORDERS_JS.slice(batchStart, batchEnd > batchStart ? batchEnd : batchStart + 2000);
+        // countDelta is computed relative to beforeActiveCount
+        assert.match(batchSection, /beforeActiveCount/, 'should track beforeActiveCount');
+        assert.match(batchSection, /afterActiveCount/, 'should track afterActiveCount');
+        assert.match(batchSection, /countDeltaMatchesSuccess/, 'should verify count delta matches success');
+    });
+
+    it('SL48: cancel success reduces active count', function () {
+        const batchStart = ORDERS_JS.indexOf('_batchCancelRemote()');
+        const batchEnd = ORDERS_JS.indexOf('selectDuplicates', batchStart);
+        const batchSection = ORDERS_JS.slice(batchStart, batchEnd > batchStart ? batchEnd : batchStart + 2000);
+        assert.match(batchSection, /successCount/, 'should track successCount');
+        assert.match(batchSection, /countDelta/, 'should compute countDelta');
+    });
+
+    it('SL49: __LAST_ORDER_DELETE_SUMMARY excludes sensitive info', function () {
+        const batchStart = ORDERS_JS.indexOf('_batchCancelRemote()');
+        const batchEnd = ORDERS_JS.indexOf('selectDuplicates', batchStart);
+        const batchSection = ORDERS_JS.slice(batchStart, batchEnd > batchStart ? batchEnd : batchStart + 2000);
+        const summaryStart = batchSection.indexOf('__LAST_ORDER_DELETE_SUMMARY');
+        const summaryEnd = batchSection.indexOf('};', summaryStart + 100);
+        const summarySection = batchSection.slice(summaryStart, summaryEnd > summaryStart ? summaryEnd + 1 : summaryStart + 800);
+        assert.doesNotMatch(summarySection, /token|key|password|email|user_id|store_id|order_id|uuid.*[a-f0-9]{8}-/, 'summary should not leak sensitive info');
+    });
+
+    it('SL50: extension noise (contentscript/FutooGrab) is not in app code', function () {
+        assert.doesNotMatch(ORDERS_JS, /contentscript/, 'orders.js should not contain contentscript');
+        assert.doesNotMatch(ORDERS_JS, /FutooGrab/, 'orders.js should not contain FutooGrab');
+        assert.doesNotMatch(DB_JS, /contentscript/, 'db.js should not contain contentscript');
+        assert.doesNotMatch(APP_JS, /ObjectMultiplex/, 'app.js should not contain ObjectMultiplex');
     });
 });

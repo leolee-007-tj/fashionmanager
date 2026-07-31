@@ -285,3 +285,14 @@ remote mode에서는 다음 작업이 절대 금지된다:
 - 판매출처(source) 자동 분류 결과가 orders 목록에 표시됨
 - 상품 identity matching이 orders 생성의 gate 역할을 함
 - remote mode에서 order create RPC가 재고를 처리하므로, smart import 시 직접 product stock 수정은 하지 않음
+
+## Cancel Order 400 Blocker (Resolved)
+
+> 판매목록 삭제/cancel_order 400 오류는 error classifier 추가로 해결됨.
+
+- `classifyCancelOrderError(err)`가 cancel_order 400 오류를 8가지 분류로 매핑
+- `_callOrderRpcAndMap`이 response.error code/details/hint/status를 보존
+- PENDING-only cancel policy 적용, SHIPPED/COMPLETED/CANCELLED 삭제 버튼 disabled
+- CANCELLED 주문은 기본 판매목록에서 제외
+- `_getOrderActionKey()`는 String 반환, UUID Number 변환 금지
+- 통과 전 orders smoke 재개 금지 (이 blocker 해결 완료)

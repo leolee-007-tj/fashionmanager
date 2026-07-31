@@ -214,6 +214,18 @@ github-pages-version/
 - `_buildPreview()`: `__LAST_SMART_EXCEL_IMPORT_PREVIEW` 생성
 - `_buildExecutionSummary()`: `__LAST_SMART_EXCEL_IMPORT_EXECUTION_SUMMARY` 생성
 
+### Sales Delete/Cancel RPC Failure and Selection Policy
+
+- **Extension noise와 앱 오류 구분**: contentscript.js, FutooGrab, ObjectMultiplex, /api/ext/auth-token 501은 브라우저 확장프로그램 noise로 앱 오류가 아님
+- **Remote sales delete = cancel_order RPC**: remote mode에서 판매 삭제는 hard delete가 아닌 `cancel_order` RPC를 호출
+- **PENDING only cancel policy**: PENDING 상태 주문만 cancel 가능. SHIPPED/COMPLETED/CANCELLED는 삭제 버튼 disabled
+- **CANCELLED 기본 제외**: `applyFilters()`에서 `cancelledExcluded` 기본값 true로 CANCELLED 주문은 기본 숨김
+- **String action key policy**: `_getOrderActionKey()`는 `String(remote_id || legacy_id || id)` 반환, UUID Number 변환 금지
+- **Error classifier**: `classifyCancelOrderError(err)`가 cancel_order 400 오류를 분류 (RPC_MISSING_OR_SIGNATURE_MISMATCH, ORDER_NOT_FOUND, ORDER_NOT_PENDING, PERMISSION_DENIED, RLS_DENIED, INVALID_REMOTE_ID, NETWORK_OR_SESSION_ERROR, UNKNOWN_CANCEL_ORDER_ERROR)
+- **Error detail preservation**: `_callOrderRpcAndMap`이 response.error.code/details/hint/status를 Error 객체에 보존
+- **Count reload/check**: cancel 후 `_refreshOrdersAfterRemoteMutation()` 호출, `beforeActiveCount`/`afterActiveCount`/`countDeltaMatchesSuccess` 검증
+- **`__LAST_ORDER_DELETE_SUMMARY`**: batch cancel 결과 요약 (mode, successCount, failCount, skippedNotPending, countDelta 등)
+
 ### `js/settings.js` (194줄)
 - `Settings` 객체
 - `render()`: 언어 버튼, 매장명/부제목, 가격 계산 설정, 계산 미리보기, 데이터 백업/복원

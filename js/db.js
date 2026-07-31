@@ -1308,10 +1308,17 @@ const DB = {
             return client.rpc(rpcName, rpcPayload)
                 .then(response => {
                     if (response.error) {
-                        throw new Error('SupabaseOrdersDataSource.' + methodName + ' RPC failed');
+                        const err = new Error('SupabaseOrdersDataSource.' + methodName + ' RPC failed');
+                        err.code = response.error.code || null;
+                        err.details = response.error.details || response.error.message || null;
+                        err.hint = response.error.hint || null;
+                        err.status = response.status || null;
+                        throw err;
                     }
                     if (!response.data) {
-                        throw new Error('SupabaseOrdersDataSource.' + methodName + ' returned no data');
+                        const err = new Error('SupabaseOrdersDataSource.' + methodName + ' returned no data');
+                        err.code = 'NO_DATA';
+                        throw err;
                     }
                     return db.mapSupabaseRowToLegacyOrder(response.data);
                 })
@@ -1475,6 +1482,70 @@ const DB = {
             }
 
             return rpcPayload;
+        }
+
+        /**
+         * cancelOrder RPC 400 오류 분류기.
+         * response.error와 err 객체를 safe하게 분석하여 원인을 분류한다.
+         *
+         * @param {Error} err - cancelOrder 실패 오류
+         * @returns {string} 분류 코드 (RPC_MISSING_OR_SIGNATURE_MISMATCH, ORDER_NOT_FOUND,
+         *                   ORDER_NOT_PENDING, PERMISSION_DENIED, RLS_DENIED,
+         *                   INVALID_REMOTE_ID, NETWORK_OR_SESSION_ERROR, UNKNOWN_CANCEL_ORDER_ERROR)
+         */
+        function classifyCancelOrderError(err) {
+            if (!err) return 'UNKNOWN_CANCEL_ORDER_ERROR';
+
+            const msg = (err.message || '').toLowerCase();
+            const details = (err.details || '').toLowerCase();
+            const hint = (err.hint || '').toLowerCase();
+            const code = (err.code || '').toLowerCase();
+            const status = err.status || 0;
+
+            // RPC function not found / signature mismatch
+            if (msg.includes('pgrst202') || msg.includes('function not found') ||
+                msg.includes('rpc missing') || code.includes('pgrst202')) {
+                return 'RPC_MISSING_OR_SIGNATURE_MISMATCH';
+            }
+
+            // Order not found
+            if (msg.includes('not found') || details.includes('not found') ||
+                msg.includes('returned no data') || code === 'no_data' ||
+                details.includes('no rows')) {
+                return 'ORDER_NOT_FOUND';
+            }
+
+            // Not pending status
+            if (status === 400 && (msg.includes('pending') || details.includes('pending') ||
+                details.includes('status') || msg.includes('status') ||
+                hint.includes('status') || hint.includes('pending'))) {
+                return 'ORDER_NOT_PENDING';
+            }
+
+            // Permission / RLS
+            if (msg.includes('permission denied') || msg.includes('rls') ||
+                msg.includes('policy') || code.includes('42501') ||
+                details.includes('permission') || details.includes('rls')) {
+                return 'PERMISSION_DENIED';
+            }
+            if (msg.includes('rls') || code.includes('rls') || details.includes('rls')) {
+                return 'RLS_DENIED';
+            }
+
+            // Invalid remote_id
+            if (msg.includes('invalid') && (msg.includes('uuid') || msg.includes('input') ||
+                msg.includes('syntax') || details.includes('uuid'))) {
+                return 'INVALID_REMOTE_ID';
+            }
+
+            // Network or session
+            if (msg.includes('network') || msg.includes('fetch') ||
+                msg.includes('jwt') || msg.includes('session') ||
+                msg.includes('token') || msg.includes('auth')) {
+                return 'NETWORK_OR_SESSION_ERROR';
+            }
+
+            return 'UNKNOWN_CANCEL_ORDER_ERROR';
         }
 
         return {
@@ -1707,7 +1778,13 @@ const DB = {
 
             findDuplicateOrder(customerId, productId, color, size) {
                 throw new Error(_writeDisabledMsg);
-            }
+            },
+
+            /**
+             * cancelOrder RPC 400 오류 분류기.
+             * err 객체의 code/details/hint/status/message를 분석하여 원인을 분류한다.
+             */
+            classifyCancelOrderError
         };
     },
 

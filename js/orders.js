@@ -272,7 +272,7 @@ const Orders = {
                 const statusLabel = statusLabels[o.status] || ['', ''];
                 const isPending = o.status === 'PENDING';
                 // PENDING이 아닌 주문은 삭제 버튼 disabled
-                const deleteDisabled = this.isRemoteOrdersMode() && !isPending ? 'disabled title="PENDING 상태만 취소 가능"' : '';
+                const deleteDisabled = !isPending ? 'disabled title="PENDING 상태만 취소 가능"' : '';
                 html += `
                     <tr>
                         <td><input type="checkbox" class="row-checkbox" data-id="${actionKey}" data-target="orders" ${this.state.selected.has(actionKey) ? 'checked' : ''}></td>
@@ -450,9 +450,11 @@ const Orders = {
                 this.state.selected.delete(key);
             } catch (e) {
                 failCount++;
-                const msg = (e.message || '').slice(0, 100);
-                failReasons.push('RPC_FAILED');
-                console.error('Batch cancel order failed:', msg);
+                const classifier = ds && ds.classifyCancelOrderError
+                    ? ds.classifyCancelOrderError(e)
+                    : 'UNKNOWN_CANCEL_ORDER_ERROR';
+                failReasons.push(classifier);
+                console.error('Batch cancel order failed:', classifier, (e.message || '').slice(0, 100));
             }
         }
 
@@ -688,11 +690,19 @@ const Orders = {
         if (this.isRemoteOrdersMode()) {
             return this._cancelRemote(orderId);
         }
-        // local mode — 기존 sync 흐름
+        // local mode — 기존 sync 흐름, PENDING만 삭제 가능
         const key = String(orderId);
         const orders = DB.getOrders();
         const order = orders.find(o => String(o.id) === key || String(o.legacy_id) === key);
-        if (order && order.status === 'PENDING') {
+        if (!order) {
+            App.flash(t('orders', 'order_not_found'), 'error');
+            return;
+        }
+        if (order.status !== 'PENDING') {
+            App.flash('PENDING 상태의 주문만 삭제할 수 있습니다.', 'error');
+            return;
+        }
+        if (order.status === 'PENDING') {
             const products = DB.getProducts();
             const product = products.find(p => p.id === order.product_id);
             if (product) {
@@ -978,8 +988,20 @@ const Orders = {
             App.flash('취소 완료!', 'success');
             await this._refreshOrdersAfterRemoteMutation();
         } catch (e) {
-            console.error('Remote cancel order failed:', (e.message || '').slice(0, 100));
-            App.flash('판매 삭제/취소 실패: 주문 상태 또는 권한/RPC를 확인해야 합니다.', 'error');
+            const classifier = ds && ds.classifyCancelOrderError
+                ? ds.classifyCancelOrderError(e)
+                : 'UNKNOWN_CANCEL_ORDER_ERROR';
+            console.error('Remote cancel order failed:', classifier, (e.message || '').slice(0, 100));
+
+            let userMsg = '판매 삭제/취소 실패: 주문 상태 또는 권한/RPC를 확인해야 합니다.';
+            if (classifier === 'ORDER_NOT_PENDING') {
+                userMsg = '대기(PENDING) 상태 주문만 삭제/취소할 수 있습니다.';
+            } else if (classifier === 'PERMISSION_DENIED' || classifier === 'RLS_DENIED') {
+                userMsg = '권한 문제로 판매 삭제/취소가 실패했습니다.';
+            } else if (classifier === 'RPC_MISSING_OR_SIGNATURE_MISMATCH') {
+                userMsg = 'cancel_order RPC 구성이 현재 코드와 맞지 않습니다.';
+            }
+            App.flash(userMsg, 'error');
         }
     },
 

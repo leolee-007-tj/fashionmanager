@@ -88,6 +88,14 @@
 
 > **Smart Import**: 스마트 엑셀 가져오기(Smart Excel Import) 결과는 import 완료 후 products/orders 재로드를 트리거하며, dashboard/product list/stock count 등 모든 metrics 재계산에 반영된다.
 
+### Sales Active Count Policy
+
+- 판매목록 active count = CANCELLED 제외 (기본 `cancelledExcluded: true`)
+- `applyFilters()`에서 `list.filter(o => o.status !== 'CANCELLED')` 적용
+- cancel 성공 후 `_refreshOrdersAfterRemoteMutation()`으로 reload, active count 재계산
+- `beforeActiveCount`/`afterActiveCount`/`countDeltaMatchesSuccess` 검증
+- order_date 기준 정렬 유지
+
 ### Product count vs Stock count 구분
 
 | 구분 | 계산 방식 |
