@@ -166,7 +166,8 @@ const App = {
                     content = this.renderClassification();
                     break;
                 case 'excel':
-                    content = ExcelManager.render();
+                case 'smart-import':
+                    content = SmartInventoryWorkbookImporter.render(this.currentParams.target || '');
                     break;
                 case 'settings':
                     content = Settings.render();

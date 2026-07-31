@@ -275,3 +275,13 @@ remote mode에서는 다음 작업이 절대 금지된다:
 | 외부 공개 서비스/상용 SaaS/결제 포함 | ❌ NO-GO |
 | GitHub sensitive-data Support ticket 완료 전 공개 홍보/배포 | ❌ NO-GO |
 | 데이터 백업/복구 정책 없는 실사용 확대 | ❌ NO-GO |
+
+## Smart Excel Import Integration
+
+> 스마트 엑셀 가져오기(Smart Excel Import)는 판매목록/상품목록 안정화와 연결된다.
+
+- 판매목록에서 `#/smart-import?target=sales`로 업로드 연결
+- smart import 결과는 orders reload를 트리거하며, 판매일은 order_date 기준으로 표시
+- 판매출처(source) 자동 분류 결과가 orders 목록에 표시됨
+- 상품 identity matching이 orders 생성의 gate 역할을 함
+- remote mode에서 order create RPC가 재고를 처리하므로, smart import 시 직접 product stock 수정은 하지 않음

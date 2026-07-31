@@ -193,6 +193,9 @@ const Orders = {
                         <h2><i class="fas fa-shopping-cart"></i> ${t('orders', 'title')}</h2>
                     </div>
                     <div class="action-bar-right">
+                        <a href="#/smart-import?target=sales" class="btn btn-outline-primary">
+                            <i class="fas fa-upload"></i> ${t('excel', 'smart_import_short') || '가져오기'}
+                        </a>
                         <button class="btn btn-secondary" onclick="Orders.selectDuplicates()">
                             <i class="fas fa-copy"></i> ${t('orders', 'select_duplicates')}
                         </button>

@@ -198,6 +198,22 @@ github-pages-version/
 - `importCustomers(rows)`: 이름 필수, 중복 확인 없이 추가
 - `importKeywords(rows)`: **`id: Date.now() + Math.random()` (소수점 ID)**, 신형 스키마(type/standard/ko(array)/zh(array)/en(array)/ja(array)/active). initDefaultKeywords와 필드명 다름 (classification.js가 fallback으로 둘 다 처리)
 
+### `js/smart-inventory-importer.js` — Smart Excel Import replaces legacy fixed product import
+- `SmartInventoryWorkbookImporter` 객체, 레거시 `excel.js`의 고정 시트/컬럼 기반 import를 대체
+- **시트 자동 분류**: 업로드된 엑셀 파일의 모든 시트를 스캔하여 상품(product)/입고(inbound)/출고(sales)/재고(inventory)/매출요약(salesSummary)/고객(customerSummary)/브랜드(brand) 시트로 자동 분류
+- **컬럼 fuzzy matching**: 각 시트별 컬럼 헤더를 fuzzy matching으로 자동 매핑. 한글/영문/오타/표기 차이를 허용 (예: 제품명↔상품명, 원가(₩)↔매입원가, 초기재고↔현재재고)
+- **계산식 오류 처리**: 엑셀 셀이 formula인 경우 캐시된 계산값을 확인. #NAME?, #VALUE!, #REF!, #DIV/0!, #N/A 등 오류값은 신뢰하지 않고 앱에서 재계산
+- **날짜 추론**: row 날짜 → 시트 날짜 → 파일명 날짜 (예: 2026_6cloth수정.xlsx → 2026년 6월) → 업로드 UI 선택값 순으로 자동 추론
+- **상품 identity key**: brand + normalized_title + color + size + korea_cost + stock_year + stock_month로 중복 생성 방지
+- **preview-first workflow**: 분석 결과 미리보기 후 사용자 확인을 거쳐야 실제 저장 실행. reviewNeeded 항목은 자동 저장 금지
+- **판매출처 자동 분류**: 微信→wechat, 淘宝→taobao, 小红书→xiaohongshu, 手机→phone, 自留→self_use 등
+- `analyze(data, filename)`: workbook 읽기 → 시트 분류 → 헤더 분류 → 데이터 row 분류 → preview summary 생성
+- `render(target)`: 스마트 import UI 렌더링 (파일 업로드 → 시트/컬럼 자동 분류 → 미리보기 → confirm import)
+- `savePreview(target)`: 사용자 확인 후 저장 실행 (products/sales/customers/all)
+- `_executeSave(preview)`: 실제 저장 실행, remote/local 모드 분기 지원
+- `_buildPreview()`: `__LAST_SMART_EXCEL_IMPORT_PREVIEW` 생성
+- `_buildExecutionSummary()`: `__LAST_SMART_EXCEL_IMPORT_EXECUTION_SUMMARY` 생성
+
 ### `js/settings.js` (194줄)
 - `Settings` 객체
 - `render()`: 언어 버튼, 매장명/부제목, 가격 계산 설정, 계산 미리보기, 데이터 백업/복원
@@ -255,6 +271,7 @@ github-pages-version/
 #/expenses/{id}/edit     → Expenses.renderEdit(id)
 #/classification         → App.renderClassification()
 #/excel                  → ExcelManager.render()
+#/smart-import           → SmartImport.render()
 #/settings               → Settings.render()
 ```
 

@@ -251,6 +251,9 @@ const Products = {
                         <h2><i class="fas fa-tshirt"></i> ${t('products', 'title')}</h2>
                     </div>
                     <div class="action-bar-right">
+                        <a href="#/smart-import?target=products" class="btn btn-outline-primary">
+                            <i class="fas fa-upload"></i> ${t('excel', 'smart_import_short') || '가져오기'}
+                        </a>
                         <a href="#/products/add" class="btn btn-primary">
                             <i class="fas fa-plus"></i> ${t('products', 'add')}
                         </a>

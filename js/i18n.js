@@ -9,6 +9,7 @@ const TRANSLATIONS = {
         expenses: { ko: '경비관리', zh: '费用管理', en: 'Expenses', ja: '経費' },
         classification: { ko: '분류키워드', zh: '分类关键词', en: 'Keywords', ja: '分類' },
         excel: { ko: 'Excel 관리', zh: 'Excel管理', en: 'Excel', ja: 'Excel' },
+        smart_import: { ko: '스마트 엑셀 가져오기', zh: '智能Excel导入', en: 'Smart Excel Import', ja: 'スマートExcelインポート' },
         settings: { ko: '설정', zh: '设置', en: 'Settings', ja: '設定' },
     },
     dashboard: {

@@ -86,6 +86,8 @@
 
 ## Import Count Policy (BLOCKER-FIX-6)
 
+> **Smart Import**: 스마트 엑셀 가져오기(Smart Excel Import) 결과는 import 완료 후 products/orders 재로드를 트리거하며, dashboard/product list/stock count 등 모든 metrics 재계산에 반영된다.
+
 ### Product count vs Stock count 구분
 
 | 구분 | 계산 방식 |

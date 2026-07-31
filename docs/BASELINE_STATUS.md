@@ -37,7 +37,7 @@ python3 -m http.server 8080
 | 수익분석 | `js/analytics.js` | 매출/원가/수익/경비 분석, 브랜드별 통계, 환율 연동 |
 | 경비관리 | `js/expenses.js` | 경비 등록/수정/삭제, 검색, 월별 필터 |
 | 분류키워드 | `js/classification.js` | 키워드 등록/수정/삭제, 자동분류 엔진 |
-| Excel 관리 | `js/excel.js` | 엑셀 업로드/다운로드, 템플릿 다운로드 |
+| 스마트 엑셀 가져오기 | `js/excel.js`, `js/smart-inventory-importer.js` | 스마트 엑셀 가져오기 (시트/컬럼 자동 분류), 기존 고정 템플릿 업로드 대체 |
 | 설정 | `js/settings.js` | 언어 설정, 가격 계산 설정, 데이터 백업/복원 |
 
 ---
@@ -80,7 +80,7 @@ python3 -m http.server 8080
 - [x] 경비 차감 순수익
 
 ### 4.5 Excel 관리
-- [x] 상품 엑셀 업로드 (`상품_업로드` 시트)
+- [x] 스마트 엑셀 가져오기 (시트/컬럼 자동 분류)
 - [x] 주문출고 엑셀 업로드 (`주문출고_업로드` 시트)
 - [x] 엑셀 템플릿 다운로드
 - [x] 데이터 엑셀 날짜 형식 지원
@@ -170,7 +170,8 @@ github-pages-version/
 │   ├── analytics.js        # 수익분석
 │   ├── expenses.js         # 경비 관리
 │   ├── classification.js   # 분류키워드 + 자동분류 엔진
-│   ├── excel.js            # 엑셀 업로드/다운로드
+│   ├── excel.js            # 엑셀 업로드/다운로드 (레거시, 스마트 임포터로 위임)
+│   ├── smart-inventory-importer.js  # 스마트 엑셀 가져오기 (시트/컬럼 자동 분류, 기존 고정 템플릿 대체)
 │   ├── settings.js         # 설정 + 백업/복원
 │   ├── price-calculator.js # 가격 계산 로직
 │   └── app_backup.js       # 앱 백업 (사용 안 함)

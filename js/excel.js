@@ -1,102 +1,18 @@
 const ExcelManager = {
+    /**
+     * DEPRECATED: 기존 Excel 관리 화면은 스마트 엑셀 가져오기로 대체되었습니다.
+     * 이 render()는 SmartInventoryWorkbookImporter.render()로 연결됩니다.
+     * 기존 템플릿 다운로드와 고정 컬럼 업로드 방식은 더 이상 기본 경로가 아닙니다.
+     */
     render() {
-        const currentYear = new Date().getFullYear();
-        const currentMonth = new Date().getMonth() + 1;
-        let yearOpts = '';
-        for (let y = 2025; y <= currentYear + 2; y++) {
-            yearOpts += `<option value="${y}"${y === currentYear ? ' selected' : ''}>${y}년</option>`;
+        if (typeof SmartInventoryWorkbookImporter !== 'undefined') {
+            return SmartInventoryWorkbookImporter.render();
         }
-        let monthOpts = '';
-        for (let m = 1; m <= 12; m++) {
-            monthOpts += `<option value="${m}"${m === currentMonth ? ' selected' : ''}>${m}월</option>`;
-        }
-
+        // Fallback: 스마트 임포터가 로드되지 않은 경우
         return `
             <div class="card">
-                <h2><i class="fas fa-file-excel"></i> ${t('excel', 'title')}</h2>
-
-                <!-- 템플릿 다운로드 -->
-                <div class="card mb-4" style="background: #f8f9fa;">
-                    <h3><i class="fas fa-download"></i> <span data-i18n="excel.template_download">${t('excel', 'template_download')}</span></h3>
-                    <p class="text-muted mb-4" data-i18n="excel.template_desc">${t('excel', 'template_desc')}</p>
-                    <div class="d-flex flex-wrap gap-2">
-                        <button class="btn btn-success" onclick="ExcelManager.downloadProductTemplate()">
-                            <i class="fas fa-tshirt"></i> <span data-i18n="excel.template_products">${t('excel', 'template_products')}</span>
-                        </button>
-                        <button class="btn btn-success" onclick="ExcelManager.downloadOrderTemplate()">
-                            <i class="fas fa-shopping-cart"></i> <span data-i18n="excel.template_orders">${t('excel', 'template_orders')}</span>
-                        </button>
-                        <button class="btn btn-success" onclick="ExcelManager.downloadCustomerTemplate()">
-                            <i class="fas fa-users"></i> <span data-i18n="excel.template_customers">${t('excel', 'template_customers')}</span>
-                        </button>
-                        <button class="btn btn-success" onclick="ExcelManager.downloadKeywordTemplate()">
-                            <i class="fas fa-tags"></i> <span data-i18n="excel.template_keywords">${t('excel', 'template_keywords')}</span>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- 업로드 -->
-                <div class="card" style="border: 2px dashed #667eea;">
-                    <h3><i class="fas fa-upload"></i> ${t('excel', 'import')}</h3>
-                    <p class="text-muted mb-4">${t('excel', 'import_desc')}</p>
-                    <div class="form-group">
-                        <label>${t('excel', 'import_file')}</label>
-                        <input type="file" id="excelFile" accept=".xlsx,.xls" class="form-control">
-                    </div>
-                    <div class="form-group">
-                        <label>${t('excel', 'import_mode')}</label>
-                        <select id="importMode" class="form-control">
-                            <option value="products">${t('excel', 'import_products')}</option>
-                            <option value="orders">${t('excel', 'import_orders')}</option>
-                            <option value="customers">${t('excel', 'import_customers')}</option>
-                            <option value="keywords">${t('excel', 'import_keywords')}</option>
-                        </select>
-                    </div>
-                    <button class="btn btn-primary" onclick="ExcelManager.importData()">
-                        <i class="fas fa-upload"></i> ${t('excel', 'start_import')}
-                    </button>
-                </div>
-
-                <!-- 초기화 -->
-                <div class="card mb-4" style="background: #fff3f3; border: 1px solid #e74c3c;">
-                    <h3><i class="fas fa-trash-alt"></i> 데이터 초기화</h3>
-                    <p class="text-muted mb-3">업로드한 데이터를 초기화합니다. 되돌릴 수 없으니 주의하세요.</p>
-                    <div class="mb-3">
-                        <button class="btn btn-danger" onclick="ExcelManager.resetAll()">
-                            <i class="fas fa-trash"></i> 전체 초기화
-                        </button>
-                    </div>
-                    <div class="row">
-                        <div class="form-group col-md-3">
-                            <label>년도</label>
-                            <select id="resetYear" class="form-control">${yearOpts}</select>
-                        </div>
-                        <div class="form-group col-md-3">
-                            <label>월</label>
-                            <select id="resetMonth" class="form-control">${monthOpts}</select>
-                        </div>
-                        <div class="form-group col-md-3 d-flex align-items-end">
-                            <button class="btn btn-warning" onclick="ExcelManager.resetByYearMonth()">
-                                <i class="fas fa-calendar-times"></i> 해당 년월 초기화
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 안내 -->
-                <div class="info-box mt-4">
-                    <h4><i class="fas fa-info-circle"></i> ${t('excel', 'guide')}</h4>
-                    <p>${t('excel', 'guide_text')}</p>
-                    <ul>
-                        <li><strong>${t('excel', 'import_products')}</strong>: 브랜드, 상품명, 매입원가, 초기재고, 입고년도, 입고월 <small class="text-muted">(필수)</small> / 카테고리, 색상, 사이즈, 소재, 메모 <small class="text-muted">(선택)</small></li>
-                        <li class="text-muted" style="font-size:0.8rem; list-style:none; margin-left:-1.5em;">• 컬럼 순서는 달라도 됩니다. 컬럼명은 템플릿과 같아야 합니다.</li>
-                        <li class="text-muted" style="font-size:0.8rem; list-style:none; margin-left:-1.5em;">• 입고연도, 현재재고, 상품수량도 자동 인식합니다.</li>
-                        <li class="text-muted" style="font-size:0.8rem; list-style:none; margin-left:-1.5em;">• 같은 상품(브랜드+상품명+색상+사이즈+원가+입고년월)은 중복 추가되지 않습니다.</li>
-                        <li><strong>${t('excel', 'import_orders')}</strong>: 고객명, 브랜드, 상품명, 최종흥정가(위안), 판매일 <small class="text-muted">(신규 고객 자동 등록)</small></li>
-                        <li><strong>${t('excel', 'import_customers')}</strong>: 이름, 전화번호(선택), 주소(선택), 메모(선택)</li>
-                        <li><strong>${t('excel', 'import_keywords')}</strong>: 타입(brand/category/color/size/material), 키워드, 대체어(선택)</li>
-                    </ul>
-                </div>
+                <h2><i class="fas fa-file-excel"></i> ${t('excel', 'smart_import_title') || '스마트 엑셀 가져오기'}</h2>
+                <p class="text-muted">스마트 엑셀 가져오기 모듈을 불러올 수 없습니다. 페이지를 새로고침해주세요.</p>
             </div>
         `;
     },
