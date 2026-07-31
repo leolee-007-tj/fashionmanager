@@ -546,10 +546,6 @@ const App = {
                 <div id="keywordFormArea"></div>
                 <div class="action-bar">
                     <div class="action-bar-left">
-                        <label class="checkbox-wrapper">
-                            <input type="checkbox" class="select-all-cb" data-target="keywords">
-                            ${t('products', 'select_all')}
-                        </label>
                         <button class="btn btn-sm btn-danger" onclick="App.batchDeleteKeywords()">
                             <i class="fas fa-trash"></i> ${t('products', 'delete')}
                         </button>

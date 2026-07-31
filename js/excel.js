@@ -232,9 +232,9 @@ const ExcelManager = {
                 if (mode === 'products') {
                     await ExcelManager.importProducts(rows);
                 } else if (mode === 'orders') {
-                    ExcelManager.importOrders(rows);
+                    await ExcelManager.importOrders(rows);
                 } else if (mode === 'customers') {
-                    ExcelManager.importCustomers(rows);
+                    await ExcelManager.importCustomers(rows);
                 } else if (mode === 'keywords') {
                     ExcelManager.importKeywords(rows);
                 }
@@ -249,6 +249,25 @@ const ExcelManager = {
         try {
             const ds = DB.getProductsDataSource();
             return ds && ds.name === 'SupabaseProductsDataSource';
+        } catch (e) {
+            return false;
+        }
+    },
+
+    _isRemoteOrdersMode() {
+        try {
+            const ds = DB.getOrdersDataSource();
+            return ds && ds.name === 'SupabaseOrdersDataSource';
+        } catch (e) {
+            return false;
+        }
+    },
+
+    _isRemoteCustomersMode() {
+        try {
+            const client = window.LESOULSupabase && window.LESOULSupabase.getClient();
+            const storeId = window.LESOULAppBootstrap?.getContext?.()?.activeMembership?.storeId;
+            return !!(client && storeId);
         } catch (e) {
             return false;
         }
@@ -802,18 +821,24 @@ const ExcelManager = {
         App.render();
     },
 
-    importOrders(data) {
+    async importOrders(data) {
         if (data.length === 0) {
             App.flash('업로드할 데이터가 없습니다.', 'warning');
             return;
         }
         if (!confirm(data.length + ' ' + t('excel', 'confirm_import_count') + '?')) return;
 
-        // 엑셀 컬럼명 로깅
         if (data.length > 0) {
             console.log('[importOrders] 엑셀 컬럼명:', Object.keys(data[0]).join(', '));
         }
 
+        if (this._isRemoteOrdersMode()) {
+            return this._importOrdersRemote(data);
+        }
+        return this._importOrdersLocal(data);
+    },
+
+    _importOrdersLocal(data) {
         const orders = DB.getOrders();
         const customers = DB.getCustomers();
         const products = DB.getProducts();
@@ -823,7 +848,6 @@ const ExcelManager = {
         let nextCustomerId = DB.getNextId('customers');
         let nextOrderId = DB.getNextId('orders');
 
-        // 1단계: 업로드 데이터에서 (고객 + 브랜드 + 상품명) 키와 판매월 추출
         const uploadedKeys = new Set();
         const uploadMonths = new Set();
         const normalizedRows = [];
@@ -847,7 +871,6 @@ const ExcelManager = {
             normalizedRows.push({ idx, row, customerName, productName, brand, key, orderDateStr });
         });
 
-        // 2단계: 같은 월의 기존 주문 중 업로드된 (고객+브랜드+상품명)과 일치하는 것은 제거
         if (uploadMonths.size > 0 && uploadedKeys.size > 0) {
             const beforeCount = orders.length;
             const remaining = orders.filter(o => {
@@ -866,16 +889,13 @@ const ExcelManager = {
             orders.push(...remaining);
         }
 
-        // 3단계: 새 주문 추가
         normalizedRows.forEach(({ idx, row, customerName, productName, brand, orderDateStr }) => {
             const isZiLiu = /自留|자留|지留|자류|지류|自留款/i.test(customerName);
             let sellingPrice = parseFloat(row['최종흥정가(위안)'] || row['최종흥정가'] || row['판매가'] || row['selling_price'] || row['price'] || row['가격'] || row['판매금액'] || 0) || 0;
-            // 최종판매가가 0원이어도 스킵하지 않고 그대로 저장
             if (isZiLiu) {
                 sellingPrice = sellingPrice || 0;
             }
 
-            // 고객 찾기 또는 생성
             let customer = customers.find(c => c.name && c.name.toLowerCase() === customerName.toLowerCase());
             if (!customer) {
                 customer = {
@@ -895,7 +915,6 @@ const ExcelManager = {
                 customers.push(customer);
             }
 
-            // 상품 찾기
             let product = products.find(p => p.original_title === productName && (brand === '' || p.brand === brand));
             if (!product) {
                 product = products.find(p => p.original_title === productName);
@@ -938,32 +957,156 @@ const ExcelManager = {
         App.flash(msg, 'success');
     },
 
-    importCustomers(data) {
+    async _importOrdersRemote(data) {
+        const client = window.LESOULSupabase && window.LESOULSupabase.getClient();
+        const storeId = window.LESOULAppBootstrap?.getContext?.()?.activeMembership?.storeId;
+        if (!client || !storeId) {
+            App.flash('Supabase 연결이 필요합니다.', 'error');
+            return;
+        }
+
+        // 기존 고객/상품 로드
+        let existingCustomers = [];
+        let existingProducts = [];
+        try {
+            const [custResult, prodResult] = await Promise.all([
+                client.from('customers').select('*').eq('store_id', storeId).is('deleted_at', null),
+                DB.getProductsAsync()
+            ]);
+            existingCustomers = (custResult && custResult.data) || [];
+            existingProducts = prodResult || [];
+        } catch (e) {
+            console.error('[importOrders] remote load failed:', e);
+            App.flash('데이터 로드에 실패했습니다.', 'error');
+            return;
+        }
+
+        let added = 0;
+        let skipped = 0;
+        const skippedDetails = [];
+        const ds = DB.getOrdersDataSource();
+
+        for (let idx = 0; idx < data.length; idx++) {
+            const row = data[idx];
+            const customerName = String(row['고객명'] || row['customer_name'] || row['name'] || row['고객이름'] || row['고객'] || row['customer'] || '').trim();
+            const productName = String(row['상품명'] || row['product_name'] || row['original_title'] || row['상품이름'] || row['제품명'] || row['품명'] || '').trim();
+            const brand = String(row['브랜드'] || row['brand'] || '').trim();
+
+            if (!customerName || !productName) {
+                skipped++;
+                skippedDetails.push({ row: idx + 2, reason: 'MISSING_CUSTOMER_OR_PRODUCT' });
+                continue;
+            }
+
+            // 고객 찾기 또는 생성
+            let customer = existingCustomers.find(c =>
+                (c.name || '').toLowerCase() === customerName.toLowerCase()
+            );
+            if (!customer) {
+                try {
+                    const insertResult = await client.from('customers').insert({
+                        store_id: storeId,
+                        name: customerName,
+                        phone: row['전화번호'] || row['phone'] || '',
+                        address: row['주소'] || row['address'] || '',
+                        wechat_nickname: '',
+                        notes: '',
+                        total_amount: 0,
+                        total_profit: 0,
+                        order_count: 0,
+                        level: 'normal'
+                    }).select().single();
+                    if (insertResult.error) {
+                        skipped++;
+                        skippedDetails.push({ row: idx + 2, reason: 'CUSTOMER_CREATE_FAILED', error: insertResult.error.message });
+                        continue;
+                    }
+                    customer = insertResult.data;
+                    existingCustomers.push(customer);
+                } catch (e) {
+                    skipped++;
+                    skippedDetails.push({ row: idx + 2, reason: 'CUSTOMER_CREATE_ERROR', error: (e.message || '').slice(0, 200) });
+                    continue;
+                }
+            }
+
+            // 상품 찾기
+            let product = existingProducts.find(p =>
+                p.original_title === productName && (brand === '' || p.brand === brand)
+            );
+            if (!product) {
+                product = existingProducts.find(p => p.original_title === productName);
+            }
+            if (!product) {
+                skipped++;
+                skippedDetails.push({ row: idx + 2, reason: 'PRODUCT_NOT_FOUND', productName, brand });
+                continue;
+            }
+
+            const rawDate = row['판매일'] || row['order_date'] || row['date'] || '';
+            const dateObj = this._parseExcelDate(rawDate) || new Date();
+            const orderDateStr = this._formatDate(dateObj);
+
+            const isZiLiu = /自留|자留|지留|자류|지류|自留款/i.test(customerName);
+            let sellingPrice = parseFloat(row['최종흥정가(위안)'] || row['최종흥정가'] || row['판매가'] || row['selling_price'] || row['price'] || row['가격'] || row['판매금액'] || 0) || 0;
+            if (isZiLiu) sellingPrice = sellingPrice || 0;
+
+            try {
+                await ds.createOrder({
+                    customer_uuid: customer.remote_id || customer.id,
+                    product_uuid: product.remote_id || product.id,
+                    quantity: 1,
+                    selling_price: sellingPrice,
+                    order_date: orderDateStr || new Date().toISOString().slice(0, 10),
+                    color: '',
+                    size: '',
+                    notes: ''
+                });
+                added++;
+            } catch (e) {
+                skipped++;
+                skippedDetails.push({ row: idx + 2, reason: 'ORDER_CREATE_FAILED', error: (e.message || '').slice(0, 200) });
+            }
+        }
+
+        console.log(`[importOrders] 결과: ${added}건 등록, ${skipped}건 스킵 (총 ${data.length}행)`);
+        if (skippedDetails.length > 0) {
+            console.log('[importOrders] 스킵 상세:', skippedDetails);
+        }
+        let msg = `${added}건 등록 완료!`;
+        if (skipped > 0) msg += ` (${skipped}건 스킵 - 콘솔에서 사유 확인)`;
+        App.flash(msg, 'success');
+    },
+
+    async importCustomers(data) {
         if (data.length === 0) {
             App.flash('업로드할 데이터가 없습니다.', 'warning');
             return;
         }
         if (!confirm(data.length + ' ' + t('excel', 'confirm_import_count') + '?')) return;
 
-        const customers = DB.getCustomers();
-        let added = 0;
-        let skippedNoName = 0;
-        let skippedDuplicate = 0;
-        const duplicateNames = [];  // 중복된 이름 수집
-        let nextCustomerId = DB.getNextId('customers');
-
-        // 엑셀 첫 행의 컬럼명 로깅 (디버깅용)
         if (data.length > 0) {
             console.log('[importCustomers] 엑셀 컬럼명:', Object.keys(data[0]).join(', '));
         }
 
-        // 이미 존재하는 고객명 목록 (소문자)
+        if (this._isRemoteCustomersMode()) {
+            return this._importCustomersRemote(data);
+        }
+        return this._importCustomersLocal(data);
+    },
+
+    _importCustomersLocal(data) {
+        const customers = DB.getCustomers();
+        let added = 0;
+        let skippedNoName = 0;
+        let skippedDuplicate = 0;
+        const duplicateNames = [];
+        let nextCustomerId = DB.getNextId('customers');
+
         const existingNames = new Set(customers.map(c => (c.name || '').toLowerCase().trim()));
-        // 이번 배치에서 추가된 이름 목록 (중복 방지)
         const batchNames = new Set();
 
         data.forEach((row, idx) => {
-            // 다양한 컬럼명 지원: 이름, name, 고객명, customer_name, 고객이름, 성함, 고객, customer, fullname, full_name
             const name = (row['이름'] || row['name'] || row['고객명'] || row['customer_name']
                 || row['고객이름'] || row['성함'] || row['고객'] || row['customer']
                 || row['fullname'] || row['full_name'] || '').toString().trim();
@@ -973,7 +1116,6 @@ const ExcelManager = {
                 return;
             }
             const nameLower = name.toLowerCase();
-            // 중복 검증: 같은 이름의 고객이 이미 존재하거나 이번 배치에서 이미 추가된 경우 스킵
             if (existingNames.has(nameLower) || batchNames.has(nameLower)) {
                 skippedDuplicate++;
                 duplicateNames.push(name);
@@ -1011,11 +1153,104 @@ const ExcelManager = {
             let msg = `${added}건 등록 완료!`;
             if (skippedNoName > 0) msg += ` (${skippedNoName}건 이름없음)`;
             if (skippedDuplicate > 0) {
-                // 중복 이름 5개만 표시
                 const preview = duplicateNames.slice(0, 5).join(', ');
                 const more = duplicateNames.length > 5 ? ` 외 ${duplicateNames.length - 5}건` : '';
                 msg += ` (${skippedDuplicate}건 중복: ${preview}${more})`;
-                // 전체 목록은 콘솔에서 확인 가능
+                msg += ` - 콘솔(F12)에서 전체 목록 확인`;
+            }
+            App.flash(msg, 'success');
+        }
+    },
+
+    async _importCustomersRemote(data) {
+        const client = window.LESOULSupabase && window.LESOULSupabase.getClient();
+        const storeId = window.LESOULAppBootstrap?.getContext?.()?.activeMembership?.storeId;
+        if (!client || !storeId) {
+            App.flash('Supabase 연결이 필요합니다.', 'error');
+            return;
+        }
+
+        // 기존 고객 로드
+        let existingCustomers = [];
+        try {
+            const custResult = await client.from('customers').select('*').eq('store_id', storeId).is('deleted_at', null);
+            existingCustomers = (custResult && custResult.data) || [];
+        } catch (e) {
+            console.error('[importCustomers] remote load failed:', e);
+            App.flash('데이터 로드에 실패했습니다.', 'error');
+            return;
+        }
+
+        let added = 0;
+        let skippedNoName = 0;
+        let skippedDuplicate = 0;
+        const duplicateNames = [];
+        const existingNames = new Set(existingCustomers.map(c => (c.name || '').toLowerCase().trim()));
+        const batchNames = new Set();
+
+        for (let idx = 0; idx < data.length; idx++) {
+            const row = data[idx];
+            const name = (row['이름'] || row['name'] || row['고객명'] || row['customer_name']
+                || row['고객이름'] || row['성함'] || row['고객'] || row['customer']
+                || row['fullname'] || row['full_name'] || '').toString().trim();
+            if (!name) {
+                skippedNoName++;
+                console.log(`[importCustomers] 행 ${idx + 2}: 이름 없음 (컬럼 확인 필요), 행 데이터:`, JSON.stringify(row));
+                continue;
+            }
+            const nameLower = name.toLowerCase();
+            if (existingNames.has(nameLower) || batchNames.has(nameLower)) {
+                skippedDuplicate++;
+                duplicateNames.push(name);
+                console.log(`[importCustomers] 행 ${idx + 2}: 중복 스킵 - "${name}"`);
+                continue;
+            }
+            batchNames.add(nameLower);
+
+            try {
+                const insertResult = await client.from('customers').insert({
+                    store_id: storeId,
+                    name: name,
+                    wechat_nickname: (row['위챗닉네임'] || row['wechat_nickname'] || row['wechat'] || '').toString().trim(),
+                    phone: (row['전화번호'] || row['phone'] || row['연락처'] || '').toString().trim(),
+                    address: (row['주소'] || row['address'] || '').toString().trim(),
+                    notes: (row['메모'] || row['notes'] || row['비고'] || '').toString().trim(),
+                    total_amount: 0,
+                    total_profit: 0,
+                    order_count: 0,
+                    level: 'normal'
+                }).select().single();
+                if (insertResult.error) {
+                    skippedDuplicate++;
+                    duplicateNames.push(name);
+                    console.log(`[importCustomers] 행 ${idx + 2}: 생성 실패 - "${name}", error:`, insertResult.error.message);
+                    continue;
+                }
+                existingNames.add(nameLower);
+                added++;
+            } catch (e) {
+                skippedDuplicate++;
+                duplicateNames.push(name);
+                console.log(`[importCustomers] 행 ${idx + 2}: 생성 오류 - "${name}", error:`, (e.message || '').slice(0, 200));
+            }
+        }
+
+        console.log(`[importCustomers] 결과: ${added}건 등록, ${skippedNoName}건 이름없음, ${skippedDuplicate}건 중복스킵 (총 ${data.length}행)`);
+        if (duplicateNames.length > 0) {
+            console.log(`[importCustomers] 중복/실패 목록 (${duplicateNames.length}건):`, duplicateNames);
+        }
+        if (added === 0) {
+            const msg = skippedNoName > 0
+                ? `등록할 고객이 없습니다. (이름 컬럼 확인 필요, 엑셀 컬럼: ${Object.keys(data[0]).join(', ')})`
+                : '등록할 고객이 없습니다. (모든 이름이 이미 존재하거나 중복입니다)';
+            App.flash(msg, 'warning');
+        } else {
+            let msg = `${added}건 등록 완료!`;
+            if (skippedNoName > 0) msg += ` (${skippedNoName}건 이름없음)`;
+            if (skippedDuplicate > 0) {
+                const preview = duplicateNames.slice(0, 5).join(', ');
+                const more = duplicateNames.length > 5 ? ` 외 ${duplicateNames.length - 5}건` : '';
+                msg += ` (${skippedDuplicate}건 중복/실패: ${preview}${more})`;
                 msg += ` - 콘솔(F12)에서 전체 목록 확인`;
             }
             App.flash(msg, 'success');
