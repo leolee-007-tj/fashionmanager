@@ -268,9 +268,7 @@ const Orders = {
                                         </div>
                                         <div class="form-group">
                                             <label>${t('orders', 'customer')}</label>
-                                            <select class="form-control" name="customer_id">
-                                                ${customers.map(c => `<option value="${c.id}"${String(c.id) === String(o.customer_id) ? ' selected' : ''}>${c.name}</option>`).join('')}
-                                            </select>
+                                            <input type="text" class="form-control" name="customer_name" value="${customer?.name || o.customer_name || ''}">
                                         </div>
                                         <div class="form-group">
                                             <label>${t('orders', 'selling_price')} (${t('common', 'currency')})</label>
@@ -471,14 +469,22 @@ const Orders = {
         if (this.isRemoteOrdersMode()) {
             return this._submitEditRemote(e, orderId);
         }
-        // local mode — 기존 sync 흐름
+        // local mode — text input 기반
         const form = e.target;
         const orders = DB.getOrders();
         const idx = orders.findIndex(o => String(o.id) === String(orderId));
         if (idx === -1) return;
         const order = orders[idx];
         order.order_date = form.order_date.value;
-        order.customer_id = Number(form.customer_id.value);
+        const customerName = (form.customer_name?.value || '').trim();
+        if (customerName) {
+            let customer = DB.findCustomerByName(customerName);
+            if (!customer) {
+                customer = DB.addCustomer({ name: customerName, wechat_nickname: '', phone: '' });
+            }
+            order.customer_id = customer.id;
+            order.customer_name = customer.name;
+        }
         order.selling_price = Number(form.selling_price.value) || 0;
         order.status = form.status.value || order.status;
         orders[idx] = order;
@@ -571,350 +577,136 @@ const Orders = {
     },
 
     renderAdd() {
-        if (this.isRemoteOrdersMode()) {
-            return this._renderAddRemote();
-        }
-        // local mode — 기존 sync 흐름
-        const customers = DB.getCustomers();
-        const products = DB.getProducts();
-        const brands = [...new Set(products.map(p => p.brand).filter(Boolean))];
         const today = new Date().toISOString().slice(0, 10);
-        return `
-            <div class="card">
-                <h2><i class="fas fa-plus"></i> ${t('orders', 'add')}</h2>
-                <form id="orderForm" onsubmit="return Orders.submitAdd()">
-                    <div class="form-group">
-                        <label>${t('orders', 'customer')} *</label>
-                        <select name="customer_id" id="customerSelect" required class="form-control" onchange="Orders.toggleNewCustomer()">
-                            <option value="">+ ${t('common', 'new_customer')}</option>
-                            ${customers.map(c => `<option value="${c.id}">${c.name} (${c.wechat_nickname || t('common', 'no_wechat')})</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="form-group" id="newCustomerGroup" style="display: none;">
-                        <label>${t('common', 'new_customer')} ${t('customers', 'name')} *</label>
-                        <input type="text" name="new_customer_name" id="newCustomerName" class="form-control" placeholder="${t('common', 'enter_name')}">
-                        <p class="text-muted mt-2"><i class="fas fa-info-circle"></i> ${t('common', 'auto_register')}</p>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>${t('products', 'brand')} *</label>
-                            <select name="brand" id="brandSelect" required class="form-control" onchange="Orders.updateProductList()">
-                                <option value="">${t('products', 'brand')} ${t('common', 'select')}</option>
-                                ${brands.map(b => `<option value="${b}">${b}</option>`).join('')}
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>${t('orders', 'product')} *</label>
-                            <select name="product_id" id="productSelect" required class="form-control" onchange="Orders.updateStockAndPrice()">
-                                <option value="">${t('common', 'please_select')}</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="info-box" id="productInfo" style="display: none;">
-                        <div class="form-row">
-                            <div class="form-group" style="flex:1; margin-bottom:0.5rem;">
-                                <strong>${t('products', 'product_code')}:</strong> <span id="productCode" style="font-weight:bold;color:#007bff;">-</span>
-                            </div>
-                            <div class="form-group" style="flex:1; margin-bottom:0.5rem;">
-                                <strong>${t('common', 'stock_available')}:</strong> <span id="availableStock">0</span>
-                            </div>
-                            <div class="form-group" style="flex:1; margin-bottom:0.5rem;">
-                                <strong>${t('common', 'base_price_ref')}:</strong> ${t('common', 'currency')} <span id="basePrice">0</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>${t('orders', 'quantity')} *</label>
-                            <input type="number" name="quantity" id="quantity" required min="1" class="form-control" value="1" onchange="Orders.checkStock();Orders.calcProfit();" oninput="Orders.calcProfit()">
-                        </div>
-                        <div class="form-group">
-                            <label>${t('orders', 'selling_price')} (${t('common', 'currency')}) *</label>
-                            <input type="number" name="selling_price" id="selling_price" required step="1" min="0" class="form-control" oninput="Orders.calcProfit()">
-                        </div>
-                        <div class="form-group">
-                            <label>${t('orders', 'sale_date')} *</label>
-                            <input type="date" name="sale_date" required class="form-control" value="${today}">
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>${t('products', 'color')}</label>
-                            <input type="text" name="color" class="form-control">
-                        </div>
-                        <div class="form-group">
-                            <label>${t('products', 'size')}</label>
-                            <input type="text" name="size" class="form-control">
-                        </div>
-                    </div>
-                    <div class="info-box" id="profitInfo" style="display: none;">
-                        <div class="form-row">
-                            <div class="form-group" style="flex:1;">
-                                <label style="color:#28a745;font-weight:bold;"><i class="fas fa-chart-line"></i> ${t('common', 'expected_profit')}</label>
-                                <input type="text" id="profitAmount" readonly style="color:#28a745;font-weight:bold;" class="form-control">
-                            </div>
-                            <div class="form-group" style="flex:1;">
-                                <label style="color:#28a745;font-weight:bold;"><i class="fas fa-percent"></i> ${t('common', 'expected_margin')}</label>
-                                <input type="text" id="profitRate" readonly style="color:#28a745;font-weight:bold;" class="form-control">
-                            </div>
-                            <div class="form-group" style="flex:1;">
-                                <label><i class="fas fa-yen-sign"></i> ${t('common', 'cost_ratio')}</label>
-                                <input type="text" id="costRatio" readonly class="form-control">
-                            </div>
-                        </div>
-                    </div>
-                    <div class="d-flex gap-2 mt-4">
-                        <button type="submit" class="btn btn-primary"><i class="fas fa-check"></i> ${t('common', 'save')}</button>
-                        <a href="#/orders" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> ${t('common', 'cancel')}</a>
-                    </div>
-                </form>
-            </div>
-        `;
-    },
-
-    /**
-     * 3-8A.9-B: remote mode add form.
-     * customer_uuid / product_uuid를 사용한다. 신규 고객 생성 옵션 없음.
-     * cached _remoteProducts / _remoteCustomers 사용.
-     */
-    _renderAddRemote() {
-        const customers = this.state._remoteCustomers || [];
-        const products = this.state._remoteProducts || [];
-        const brands = [...new Set(products.map(p => p.brand).filter(Boolean))];
-        const today = new Date().toISOString().slice(0, 10);
-        return `
-            <div class="card">
-                <h2><i class="fas fa-plus"></i> ${t('orders', 'add')}</h2>
-                <form id="orderForm" onsubmit="return Orders.submitAdd()">
-                    <div class="form-group">
-                        <label>${t('orders', 'customer')} *</label>
-                        <select name="customer_uuid" id="customerSelect" required class="form-control">
-                            <option value="">${t('common', 'please_select')}</option>
-                            ${customers.map(c => `<option value="${c.remote_id || c.id}">${c.name || c.customer_name_snapshot || ''}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>${t('products', 'brand')} *</label>
-                            <select name="brand" id="brandSelect" required class="form-control" onchange="Orders.updateProductList()">
-                                <option value="">${t('products', 'brand')} ${t('common', 'select')}</option>
-                                ${brands.map(b => `<option value="${b}">${b}</option>`).join('')}
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>${t('orders', 'product')} *</label>
-                            <select name="product_uuid" id="productSelect" required class="form-control" onchange="Orders.updateStockAndPrice()">
-                                <option value="">${t('common', 'please_select')}</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="info-box" id="productInfo" style="display: none;">
-                        <div class="form-row">
-                            <div class="form-group" style="flex:1; margin-bottom:0.5rem;">
-                                <strong>${t('products', 'product_code')}:</strong> <span id="productCode" style="font-weight:bold;color:#007bff;">-</span>
-                            </div>
-                            <div class="form-group" style="flex:1; margin-bottom:0.5rem;">
-                                <strong>${t('common', 'stock_available')}:</strong> <span id="availableStock">0</span>
-                            </div>
-                            <div class="form-group" style="flex:1; margin-bottom:0.5rem;">
-                                <strong>${t('common', 'base_price_ref')}:</strong> ${t('common', 'currency')} <span id="basePrice">0</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>${t('orders', 'quantity')} *</label>
-                            <input type="number" name="quantity" id="quantity" required min="1" class="form-control" value="1" onchange="Orders.checkStock();Orders.calcProfit();" oninput="Orders.calcProfit()">
-                        </div>
-                        <div class="form-group">
-                            <label>${t('orders', 'selling_price')} (${t('common', 'currency')}) *</label>
-                            <input type="number" name="selling_price" id="selling_price" required step="1" min="0" class="form-control" oninput="Orders.calcProfit()">
-                        </div>
-                        <div class="form-group">
-                            <label>${t('orders', 'sale_date')} *</label>
-                            <input type="date" name="sale_date" required class="form-control" value="${today}">
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>${t('products', 'color')}</label>
-                            <input type="text" name="color" class="form-control">
-                        </div>
-                        <div class="form-group">
-                            <label>${t('products', 'size')}</label>
-                            <input type="text" name="size" class="form-control">
-                        </div>
-                    </div>
-                    <div class="info-box" id="profitInfo" style="display: none;">
-                        <div class="form-row">
-                            <div class="form-group" style="flex:1;">
-                                <label style="color:#28a745;font-weight:bold;"><i class="fas fa-chart-line"></i> ${t('common', 'expected_profit')}</label>
-                                <input type="text" id="profitAmount" readonly style="color:#28a745;font-weight:bold;" class="form-control">
-                            </div>
-                            <div class="form-group" style="flex:1;">
-                                <label style="color:#28a745;font-weight:bold;"><i class="fas fa-percent"></i> ${t('common', 'expected_margin')}</label>
-                                <input type="text" id="profitRate" readonly style="color:#28a745;font-weight:bold;" class="form-control">
-                            </div>
-                            <div class="form-group" style="flex:1;">
-                                <label><i class="fas fa-yen-sign"></i> ${t('common', 'cost_ratio')}</label>
-                                <input type="text" id="costRatio" readonly class="form-control">
-                            </div>
-                        </div>
-                    </div>
-                    <div class="d-flex gap-2 mt-4">
-                        <button type="submit" class="btn btn-primary"><i class="fas fa-check"></i> ${t('common', 'save')}</button>
-                        <a href="#/orders" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> ${t('common', 'cancel')}</a>
-                    </div>
-                </form>
-            </div>
-        `;
-    },
-
-    toggleNewCustomer() {
-        const sel = document.getElementById('customerSelect').value;
-        const group = document.getElementById('newCustomerGroup');
-        if (sel === '') {
-            group.style.display = 'block';
-            document.getElementById('newCustomerName').required = true;
-        } else {
-            group.style.display = 'none';
-            document.getElementById('newCustomerName').required = false;
-        }
-    },
-
-    updateProductList() {
-        const brand = document.getElementById('brandSelect').value;
-        const productSelect = document.getElementById('productSelect');
-        productSelect.innerHTML = `<option value="">${t('common', 'please_select')}</option>`;
-        document.getElementById('productInfo').style.display = 'none';
-        document.getElementById('profitInfo').style.display = 'none';
-        if (!brand) return;
-        // 3-8A.9-B: remote mode uses cached _remoteProducts
+        const customers = this.isRemoteOrdersMode()
+            ? (this.state._remoteCustomers || [])
+            : DB.getCustomers();
         const products = this.isRemoteOrdersMode()
             ? (this.state._remoteProducts || [])
             : DB.getProducts();
-        const filtered = products.filter(p => p.brand === brand);
-        filtered.forEach(p => {
-            const available = (p.current_stock || 0) - (p.reserved_stock || 0);
-            const opt = document.createElement('option');
-            // 3-8A.9-B: remote mode uses remote_id (uuid) as value
-            opt.value = this.isRemoteOrdersMode() ? (p.remote_id || p.id) : p.id;
-            opt.textContent = `${p.original_title || p.product_name || ''} (${t('inventory', 'stock')}: ${available})`;
-            opt.dataset.stock = p.current_stock || 0;
-            opt.dataset.reserved = p.reserved_stock || 0;
-            opt.dataset.baseprice = p.china_base_price || p.china_cost || 0;
-            opt.dataset.productcode = p.product_code || '';
-            opt.dataset.convertedcost = p.actual_converted_cost || p.actual_cost || 0;
-            productSelect.appendChild(opt);
-        });
-    },
-
-    updateStockAndPrice() {
-        const sel = document.getElementById('productSelect');
-        const opt = sel.options[sel.selectedIndex];
-        if (opt && opt.value) {
-            const stock = parseInt(opt.dataset.stock) || 0;
-            const reserved = parseInt(opt.dataset.reserved) || 0;
-            const basePrice = parseFloat(opt.dataset.baseprice) || 0;
-            const code = opt.dataset.productcode || '-';
-            document.getElementById('productCode').textContent = code;
-            document.getElementById('availableStock').textContent = stock - reserved;
-            document.getElementById('basePrice').textContent = basePrice.toLocaleString();
-            document.getElementById('productInfo').style.display = 'block';
-            if (!document.getElementById('selling_price').value) {
-                document.getElementById('selling_price').value = basePrice;
-            }
-            this.calcProfit();
-        } else {
-            document.getElementById('productInfo').style.display = 'none';
-            document.getElementById('profitInfo').style.display = 'none';
-        }
-    },
-
-    checkStock() {
-        const sel = document.getElementById('productSelect');
-        const opt = sel.options[sel.selectedIndex];
-        const qty = parseInt(document.getElementById('quantity').value) || 0;
-        if (opt && opt.value && qty > 0) {
-            const stock = parseInt(opt.dataset.stock) || 0;
-            const reserved = parseInt(opt.dataset.reserved) || 0;
-            const available = stock - reserved;
-            if (qty > available) {
-                App.flash(t('common', 'low_stock_alert') + ' (' + available + ')', 'warning');
-                document.getElementById('quantity').value = available;
-            }
-        }
-    },
-
-    calcProfit() {
-        const sel = document.getElementById('productSelect');
-        const opt = sel.options[sel.selectedIndex];
-        const sellingPrice = parseFloat(document.getElementById('selling_price').value) || 0;
-        if (opt && opt.value && sellingPrice > 0) {
-            const basePrice = parseFloat(opt.dataset.baseprice) || 0;
-            const convertedCost = parseFloat(opt.dataset.convertedcost) || ((basePrice - 40) / 3);
-            const quantity = parseInt(document.getElementById('quantity').value) || 1;
-            const result = PriceCalculator.calculateProfit(sellingPrice, convertedCost, quantity);
-            document.getElementById('profitAmount').value = result.profit.toLocaleString() + ' ' + t('common', 'currency');
-            document.getElementById('profitRate').value = result.profit_margin + ' %';
-            document.getElementById('costRatio').value = result.cost_ratio + ' %';
-            document.getElementById('profitInfo').style.display = 'block';
-        } else {
-            document.getElementById('profitInfo').style.display = 'none';
-        }
+        const customerNames = [...new Set(customers.map(c => c.name || c.customer_name_snapshot || '').filter(Boolean))].sort();
+        const productNames = [...new Set(products.map(p => p.original_title || p.product_name || '').filter(Boolean))].sort();
+        const brandNames = [...new Set(products.map(p => p.brand).filter(Boolean))].sort();
+        return `
+            <div class="card">
+                <h2><i class="fas fa-plus"></i> ${t('orders', 'add')}</h2>
+                <form id="orderForm" onsubmit="return Orders.submitAdd()">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>${t('orders', 'customer')} *</label>
+                            <input type="text" name="customer_name" id="customerName" required class="form-control"
+                                list="customerList" placeholder="${t('common', 'enter_name')}">
+                            <datalist id="customerList">
+                                ${customerNames.map(n => `<option value="${n}">`).join('')}
+                            </datalist>
+                        </div>
+                        <div class="form-group">
+                            <label>${t('orders', 'sale_date')} *</label>
+                            <input type="date" name="sale_date" required class="form-control" value="${today}">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>${t('products', 'brand')}</label>
+                            <input type="text" name="brand" class="form-control"
+                                list="brandList" placeholder="${t('products', 'brand')}">
+                            <datalist id="brandList">
+                                ${brandNames.map(b => `<option value="${b}">`).join('')}
+                            </datalist>
+                        </div>
+                        <div class="form-group">
+                            <label>${t('orders', 'product')} *</label>
+                            <input type="text" name="product_name" id="productName" required class="form-control"
+                                list="productList" placeholder="${t('orders', 'product')}">
+                            <datalist id="productList">
+                                ${productNames.map(n => `<option value="${n}">`).join('')}
+                            </datalist>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>${t('orders', 'quantity')} *</label>
+                            <input type="number" name="quantity" id="quantity" required min="1" class="form-control" value="1">
+                        </div>
+                        <div class="form-group">
+                            <label>${t('orders', 'selling_price')} (${t('common', 'currency')}) *</label>
+                            <input type="number" name="selling_price" id="selling_price" required step="1" min="0" class="form-control">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>${t('products', 'color')}</label>
+                            <input type="text" name="color" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>${t('products', 'size')}</label>
+                            <input type="text" name="size" class="form-control">
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2 mt-4">
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-check"></i> ${t('common', 'save')}</button>
+                        <a href="#/orders" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> ${t('common', 'cancel')}</a>
+                    </div>
+                </form>
+            </div>
+        `;
     },
 
     /**
      * 3-8A.9-B: remote mode에서는 SupabaseOrdersDataSource.createOrder를 사용한다.
      * local mode는 기존 submitAdd 흐름 유지.
-     * remote mode: DB.addOrder, DB.updateProduct, DB.addCustomer, DB.findCustomerByName 금지.
+     * text input 기반으로 단순화: customer_name, product_name, brand로 조회.
      */
     async submitAdd() {
         if (this.isRemoteOrdersMode()) {
             return this._submitAddRemote();
         }
-        // local mode — 기존 sync 흐름
+        // local mode — text input 기반
         const fd = new FormData(document.getElementById('orderForm'));
-        let customerId = parseInt(fd.get('customer_id'));
-        const newName = (fd.get('new_customer_name') || '').trim();
-        if (!customerId && newName) {
-            const existing = DB.findCustomerByName(newName);
-            if (existing) {
-                customerId = existing.id;
-            } else {
-                const newCust = DB.addCustomer({ name: newName, wechat_nickname: '', phone: '' });
-                customerId = newCust.id;
-            }
-        }
-        if (!customerId) {
+        const customerName = (fd.get('customer_name') || '').trim();
+        const productName = (fd.get('product_name') || '').trim();
+        const brand = (fd.get('brand') || '').trim();
+
+        if (!customerName) {
             App.flash(t('orders', 'select_customer_or_input'), 'error');
             return false;
         }
-        const productId = parseInt(fd.get('product_id'));
-        const product = DB.getProducts().find(p => p.id === productId);
+        if (!productName) {
+            App.flash(t('orders', 'select_product_required'), 'error');
+            return false;
+        }
+
+        // 고객 찾기 또는 생성
+        let customer = DB.findCustomerByName(customerName);
+        if (!customer) {
+            customer = DB.addCustomer({ name: customerName, wechat_nickname: '', phone: '' });
+        }
+
+        // 상품 찾기 (브랜드 + 상품명)
+        const products = DB.getProducts();
+        let product = products.find(p => p.original_title === productName && (brand === '' || p.brand === brand));
+        if (!product) {
+            product = products.find(p => p.original_title === productName);
+        }
         if (!product) {
             App.flash(t('orders', 'select_product_required'), 'error');
             return false;
         }
+
         const quantity = parseInt(fd.get('quantity')) || 0;
         const sellingPrice = parseFloat(fd.get('selling_price')) || 0;
         if (quantity <= 0 || sellingPrice <= 0) {
             App.flash(t('orders', 'enter_qty_price'), 'error');
             return false;
         }
-        const available = (product.current_stock || 0) - (product.reserved_stock || 0);
-        if (quantity > available) {
-            App.flash(t('common', 'low_stock_alert'), 'error');
-            return false;
-        }
-        DB.updateProduct(productId, { reserved_stock: (product.reserved_stock || 0) + quantity });
-        const profitResult = PriceCalculator.calculateProfit(sellingPrice, product.actual_converted_cost, quantity);
+
         const lastOrder = DB.getOrders().slice(-1)[0];
         const orderNumber = 'ORD-' + String((parseInt((lastOrder?.order_number || 'ORD-0').replace('ORD-', '')) || 0) + 1).padStart(4, '0');
         DB.addOrder({
             order_number: orderNumber,
-            customer_id: customerId,
-            product_id: productId,
+            customer_id: customer.id,
+            product_id: product.id,
+            brand: brand || product.brand || '',
             color: fd.get('color') || '',
             size: fd.get('size') || '',
             quantity: quantity,
@@ -935,20 +727,19 @@ const Orders = {
 
     /**
      * 3-8A.9-B: remote mode 주문 생성.
-     * SupabaseOrdersDataSource.createOrder(payload)만 사용한다.
-     * DB.addOrder, DB.updateProduct, DB.addInventoryLog, DB.addCustomer, DB.findCustomerByName 금지.
-     * product stock side effect는 create_order RPC에 맡긴다.
+     * text input 기반: customer_name, product_name으로 UUID 조회.
      */
     async _submitAddRemote() {
         const fd = new FormData(document.getElementById('orderForm'));
-        const customerUuid = (fd.get('customer_uuid') || '').trim();
-        const productUuid = (fd.get('product_uuid') || '').trim();
+        const customerName = (fd.get('customer_name') || '').trim();
+        const productName = (fd.get('product_name') || '').trim();
+        const brand = (fd.get('brand') || '').trim();
 
-        if (!customerUuid) {
+        if (!customerName) {
             App.flash(t('orders', 'select_customer_or_input'), 'error');
             return false;
         }
-        if (!productUuid) {
+        if (!productName) {
             App.flash(t('orders', 'select_product_required'), 'error');
             return false;
         }
@@ -957,6 +748,32 @@ const Orders = {
         const sellingPrice = parseFloat(fd.get('selling_price')) || 0;
         if (quantity <= 0 || sellingPrice <= 0) {
             App.flash(t('orders', 'enter_qty_price'), 'error');
+            return false;
+        }
+
+        // cached 데이터에서 고객/상품 UUID 조회
+        const customers = this.state._remoteCustomers || [];
+        const products = this.state._remoteProducts || [];
+
+        let customer = customers.find(c =>
+            (c.name || c.customer_name_snapshot || '').toLowerCase() === customerName.toLowerCase()
+        );
+        let customerUuid = customer ? (customer.remote_id || customer.id) : null;
+
+        let product = products.find(p =>
+            p.original_title === productName && (brand === '' || p.brand === brand)
+        );
+        if (!product) {
+            product = products.find(p => p.original_title === productName);
+        }
+        let productUuid = product ? (product.remote_id || product.id) : null;
+
+        if (!customerUuid) {
+            App.flash(`'${customerName}' ${t('common', 'not_found')}`, 'error');
+            return false;
+        }
+        if (!productUuid) {
+            App.flash(`'${productName}' ${t('common', 'not_found')}`, 'error');
             return false;
         }
 
