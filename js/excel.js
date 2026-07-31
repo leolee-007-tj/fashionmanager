@@ -851,8 +851,8 @@ const ExcelManager = {
         const uploadMonths = new Set();
         const normalizedRows = [];
         data.forEach((row, idx) => {
-            const customerName = String(row['고객명'] || row['customer_name'] || row['name'] || '').trim();
-            const productName = String(row['상품명'] || row['product_name'] || row['original_title'] || '').trim();
+            const customerName = String(row['고객명'] || row['customer_name'] || row['name'] || row['고객이름'] || row['고객'] || row['customer'] || '').trim();
+            const productName = String(row['상품명'] || row['product_name'] || row['original_title'] || row['상품이름'] || row['제품명'] || row['품명'] || '').trim();
             const brand = String(row['브랜드'] || row['brand'] || '').trim();
             const rawDate = row['판매일'] || row['order_date'] || row['date'] || '';
             const dateObj = this._parseExcelDate(rawDate) || new Date();
@@ -892,7 +892,7 @@ const ExcelManager = {
         // 3단계: 새 주문 추가
         normalizedRows.forEach(({ idx, row, customerName, productName, brand, orderDateStr }) => {
             const isZiLiu = /自留|자留|지留|자류|지류|自留款/i.test(customerName);
-            let sellingPrice = parseFloat(row['최종흥정가(위안)'] || row['최종흥정가'] || row['판매가'] || row['selling_price'] || row['price'] || 0) || 0;
+            let sellingPrice = parseFloat(row['최종흥정가(위안)'] || row['최종흥정가'] || row['판매가'] || row['selling_price'] || row['price'] || row['가격'] || row['판매금액'] || 0) || 0;
             // 최종판매가가 0원이어도 스킵하지 않고 그대로 저장
             if (isZiLiu) {
                 sellingPrice = sellingPrice || 0;
