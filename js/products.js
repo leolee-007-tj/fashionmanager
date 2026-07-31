@@ -257,10 +257,6 @@ const Products = {
                 </div>
                 <div class="action-bar">
                     <div class="action-bar-left">
-                        <label class="checkbox-wrapper">
-                            <input type="checkbox" class="select-all-cb" data-target="products">
-                            ${t('products', 'select_all')}
-                        </label>
                         <button class="btn btn-sm btn-info" onclick="Products.batchReclassify()">
                             <i class="fas fa-magic"></i> ${t('products', 'batch_reclassify')}
                         </button>
