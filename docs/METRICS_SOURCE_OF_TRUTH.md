@@ -53,6 +53,10 @@
 - 모든 삭제는 hard delete가 아닌 soft delete (`deleted_at` 설정)
 - Orders와 연결된 상품은 주문 snapshot 보존 (삭제되어도 기존 주문 record 유지)
 - 삭제된 상품은 product list/dashboard/product count/stock count에서 제외
+- **Cancel Order with Inactive Product**: soft-deleted 상품의 PENDING 주문도 cancel_order로 취소 가능
+  - `validate_order_store_consistency` 트리거: product_id 미변경 UPDATE는 `deleted_at IS NULL` 검사 생략
+  - `cancel_order` RPC: product 조회 시 `deleted_at IS NULL` 제외, store_id 일치만 확인
+  - 상품이 완전히 삭제되었거나 store mismatch면 `ORDER_PRODUCT_STORE_MISMATCH`
 
 ## Count Recalculation Policy
 

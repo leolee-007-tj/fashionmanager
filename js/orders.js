@@ -520,14 +520,18 @@ const Orders = {
             const uniqueReasons = [...new Set(failReasons)];
             if (uniqueReasons.length === 1 && uniqueReasons[0] === 'ORDER_NOT_PENDING') {
                 App.flash('대기(PENDING) 상태 주문만 삭제/취소할 수 있습니다. 출고/완료 주문은 목록에서 삭제할 수 없습니다.', 'error');
+            } else if (uniqueReasons.some(r => r === 'PRODUCT_INACTIVE_OR_STORE_MISMATCH_ON_CANCEL')) {
+                App.flash('연결된 상품이 삭제/비활성 상태라 기존 cancel_order RPC가 취소를 막고 있습니다. DB 함수 수정이 필요합니다.', 'error');
             } else if (uniqueReasons.some(r => r === 'RPC_MISSING_OR_SIGNATURE_MISMATCH')) {
                 App.flash('cancel_order RPC 구성이 현재 코드와 맞지 않습니다. Supabase 함수/마이그레이션 확인이 필요합니다.', 'error');
-            } else if (uniqueReasons.some(r => r === 'PERMISSION_DENIED' || r === 'RLS_DENIED')) {
+            } else if (uniqueReasons.some(r => r === 'PERMISSION_DENIED' || r === 'RLS_DENIED' || r === 'ORDER_CANCEL_PERMISSION_DENIED')) {
                 App.flash('권한 문제로 판매 삭제/취소가 실패했습니다. 로그인/스토어 권한/RLS를 확인해야 합니다.', 'error');
             } else if (uniqueReasons.some(r => r === 'INVALID_REMOTE_ID')) {
                 App.flash('주문 고유번호 연결이 잘못되어 삭제/취소할 수 없습니다.', 'error');
             } else if (uniqueReasons.some(r => r === 'ORDER_NOT_FOUND')) {
                 App.flash('해당 주문을 찾을 수 없습니다. 목록을 새로고침한 뒤 다시 확인하세요.', 'error');
+            } else if (uniqueReasons.some(r => r === 'ORDER_PRODUCT_STORE_MISMATCH')) {
+                App.flash('주문과 연결된 상품의 스토어가 일치하지 않아 취소할 수 없습니다.', 'error');
             } else {
                 App.flash('판매 삭제/취소 실패: 상세 오류를 콘솔 summary에 기록했습니다.', 'error');
             }
@@ -1045,7 +1049,9 @@ const Orders = {
             let userMsg;
             if (classifier === 'ORDER_NOT_PENDING') {
                 userMsg = '대기(PENDING) 상태 주문만 삭제/취소할 수 있습니다. 출고/완료 주문은 목록에서 삭제할 수 없습니다.';
-            } else if (classifier === 'PERMISSION_DENIED' || classifier === 'RLS_DENIED') {
+            } else if (classifier === 'PRODUCT_INACTIVE_OR_STORE_MISMATCH_ON_CANCEL') {
+                userMsg = '연결된 상품이 삭제/비활성 상태라 기존 cancel_order RPC가 취소를 막고 있습니다. DB 함수 수정이 필요합니다.';
+            } else if (classifier === 'PERMISSION_DENIED' || classifier === 'RLS_DENIED' || classifier === 'ORDER_CANCEL_PERMISSION_DENIED') {
                 userMsg = '권한 문제로 판매 삭제/취소가 실패했습니다. 로그인/스토어 권한/RLS를 확인해야 합니다.';
             } else if (classifier === 'RPC_MISSING_OR_SIGNATURE_MISMATCH') {
                 userMsg = 'cancel_order RPC 구성이 현재 코드와 맞지 않습니다. Supabase 함수/마이그레이션 확인이 필요합니다.';
@@ -1053,6 +1059,8 @@ const Orders = {
                 userMsg = '주문 고유번호 연결이 잘못되어 삭제/취소할 수 없습니다.';
             } else if (classifier === 'ORDER_NOT_FOUND') {
                 userMsg = '해당 주문을 찾을 수 없습니다. 목록을 새로고침한 뒤 다시 확인하세요.';
+            } else if (classifier === 'ORDER_PRODUCT_STORE_MISMATCH') {
+                userMsg = '주문과 연결된 상품의 스토어가 일치하지 않아 취소할 수 없습니다.';
             } else {
                 userMsg = '판매 삭제/취소 실패: 상세 오류를 콘솔에서 확인하세요.';
             }

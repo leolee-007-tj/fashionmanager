@@ -1511,18 +1511,39 @@ const DB = {
                 return 'RPC_MISSING_OR_SIGNATURE_MISMATCH';
             }
 
-            // Order not found
-            if (msg.includes('not found') || details.includes('not found') ||
-                msg.includes('returned no data') || code === 'no_data' ||
-                details.includes('no rows')) {
+            // P0001 + product_id must be active (trigger blocks cancel on inactive product)
+            // This is a DB-level error that requires migration fix
+            if ((code === 'p0001' || status === 400) &&
+                (details.includes('product_id must be active') ||
+                 msg.includes('product_id must be active'))) {
+                return 'PRODUCT_INACTIVE_OR_STORE_MISMATCH_ON_CANCEL';
+            }
+
+            // Order not found (from new cancel_order: ORDER_NOT_FOUND)
+            if (msg.includes('order_not_found') || msg.includes('not found') ||
+                details.includes('not found') || msg.includes('returned no data') ||
+                code === 'no_data' || details.includes('no rows')) {
                 return 'ORDER_NOT_FOUND';
             }
 
-            // Not pending status
-            if (status === 400 && (msg.includes('pending') || details.includes('pending') ||
+            // Not pending status (from new cancel_order: ORDER_NOT_PENDING)
+            if (status === 400 && (msg.includes('order_not_pending') ||
+                msg.includes('pending') || details.includes('pending') ||
                 details.includes('status') || msg.includes('status') ||
                 hint.includes('status') || hint.includes('pending'))) {
                 return 'ORDER_NOT_PENDING';
+            }
+
+            // Product store mismatch (from new cancel_order: ORDER_PRODUCT_STORE_MISMATCH)
+            if (msg.includes('order_product_store_mismatch') ||
+                details.includes('order_product_store_mismatch')) {
+                return 'ORDER_PRODUCT_STORE_MISMATCH';
+            }
+
+            // Cancel permission denied (from new cancel_order: ORDER_CANCEL_PERMISSION_DENIED)
+            if (msg.includes('order_cancel_permission_denied') ||
+                details.includes('order_cancel_permission_denied')) {
+                return 'ORDER_CANCEL_PERMISSION_DENIED';
             }
 
             // Permission / RLS

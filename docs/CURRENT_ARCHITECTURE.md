@@ -10167,3 +10167,33 @@ window.__LAST_ORDER_DELETE_SUMMARY = {
 - 상품목록에서 `china_base_price`(판매가) 컬럼 제거
 - 상품목록 통계 카드: 상품 수, 총 재고만 유지
 - 실제 매출 통계는 판매목록/분석/대시보드에서만 유지
+
+## Cancel Order with Inactive Products
+
+### 원인
+
+- `validate_order_store_consistency` 트리거가 `orders` UPDATE 시 product_id 변경 여부와 관계없이 `deleted_at IS NULL` 검사를 수행
+- soft-deleted 상품의 PENDING 주문을 cancel_order로 취소하려고 하면 트리거가 `product_id must be active and belong to the same store` 오류로 차단
+
+### 수정 사항
+
+1. **트리거 수정** (`validate_order_store_consistency`):
+   - product_id가 변경되지 않는 UPDATE(cancel/ship/complete)는 `deleted_at IS NULL` 검사 생략
+   - store_id 일치 여부만 확인 (`ORDER_PRODUCT_STORE_MISMATCH`)
+   - INSERT / product_id 변경 UPDATE는 기존 active product 검증 유지
+
+2. **cancel_order RPC 수정**:
+   - product 조회 시 `deleted_at IS NULL` 조건 제외
+   - soft-deleted product의 reserved_stock 해제 허용
+   - reserved_stock < quantity인 soft-deleted product는 예약 해제 없이 cancel만 수행
+   - 오류 메시지 명확화: `ORDER_NOT_FOUND`, `ORDER_NOT_PENDING`, `ORDER_CANCEL_PERMISSION_DENIED`, `ORDER_PRODUCT_STORE_MISMATCH`
+
+3. **프론트 classifier 추가**:
+   - `PRODUCT_INACTIVE_OR_STORE_MISMATCH_ON_CANCEL`: P0001 + "product_id must be active" → "DB 함수 수정 필요"
+   - `ORDER_PRODUCT_STORE_MISMATCH`: "주문과 연결된 상품의 스토어가 일치하지 않음"
+   - `ORDER_CANCEL_PERMISSION_DENIED`: 권한 오류
+
+### Migration
+
+- 신규: `supabase/migrations/20260801000000_fix_cancel_order_inactive_product.sql`
+- remote 적용은 사용자 승인 필요 (`REQUIRES_USER_APPROVAL_FOR_REMOTE_MIGRATION`)
