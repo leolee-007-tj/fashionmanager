@@ -10129,3 +10129,41 @@ window.__LAST_ORDER_DELETE_SUMMARY = {
     selectedCountAfter, failReasons
 };
 ```
+
+---
+
+## Product Delete & Product List UI Cleanup
+
+### 상품 삭제 정책
+
+- 상품 삭제는 **soft delete**(`deleted_at` 설정)가 기본이다. Hard delete는 사용하지 않는다.
+- 판매 기록(orders/sales)은 상품 삭제 시 절대 삭제하지 않는다.
+- 상품목록 조회 시 `deleted_at IS NULL` 조건으로 활성 상품만 가져온다.
+
+### Action Key 우선순위
+
+`_getProductActionKey(product)`:
+1. `remote_id` (UUID string) - 최우선
+2. `legacy_id` (numeric string)
+3. `id` (numeric string)
+
+`remote:` prefix는 사용하지 않는다. UUID는 Number 변환하지 않는다.
+
+### 삭제 Target
+
+`_getProductDeleteTarget(product)`:
+- remote mode: `remote_id` 우선 → `soft_delete_product_by_id` RPC 호출
+- remote mode fallback: `legacy_id` → `soft_delete_product` RPC 호출
+- local mode: `id` → localStorage 직접 삭제
+
+### 삭제 후 갱신
+
+- `this.state.loaded = false` → `await this.load()` → `App.renderPage()`
+- 삭제 전후 count 비교: `beforeCount - afterCount === successCount`
+- `window.__LAST_PRODUCT_DELETE_SUMMARY__`에 삭제 결과 저장
+
+### 상품목록 UI 정리
+
+- 상품목록에서 `china_base_price`(판매가) 컬럼 제거
+- 상품목록 통계 카드: 상품 수, 총 재고만 유지
+- 실제 매출 통계는 판매목록/분석/대시보드에서만 유지

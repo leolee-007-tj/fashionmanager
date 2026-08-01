@@ -55,26 +55,30 @@ const Products = {
 
     /**
      * 상품 객체에서 안전한 action key (string)를 반환한다.
-     * 우선순위: legacy_id > id > remote_id
+     * 우선순위: remote_id > legacy_id > id
      * @param {Object} product
      * @returns {string} 빈 문자열이면 identity 없음
      */
     _getProductActionKey(product) {
         if (!product) return '';
+        if (product.remote_id) return String(product.remote_id);
         if (Number.isFinite(Number(product.legacy_id)) && Number(product.legacy_id) > 0) return String(product.legacy_id);
         if (Number.isFinite(Number(product.id)) && Number(product.id) > 0) return String(product.id);
-        if (product.remote_id) return 'remote:' + String(product.remote_id);
         return '';
     },
 
     /**
      * action key로 this.state.products에서 상품을 찾는다.
+     * 우선순위: remote_id > legacy_id > id
      * @param {string} key
      * @returns {Object|null}
      */
     _findProductByActionKey(key) {
         if (!key || !this.state.products) return null;
-        // Try legacy_id and id matching first
+        // Try remote_id (UUID) first
+        const byRemoteId = this.state.products.find(p => String(p.remote_id) === key);
+        if (byRemoteId) return byRemoteId;
+        // Try legacy_id and id
         const numericKey = Number(key);
         if (Number.isFinite(numericKey) && numericKey > 0) {
             const byLegacyId = this.state.products.find(p => Number(p.legacy_id) === numericKey);
@@ -82,16 +86,10 @@ const Products = {
             const byId = this.state.products.find(p => Number(p.id) === numericKey);
             if (byId) return byId;
         }
-        // Try remote: prefix
-        if (key.startsWith('remote:')) {
-            const uuid = key.slice(7);
-            return this.state.products.find(p => String(p.remote_id) === uuid) || null;
-        }
         // Try direct string match
         return this.state.products.find(p =>
             String(p.id) === key ||
-            String(p.legacy_id) === key ||
-            String(p.remote_id) === key
+            String(p.legacy_id) === key
         ) || null;
     },
 
@@ -335,11 +333,10 @@ const Products = {
                             <th>${t('products', 'color')}</th>
                             <th>${t('products', 'size')}</th>
                             <th onclick="Products.sort('korea_cost')" class="${this.state.sortBy === 'korea_cost' ? 'sort-active' : ''}">
-                                ${t('products', 'korea_cost')}
-                                <i class="fas fa-sort-${this.state.sortOrder === 'asc' ? 'up' : 'down'}"></i>
-                            </th>
-                            <th>${t('products', 'base_price')}</th>
-                            <th onclick="Products.sort('current_stock')" class="${this.state.sortBy === 'current_stock' ? 'sort-active' : ''}">
+                            ${t('products', 'korea_cost')}
+                            <i class="fas fa-sort-${this.state.sortOrder === 'asc' ? 'up' : 'down'}"></i>
+                        </th>
+                        <th onclick="Products.sort('current_stock')" class="${this.state.sortBy === 'current_stock' ? 'sort-active' : ''}">
                                 ${t('inventory', 'stock')}
                                 <i class="fas fa-sort-${this.state.sortOrder === 'asc' ? 'up' : 'down'}"></i>
                             </th>
@@ -372,8 +369,7 @@ const Products = {
                         <td><span class="${colorClass}" title="${p.color || '-'}${tooltipInfo}">${p.color || (classified.color || '-')}</span></td>
                         <td><span class="${sizeClass}" title="${p.size || '-'}${tooltipInfo}">${p.size || (classified.size || '-')}</span></td>
                         <td>${(p.korea_cost || 0).toLocaleString()} ${t('common', 'currency_kr')}</td>
-                        <td class="font-bold">${(p.china_base_price || 0).toLocaleString()} ${t('common', 'currency')}</td>
-                        <td class="${stockStatus}">${available} / ${displayStock}</td>
+                    <td class="${stockStatus}">${available} / ${displayStock}</td>
                         <td>
                             <button class="btn btn-sm btn-info" onclick="Products.reclassify('${actionArg}')" title="${t('common', 'reclassify')}">
                                 <i class="fas fa-magic"></i>
@@ -732,16 +728,19 @@ const Products = {
         // this.state.products (이미 remote에서 로드됨)를 우선 사용하고,
         // 없으면 DB.getProductsAsync()로 비동기 조회한다.
         let product = null;
-        const numericId = Number(id);
         if (this.state.products && this.state.products.length > 0) {
-            product = this.state.products.find(p => p.id === numericId || p.legacy_id === numericId);
+            product = this._findProductByActionKey(id);
         }
         if (!product) {
             try {
                 const products = typeof DB.getProductsAsync === 'function'
                     ? await DB.getProductsAsync()
                     : DB.getProducts();
-                product = products.find(p => p.id === numericId || p.legacy_id === numericId);
+                product = products.find(p =>
+                    String(p.remote_id) === id ||
+                    String(p.legacy_id) === id ||
+                    String(p.id) === id
+                );
             } catch (e) {
                 console.error('renderEdit load failed:', e && e.message ? e.message : e);
             }
