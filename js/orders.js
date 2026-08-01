@@ -271,8 +271,14 @@ const Orders = {
                 const actionKey = this._getOrderActionKey(o);
                 const statusLabel = statusLabels[o.status] || ['', ''];
                 const isPending = o.status === 'PENDING';
-                // PENDING이 아닌 주문은 삭제 버튼 disabled
-                const deleteDisabled = !isPending ? 'disabled title="PENDING 상태만 취소 가능"' : '';
+                // PENDING이 아닌 주문은 삭제 버튼 disabled + onclick 제거
+                const statusDeleteTitle = {
+                    SHIPPED: '출고된 주문은 삭제/취소할 수 없습니다.',
+                    COMPLETED: '완료된 주문은 삭제/취소할 수 없습니다.',
+                    CANCELLED: '이미 취소된 주문입니다.'
+                };
+                const deleteDisabled = !isPending ? `disabled title="${statusDeleteTitle[o.status] || 'PENDING 상태만 취소 가능'}"` : '';
+                const deleteOnclick = isPending ? `onclick="Orders.delete('${actionKey}')"` : '';
                 html += `
                     <tr>
                         <td><input type="checkbox" class="row-checkbox" data-id="${actionKey}" data-target="orders" ${this.state.selected.has(actionKey) ? 'checked' : ''}></td>
@@ -284,7 +290,7 @@ const Orders = {
                         <td><span class="badge ${statusLabel[1]}">${statusLabel[0]}</span></td>
                         <td>
                             <button class="btn btn-sm btn-secondary" onclick="Orders.editOrder('${actionKey}')"><i class="fas fa-edit"></i></button>
-                            <button class="btn btn-sm btn-danger" onclick="Orders.delete('${actionKey}')" ${deleteDisabled}><i class="fas fa-trash"></i></button>
+                            <button class="btn btn-sm btn-danger" ${deleteOnclick} ${deleteDisabled}><i class="fas fa-trash"></i></button>
                         </td>
                     </tr>
                 `;
@@ -411,6 +417,7 @@ const Orders = {
         let skippedNotPending = 0;
         let invalidIdCount = 0;
         const failReasons = [];
+        const safeErrors = [];
         let fnError = null;
 
         try {
@@ -455,6 +462,14 @@ const Orders = {
                         ? ds.classifyCancelOrderError(e)
                         : 'UNKNOWN_CANCEL_ORDER_ERROR';
                     failReasons.push(classifier);
+                    safeErrors.push({
+                        classifier,
+                        code: e.code || null,
+                        status: e.status || null,
+                        message: (e.message || '').slice(0, 120),
+                        details: e.details ? String(e.details).slice(0, 160) : null,
+                        hint: e.hint ? String(e.hint).slice(0, 160) : null
+                    });
                     console.error('Batch cancel order failed:', classifier, {
                         code: e.code || null,
                         status: e.status || null,
@@ -490,6 +505,7 @@ const Orders = {
             countDeltaMatchesSuccess,
             selectedCountAfter: this.state.selected.size,
             failReasons: failReasons.slice(0, 20),
+            safeErrors: safeErrors.slice(0, 20),
             fnError: fnError ? (fnError.message || '').slice(0, 100) : null
         };
 
@@ -500,7 +516,21 @@ const Orders = {
         } else if (successCount > 0) {
             App.flash(`${successCount}건 취소, ${failCount}건 실패 — 콘솔에서 사유 확인`, 'warning');
         } else if (failCount > 0) {
-            App.flash('판매 삭제/취소 실패: 주문 상태 또는 권한/RPC를 확인해야 합니다.', 'error');
+            // failReasons 기반으로 구체적인 메시지 표시
+            const uniqueReasons = [...new Set(failReasons)];
+            if (uniqueReasons.length === 1 && uniqueReasons[0] === 'ORDER_NOT_PENDING') {
+                App.flash('대기(PENDING) 상태 주문만 삭제/취소할 수 있습니다. 출고/완료 주문은 목록에서 삭제할 수 없습니다.', 'error');
+            } else if (uniqueReasons.some(r => r === 'RPC_MISSING_OR_SIGNATURE_MISMATCH')) {
+                App.flash('cancel_order RPC 구성이 현재 코드와 맞지 않습니다. Supabase 함수/마이그레이션 확인이 필요합니다.', 'error');
+            } else if (uniqueReasons.some(r => r === 'PERMISSION_DENIED' || r === 'RLS_DENIED')) {
+                App.flash('권한 문제로 판매 삭제/취소가 실패했습니다. 로그인/스토어 권한/RLS를 확인해야 합니다.', 'error');
+            } else if (uniqueReasons.some(r => r === 'INVALID_REMOTE_ID')) {
+                App.flash('주문 고유번호 연결이 잘못되어 삭제/취소할 수 없습니다.', 'error');
+            } else if (uniqueReasons.some(r => r === 'ORDER_NOT_FOUND')) {
+                App.flash('해당 주문을 찾을 수 없습니다. 목록을 새로고침한 뒤 다시 확인하세요.', 'error');
+            } else {
+                App.flash('판매 삭제/취소 실패: 상세 오류를 콘솔 summary에 기록했습니다.', 'error');
+            }
         } else {
             App.flash('취소할 주문이 없습니다.', 'info');
         }
@@ -1012,13 +1042,19 @@ const Orders = {
                 hint: e.hint ? String(e.hint).slice(0, 120) : null
             });
 
-            let userMsg = '판매 삭제/취소 실패: 주문 상태 또는 권한/RPC를 확인해야 합니다.';
+            let userMsg;
             if (classifier === 'ORDER_NOT_PENDING') {
-                userMsg = '대기(PENDING) 상태 주문만 삭제/취소할 수 있습니다.';
+                userMsg = '대기(PENDING) 상태 주문만 삭제/취소할 수 있습니다. 출고/완료 주문은 목록에서 삭제할 수 없습니다.';
             } else if (classifier === 'PERMISSION_DENIED' || classifier === 'RLS_DENIED') {
-                userMsg = '권한 문제로 판매 삭제/취소가 실패했습니다.';
+                userMsg = '권한 문제로 판매 삭제/취소가 실패했습니다. 로그인/스토어 권한/RLS를 확인해야 합니다.';
             } else if (classifier === 'RPC_MISSING_OR_SIGNATURE_MISMATCH') {
-                userMsg = 'cancel_order RPC 구성이 현재 코드와 맞지 않습니다.';
+                userMsg = 'cancel_order RPC 구성이 현재 코드와 맞지 않습니다. Supabase 함수/마이그레이션 확인이 필요합니다.';
+            } else if (classifier === 'INVALID_REMOTE_ID') {
+                userMsg = '주문 고유번호 연결이 잘못되어 삭제/취소할 수 없습니다.';
+            } else if (classifier === 'ORDER_NOT_FOUND') {
+                userMsg = '해당 주문을 찾을 수 없습니다. 목록을 새로고침한 뒤 다시 확인하세요.';
+            } else {
+                userMsg = '판매 삭제/취소 실패: 상세 오류를 콘솔에서 확인하세요.';
             }
             App.flash(userMsg, 'error');
         }
