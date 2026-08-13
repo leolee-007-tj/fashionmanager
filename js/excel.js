@@ -1086,6 +1086,7 @@ const ExcelManager = {
         }
 
         let added = 0;
+        let duplicates = 0;
         let skipped = 0;
         const skippedDetails = [];
         const ds = DB.getOrdersDataSource();
@@ -1157,6 +1158,26 @@ const ExcelManager = {
 
             try {
                 const quantity = Math.max(1, parseInt(row['수량'] || row['판매수량'] || row['quantity'] || 1, 10) || 1);
+                // Treat the visible business fields as the import identity. Older
+                // imports may point at duplicate customer/product UUIDs, so UUID-only
+                // checks allow the same spreadsheet row to be counted again.
+                let duplicateQuery = client.from('orders')
+                    .select('id')
+                    .eq('store_id', storeId)
+                    .eq('quantity', quantity)
+                    .eq('selling_price', sellingPrice)
+                    .eq('order_date', orderDateStr)
+                    .in('status', ['SHIPPED', 'COMPLETED'])
+                    .is('deleted_at', null)
+                    .ilike('customer_name_snapshot', customerName)
+                    .ilike('product_title_snapshot', productName);
+                if (brand) duplicateQuery = duplicateQuery.ilike('brand_snapshot', brand);
+                const duplicateResult = await duplicateQuery.limit(1);
+                if (duplicateResult.error) throw new Error(duplicateResult.error.message || 'DUPLICATE_CHECK_FAILED');
+                if ((duplicateResult.data || []).length > 0) {
+                    duplicates++;
+                    continue;
+                }
                 const importResult = await client.rpc('import_historical_sale', {
                     p_store_id: storeId,
                     p_customer_id: customer.remote_id || customer.id,
@@ -1173,14 +1194,14 @@ const ExcelManager = {
             }
         }
 
-        console.log(`[importOrders] 결과: ${added}건 등록, ${skipped}건 스킵 (총 ${data.length}행)`);
+        console.log(`[importOrders] 결과: 신규 ${added}건, 기존 중복 ${duplicates}건, 실패 ${skipped}건 (총 ${data.length}행)`);
         if (skippedDetails.length > 0) {
             console.log('[importOrders] 스킵 상세:', skippedDetails);
         }
-        let msg = `${added}건 등록 완료!`;
+        let msg = `신규 ${added}건 등록, 기존 중복 ${duplicates}건 제외`;
         if (skipped > 0) msg += ` (${skipped}건 스킵 - 콘솔에서 사유 확인)`;
         App.flash(msg, 'success');
-        return { added, skipped, skippedDetails };
+        return { added, duplicates, skipped, skippedDetails };
     },
 
     async importCustomers(data) {

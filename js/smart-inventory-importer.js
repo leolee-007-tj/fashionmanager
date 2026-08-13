@@ -979,7 +979,9 @@ const SmartInventoryWorkbookImporter = {
 
         try {
             // Save products
-            if ((target === 'products' || target === 'all') && extractedData.productRows && extractedData.productRows.length > 0) {
+            // Sales-only imports must still repair the cost of an existing product.
+            // Creating brand-new products remains limited to products/all.
+            if ((target === 'products' || target === 'all' || target === 'sales') && extractedData.productRows && extractedData.productRows.length > 0) {
                 const productRows = extractedData.productRows;
                 const existingIdentityMap = preview._existingIdentityMap || new Map();
                 const seenIdentities = new Set();
@@ -1042,6 +1044,8 @@ const SmartInventoryWorkbookImporter = {
                         }
                         continue;
                     }
+
+                    if (target === 'sales') continue;
 
                     if (seenIdentities.has(key)) continue;
                     seenIdentities.add(key);
