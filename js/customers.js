@@ -428,7 +428,7 @@ const Customers = {
                         <td>
                             <a href="#/customers/${c.id}" class="btn btn-sm btn-info"><i class="fas fa-eye"></i></a>
                             <button class="btn btn-sm ${isEditing ? 'btn-warning' : 'btn-secondary'}" onclick="Customers.toggleEditCustomer('${c.id}')"><i class="fas fa-edit"></i></button>
-                            <button class="btn btn-sm btn-danger" onclick="Customers.delete(${c.id})"><i class="fas fa-trash"></i></button>
+                            <button class="btn btn-sm btn-danger" onclick="Customers.delete('${c.id}')"><i class="fas fa-trash"></i></button>
                         </td>
                     </tr>
                 `;
@@ -642,11 +642,36 @@ const Customers = {
         return { name: t('customers', 'level_normal'), class: 'pending' };
     },
 
-    delete(id) {
+    async delete(id) {
         if (!confirm(t('common', 'confirm_delete') + '?')) return;
-        DB.deleteCustomer(id);
-        App.flash(t('common', 'delete') + '!', 'success');
-        App.render();
+        try {
+            const ordersSource = DB.getOrdersDataSource();
+            const isRemote = ordersSource && ordersSource.name === 'SupabaseOrdersDataSource';
+            if (isRemote) {
+                const client = window.LESOULSupabase && window.LESOULSupabase.getClient();
+                const storeId = window.LESOULAppBootstrap?.getContext?.()?.activeMembership?.storeId;
+                if (!client || !storeId) throw new Error('고객 원격 연결 정보가 없습니다.');
+                const response = await client.from('customers')
+                    .update({ deleted_at: new Date().toISOString() })
+                    .eq('store_id', storeId)
+                    .eq('id', id)
+                    .is('deleted_at', null)
+                    .select('id');
+                if (response.error) throw new Error(response.error.message || '고객 삭제 실패');
+                if (!response.data || response.data.length !== 1) {
+                    throw new Error('삭제할 고객을 찾지 못했거나 삭제 권한이 없습니다.');
+                }
+                this.state.customers = this.state.customers.filter(c => String(c.id) !== String(id));
+                this.applyFilters();
+            } else {
+                DB.deleteCustomer(Number(id));
+            }
+            App.flash(t('common', 'delete') + '!', 'success');
+            App.render();
+        } catch (e) {
+            console.error('Customer delete failed:', (e.message || '').slice(0, 160));
+            App.flash((e.message || '고객 삭제 실패'), 'error');
+        }
     },
 
     toggleEditCustomer(id) {
