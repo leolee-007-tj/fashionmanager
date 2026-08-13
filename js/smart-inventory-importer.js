@@ -929,6 +929,18 @@ const SmartInventoryWorkbookImporter = {
                 const existingIdentityMap = preview._existingIdentityMap || new Map();
                 const seenIdentities = new Set();
 
+                // Smart preview rows bypass ExcelManager's normal row normalizer,
+                // so allocate the required product_code explicitly here.
+                let existingProducts = [];
+                try {
+                    existingProducts = isRemote && typeof DB.getProductsAsync === 'function'
+                        ? await DB.getProductsAsync()
+                        : DB.getProducts();
+                } catch (e) { /* allocator can still start from an empty set */ }
+                const codeAllocator = typeof ExcelManager !== 'undefined' && ExcelManager._buildProductCodeAllocator
+                    ? ExcelManager._buildProductCodeAllocator(isRemote, existingProducts)
+                    : null;
+
                 // Build normalized rows for ExcelManager.importProducts
                 const normalizedRows = [];
                 for (const row of productRows) {
@@ -951,14 +963,22 @@ const SmartInventoryWorkbookImporter = {
                         continue;
                     }
 
+                    const priceResult = PriceCalculator.calculate(row.cost || 0);
+                    const productCode = codeAllocator
+                        ? codeAllocator.allocate(row.brand)
+                        : DB.generateProductCode(row.brand, tempProduct.stock_year, tempProduct.stock_month);
+
                     normalizedRows.push({
                         valid: true,
                         product: {
                             brand: row.brand,
+                            product_code: productCode,
                             original_title: row.title,
                             color: row.color,
                             size: row.size,
                             korea_cost: row.cost,
+                            actual_converted_cost: priceResult.actual_converted_cost,
+                            china_base_price: priceResult.china_base_price,
                             current_stock: row.stock,
                             stock_year: tempProduct.stock_year,
                             stock_month: tempProduct.stock_month,
