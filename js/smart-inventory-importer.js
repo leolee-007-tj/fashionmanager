@@ -398,7 +398,8 @@ const SmartInventoryWorkbookImporter = {
         let formulaErrorCount = 0;
         const extractedRows = [];
 
-        for (const row of rows) {
+        for (let sourceIndex = 0; sourceIndex < rows.length; sourceIndex++) {
+            const row = rows[sourceIndex];
             // Convert array row to object using headers
             const rowObj = {};
             headers.forEach((h, i) => { rowObj[h] = row[i]; });
@@ -429,6 +430,7 @@ const SmartInventoryWorkbookImporter = {
                         material: String(this._getFieldValue(rowObj, fieldMap, 'material') || '').trim(),
                         notes: String(this._getFieldValue(rowObj, fieldMap, 'notes') || '').trim(),
                         sellingBasePrice: this._safeParseInt(this._getFieldValue(rowObj, fieldMap, 'sellingBasePrice')),
+                        sourceIndex,
                         rawRow: rowObj
                     });
                 }
@@ -458,6 +460,20 @@ const SmartInventoryWorkbookImporter = {
                         title: String(this._getFieldValue(rowObj, fieldMap, 'title') || '').trim(),
                         stock: this._safeParseInt(stock),
                         receivedDate: this._parseDate(this._getFieldValue(rowObj, fieldMap, 'receivedDate')),
+                        rawRow: rowObj
+                    });
+                }
+            } else if (role === 'inventory') {
+                const brand = this._getFieldValue(rowObj, fieldMap, 'brand');
+                const title = this._getFieldValue(rowObj, fieldMap, 'title');
+                const stock = this._getFieldValue(rowObj, fieldMap, 'stock');
+                if (stock !== null && stock !== undefined && stock !== '') {
+                    validRows++;
+                    extractedRows.push({
+                        brand: this._isFormulaError(brand) ? '' : String(brand || '').trim(),
+                        title: this._isFormulaError(title) ? '' : String(title || '').trim(),
+                        stock: this._safeParseInt(stock),
+                        sourceIndex,
                         rawRow: rowObj
                     });
                 }
@@ -1026,6 +1042,30 @@ const SmartInventoryWorkbookImporter = {
                         summary.productsInserted = result.inserted || 0;
                         summary.productsSkipped = result.skipped || 0;
                     }
+                }
+            }
+
+            // 현재재고 시트는 최종 재고의 권위 있는 원본이다.
+            if ((target === 'products' || target === 'all') && extractedData.inventoryRows?.length) {
+                const products = await DB.getProductsAsync();
+                for (const row of extractedData.inventoryRows) {
+                    const alignedProduct = extractedData.productRows.find(p => p.sourceIndex === row.sourceIndex);
+                    const lookupTitle = row.title || alignedProduct?.title || '';
+                    const lookupBrand = row.brand || alignedProduct?.brand || '';
+                    const product = products.find(p =>
+                        String(p.original_title || '').trim() === lookupTitle &&
+                        (!lookupBrand || String(p.brand || '').trim() === lookupBrand)
+                    );
+                    const legacyId = Number(product?.legacy_id || product?.id);
+                    if (!product || !Number.isFinite(legacyId) || legacyId <= 0) {
+                        summary.inboundSkipped++;
+                        continue;
+                    }
+                    await DB.updateProductAsync(legacyId, {
+                        legacy_id: legacyId,
+                        current_stock: Math.max(0, row.stock)
+                    });
+                    summary.inboundApplied++;
                 }
             }
 

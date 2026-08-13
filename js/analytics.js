@@ -238,36 +238,35 @@ const Analytics = {
         const map = {};
         orders.forEach(o => {
             const pid = o.product_id || 0;
-            if (!map[pid]) {
-                const p = products.find(x => x.id === pid || x.id === Number(pid));
-                map[pid] = { title: p ? p.original_title : '-', quantity: 0, revenue: 0 };
-            }
-            map[pid].quantity += o.quantity || 0;
-            map[pid].revenue += (o.selling_price || 0) * (o.quantity || 0);
+            const p = products.find(x =>
+                String(x.remote_id || '') === String(pid) ||
+                String(x.id || '') === String(pid) ||
+                String(x.legacy_id || '') === String(pid)
+            );
+            const category = String(o.category || o.category_snapshot || p?.category || '미분류').trim() || '미분류';
+            if (!map[category]) map[category] = { title: category, quantity: 0, revenue: 0 };
+            map[category].quantity += o.quantity || 0;
+            map[category].revenue += (o.selling_price || 0) * (o.quantity || 0);
         });
         return Object.values(map).sort((a, b) => b.quantity - a.quantity);
     },
 
     getCustomerRanking(year) {
         const allOrders = this._getShippedOrders();
-        const customers = DB.getCustomers();
         const orders = allOrders.filter(o => {
             const ym = this._extractYearMonth(this._getOrderDate(o));
             return ym && ym.year === year;
         });
         const map = {};
         orders.forEach(o => {
-            const cid = o.customer_id;
-            if (cid === undefined || cid === null) return;
-            if (!map[cid]) {
-                const c = customers.find(x => x.id === cid || x.id === Number(cid));
-                map[cid] = { name: c ? c.name : '-', quantity: 0, amount: 0, order_count: 0 };
-            }
-            map[cid].quantity += o.quantity || 0;
-            map[cid].amount += (o.selling_price || 0) * (o.quantity || 0);
-            map[cid].order_count += 1;
+            const name = String(o.customer_name || o.customer_name_snapshot || '미확인').trim() || '미확인';
+            const key = name.toLowerCase();
+            if (!map[key]) map[key] = { name, quantity: 0, amount: 0, order_count: 0 };
+            map[key].quantity += o.quantity || 0;
+            map[key].amount += (o.selling_price || 0) * (o.quantity || 0);
+            map[key].order_count += 1;
         });
-        return Object.values(map).sort((a, b) => b.amount - a.amount);
+        return Object.values(map).sort((a, b) => b.quantity - a.quantity || b.amount - a.amount);
     },
 
     async renderAsync() {
@@ -496,13 +495,13 @@ const Analytics = {
 
                     <div class="form-group" style="flex:1; min-width:300px;">
                         <div class="card" style="box-shadow:none; border:1px solid #e9ecef;">
-                            <h3 class="mb-3"><i class="fas fa-box"></i> ${t('analytics', 'product_ranking')}</h3>
+                            <h3 class="mb-3"><i class="fas fa-box"></i> 종류별 판매 순위</h3>
                             ${productRanking.length === 0 ? `<p class="text-muted">${t('common', 'no_data')}</p>` : `
                             <table class="table">
                                 <thead>
                                     <tr>
                                         <th>${t('common', 'rank')}</th>
-                                        <th>${t('orders', 'product')}</th>
+                                        <th>종류</th>
                                         <th class="text-right">${t('orders', 'quantity')}</th>
                                         <th class="text-right">${t('analytics', 'revenue')}</th>
                                     </tr>
@@ -529,7 +528,7 @@ const Analytics = {
 
                     <div class="form-group" style="flex:1; min-width:300px;">
                         <div class="card" style="box-shadow:none; border:1px solid #e9ecef;">
-                            <h3 class="mb-3"><i class="fas fa-users"></i> ${t('analytics', 'customer_ranking')}</h3>
+                            <h3 class="mb-3"><i class="fas fa-users"></i> 연간 최다 구매 고객</h3>
                             ${customerRanking.length === 0 ? `<p class="text-muted">${t('common', 'no_data')}</p>` : `
                             <table class="table">
                                 <thead>
