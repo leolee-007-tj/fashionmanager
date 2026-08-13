@@ -2,7 +2,37 @@ const Analytics = {
     state: {
         year: 2025,
         liveExchangeRate: null,
-        liveRateUpdatedAt: null
+        liveRateUpdatedAt: null,
+        orders: null,
+        products: null,
+        expenses: null
+    },
+
+    _isRemoteMode() {
+        try {
+            const ds = DB.getOrdersDataSource();
+            return ds && ds.name === 'SupabaseOrdersDataSource';
+        } catch (e) {
+            return false;
+        }
+    },
+
+    async _loadAnalyticsData() {
+        if (this._isRemoteMode()) {
+            const [orders, products] = await Promise.all([
+                DB.getOrdersAsync(),
+                DB.getProductsAsync()
+            ]);
+            this.state.orders = Array.isArray(orders) ? orders : [];
+            this.state.products = Array.isArray(products) ? products : [];
+            // Expenses have no remote datasource yet. Do not mix legacy browser
+            // records into Supabase-backed analytics.
+            this.state.expenses = [];
+            return;
+        }
+        this.state.orders = DB.getOrders();
+        this.state.products = DB.getProducts();
+        this.state.expenses = DB.getExpenses();
     },
 
     _getSettings() {
@@ -82,13 +112,14 @@ const Analytics = {
     },
 
     _getShippedOrders() {
-        return DB.getOrders().filter(o => o.status === 'SHIPPED' || o.status === 'COMPLETED');
+        const orders = Array.isArray(this.state.orders) ? this.state.orders : DB.getOrders();
+        return orders.filter(o => o.status === 'SHIPPED' || o.status === 'COMPLETED');
     },
 
     calculateMonthlyStats(year) {
         const allOrders = this._getShippedOrders();
-        const products = DB.getProducts();
-        const expenses = DB.getExpenses();
+        const products = Array.isArray(this.state.products) ? this.state.products : DB.getProducts();
+        const expenses = Array.isArray(this.state.expenses) ? this.state.expenses : DB.getExpenses();
         const stats = [];
 
         for (let month = 1; month <= 12; month++) {
@@ -171,7 +202,7 @@ const Analytics = {
 
     getBrandRanking(year) {
         const allOrders = this._getShippedOrders();
-        const products = DB.getProducts();
+        const products = Array.isArray(this.state.products) ? this.state.products : DB.getProducts();
         const orders = allOrders.filter(o => {
             const ym = this._extractYearMonth(this._getOrderDate(o));
             return ym && ym.year === year;
@@ -191,7 +222,7 @@ const Analytics = {
 
     getProductRanking(year) {
         const allOrders = this._getShippedOrders();
-        const products = DB.getProducts();
+        const products = Array.isArray(this.state.products) ? this.state.products : DB.getProducts();
         const orders = allOrders.filter(o => {
             const ym = this._extractYearMonth(this._getOrderDate(o));
             return ym && ym.year === year;
@@ -232,6 +263,7 @@ const Analytics = {
     },
 
     async renderAsync() {
+        await this._loadAnalyticsData();
         await this._ensureRate();
         return this.render();
     },
