@@ -208,8 +208,32 @@ describe('Smart Excel Import Replacement Contract', () => {
     describe('Fuzzy header resolver', () => {
         it('blank headers never fuzzy-match a field', () => {
             const smartJs = readSource('js/smart-inventory-importer.js');
-            assert.match(smartJs, /if \(!h\) return false/,
+            assert.match(smartJs, /if \(!h \|\| h\.startsWith\('='\)\) return false/,
                 'blank header cells must not be treated as every logical field');
+        });
+
+        it('formula cells and objects are never treated as headers', () => {
+            const smartJs = readSource('js/smart-inventory-importer.js');
+            assert.match(smartJs, /typeof headerName === 'object'/,
+                'array-formula objects must not be treated as headers');
+            assert.match(smartJs, /h\.startsWith\('='\)/,
+                'formula text must not be treated as a header');
+        });
+
+        it('recognizes 일자 as an inbound or sales date', () => {
+            const smartJs = readSource('js/smart-inventory-importer.js');
+            assert.match(smartJs, /receivedDate: \[[^\]]*'일자'/,
+                '입고 sheets using 일자 should map their date column');
+            assert.match(smartJs, /orderDate: \[[^\]]*'일자'/,
+                'sales sheets using 일자 should map their date column');
+        });
+
+        it('does not reinterpret a generic 메모 column as sales source', () => {
+            const smartJs = readSource('js/smart-inventory-importer.js');
+            const sourceAliases = smartJs.match(/source: \[([^\]]+)\]/);
+            assert.ok(sourceAliases, 'source aliases should exist');
+            assert.doesNotMatch(sourceAliases[1], /메모/,
+                'generic notes must remain notes instead of becoming a sales channel');
         });
 
         it('finds a real header row below workbook title rows', () => {

@@ -66,17 +66,17 @@ const SmartInventoryWorkbookImporter = {
         const hasBrand = h.some(hh => this._fuzzyMatchHeader(hh, ['brand', '브랜드']));
         const hasTitle = h.some(hh => this._fuzzyMatchHeader(hh, ['title', '상품명', '제품명', 'product_name']));
         const hasCost = h.some(hh => this._fuzzyMatchHeader(hh, ['cost', '원가', '매입원가', 'korea_cost']));
-        if (hasBrand && hasTitle && hasCost) return 'product';
-
-        const hasSaleDate = h.some(hh => this._fuzzyMatchHeader(hh, ['order_date', 'sale_date', '판매일', '출고일', '날짜']));
+        const hasSaleDate = h.some(hh => this._fuzzyMatchHeader(hh, ['order_date', 'sale_date', '판매일', '출고일', '날짜', '일자']));
         const hasCustomer = h.some(hh => this._fuzzyMatchHeader(hh, ['customer', '고객이름', '고객명', '고객', 'customer_name']));
-        if (hasSaleDate && hasCustomer) return 'sales';
-
         const hasStock = h.some(hh => this._fuzzyMatchHeader(hh, ['stock', '재고', 'current_stock', '수량']));
-        const hasReceived = h.some(hh => this._fuzzyMatchHeader(hh, ['received_date', '입고일', '받은날짜']));
-        if (hasStock && hasReceived) return 'inbound';
+        const hasReceived = h.some(hh => this._fuzzyMatchHeader(hh, ['received_date', '입고일', '받은날짜', '일자']));
+        const hasSellingPrice = h.some(hh => this._fuzzyMatchHeader(hh, ['실제판매가', '판매금액', 'selling_price']));
 
-        if (hasStock && !hasSaleDate && !hasCustomer) return 'inventory';
+        if (hasCustomer && hasTitle && (hasSaleDate || hasSellingPrice)) return 'sales';
+        if (hasStock && hasTitle && hasReceived && !hasCustomer) return 'inbound';
+        if (hasBrand && hasTitle && (hasCost || hasStock)) return 'product';
+
+        if (hasStock && hasTitle && !hasCustomer) return 'inventory';
 
         return null;
     },
@@ -84,10 +84,11 @@ const SmartInventoryWorkbookImporter = {
     // ==================== Column Fuzzy Resolver ====================
 
     _fuzzyMatchHeader(headerName, aliases) {
+        if (headerName && typeof headerName === 'object') return false;
         const h = String(headerName || '').trim().toLowerCase()
             .replace(/\s+/g, '')
             .replace(/[\(\)（）]/g, '');
-        if (!h) return false;
+        if (!h || h.startsWith('=')) return false;
         return aliases.some(a => {
             const alias = a.toLowerCase().replace(/\s+/g, '').replace(/[\(\)（）]/g, '');
             if (!alias) return false;
@@ -101,7 +102,7 @@ const SmartInventoryWorkbookImporter = {
         const limit = Math.min(rows.length, 20);
         for (let i = 0; i < limit; i++) {
             const headers = (rows[i] || []).map(v => String(v || '').trim());
-            const nonEmpty = headers.filter(Boolean).length;
+            const nonEmpty = headers.filter(h => h && !h.startsWith('=')).length;
             if (nonEmpty < 2) continue;
             const fieldMap = this._buildFieldMap(headers);
             const matchedFields = Object.keys(fieldMap);
@@ -128,11 +129,11 @@ const SmartInventoryWorkbookImporter = {
         location: ['위치', '보관위치', 'location'],
         image: ['이미지', '사진', '아이폰사진', 'image', 'photo'],
         purchaseDate: ['구입일', '구매일', 'purchase_date'],
-        receivedDate: ['받은날짜', '입고일', 'received_date'],
+        receivedDate: ['받은날짜', '입고일', '일자', 'received_date'],
         productCode: ['상품코드', 'product_code'],
-        orderDate: ['판매일', '출고일', '주문일', '결제일', '날짜', 'order_date', 'sale_date', 'date'],
+        orderDate: ['판매일', '출고일', '주문일', '결제일', '날짜', '일자', 'order_date', 'sale_date', 'date'],
         customerName: ['고객이름', '고객명', '고객', '구매자', '수령인', 'customer', 'customer_name', 'buyer'],
-        source: ['판매출처', '판매처', '출처', '채널', '플랫폼', '메모', 'source', 'channel', 'platform'],
+        source: ['판매출처', '판매처', '출처', '채널', '플랫폼', 'source', 'channel', 'platform'],
         saleQuantity: ['수량', '판매수량', '출고수량', 'quantity', 'qty'],
         actualSellingPrice: ['실제판매가', '최종판매가', '최종총평가', '결제금액', '금액', '판매금액', 'actual_selling_price', 'selling_price', 'price'],
         profit: ['이익금', '실제이익', 'profit', 'actual_profit'],
