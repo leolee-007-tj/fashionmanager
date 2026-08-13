@@ -980,6 +980,33 @@ const SmartInventoryWorkbookImporter = {
                     .normalize('NFKC')
                     .toLowerCase()
                     .replace(/[\s\p{P}\p{S}]+/gu, '');
+
+                // Send workbook costs directly to the authenticated store in one
+                // transaction-like RPC. Values never enter source control.
+                if (isRemote) {
+                    const client = window.LESOULSupabase && window.LESOULSupabase.getClient();
+                    const storeId = window.LESOULAppBootstrap?.getContext?.()?.activeMembership?.storeId;
+                    const costRows = productRows
+                        .filter(row => Number(row.cost || 0) > 0 && row.brand && row.title)
+                        .map(row => ({ brand: row.brand, title: row.title, cost: Number(row.cost) }));
+                    if (client && storeId && costRows.length > 0) {
+                        const bulkResult = await client.rpc('bulk_repair_product_costs', {
+                            p_store_id: storeId,
+                            p_rows: costRows
+                        });
+                        if (bulkResult.error) throw new Error(`한국원가 강제 저장 실패: ${bulkResult.error.message || 'RPC_ERROR'}`);
+                        summary.productCostsRepaired = Number(bulkResult.data?.updated) || 0;
+                        summary.zeroCostProductsRemaining = Number(bulkResult.data?.zero_remaining) || 0;
+                        existingProducts.forEach(product => {
+                            const match = productRows.find(row =>
+                                normalizeLoose(product.brand) === normalizeLoose(row.brand) &&
+                                normalizeLoose(product.original_title) === normalizeLoose(row.title) &&
+                                Number(row.cost || 0) > 0
+                            );
+                            if (match) product.korea_cost = Number(match.cost);
+                        });
+                    }
+                }
                 for (const row of productRows) {
                     const tempProduct = {
                         brand: row.brand,
