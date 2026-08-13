@@ -57,6 +57,14 @@ const SmartInventoryWorkbookImporter = {
         return bestMatch ? bestMatch.role : null;
     },
 
+    _classifySheetByExactName(sheetName) {
+        const name = String(sheetName || '').trim().toLowerCase();
+        for (const [role, patterns] of Object.entries(this.SHEET_ROLE_PATTERNS)) {
+            if (patterns.some(pattern => name === String(pattern).trim().toLowerCase())) return role;
+        }
+        return null;
+    },
+
     /**
      * 헤더 기반 fallback 분류
      */
@@ -339,17 +347,20 @@ const SmartInventoryWorkbookImporter = {
             const rowCount = Math.max(0, json.length - headerInfo.index - 1);
 
             const nameRole = this._classifySheetByName(sheetName);
+            const exactNameRole = this._classifySheetByExactName(sheetName);
             const headerRole = this._classifySheetByHeaders(headers);
-            // 실제 컬럼 구성이 확인되면 모호한 시트명보다 헤더를 신뢰한다.
+            // 부분 일치로 추정한 모호한 이름에서는 헤더를 우선한다.
             const role = headerRole || nameRole;
+            // 제품목록/현재재고처럼 명시적인 표준 시트명은 헤더보다 우선한다.
+            const resolvedRole = exactNameRole || role;
 
             const fieldMap = this._buildFieldMap(headers);
-            const analysis = this._analyzeSheetRows(json.slice(headerInfo.index + 1), fieldMap, role, headers);
-            sheetRoles[sheetName] = role;
+            const analysis = this._analyzeSheetRows(json.slice(headerInfo.index + 1), fieldMap, resolvedRole, headers);
+            sheetRoles[sheetName] = resolvedRole;
 
             detectedSheets.push({
                 name: sheetName,
-                role,
+                role: resolvedRole,
                 headers,
                 fieldMap,
                 headerRowNumber: headerInfo.index + 1,
@@ -360,7 +371,7 @@ const SmartInventoryWorkbookImporter = {
             });
 
             // Store extracted data for preview
-            switch (role) {
+            switch (resolvedRole) {
                 case 'product':
                     extractedData.productRows.push(...analysis.extractedRows);
                     break;
