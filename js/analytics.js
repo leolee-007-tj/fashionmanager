@@ -19,6 +19,14 @@ const Analytics = {
 
     async _loadAnalyticsData() {
         if (this._isRemoteMode()) {
+            const cleanupKey = 'lesoul_gh_remote_analytics_cleanup_v1';
+            if (localStorage.getItem(cleanupKey) !== 'done') {
+                // Explicitly user-approved one-time cleanup. Preserve products,
+                // customers, settings, authentication, and every unrelated key.
+                DB.setOrders([]);
+                DB.setExpenses([]);
+                localStorage.setItem(cleanupKey, 'done');
+            }
             const [orders, products] = await Promise.all([
                 DB.getOrdersAsync(),
                 DB.getProductsAsync()

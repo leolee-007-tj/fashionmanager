@@ -20,6 +20,18 @@ describe('Analytics remote source contract', () => {
         assert.match(source.slice(start, end), /this\.state\.expenses = \[\]/);
     });
 
+    it('cleans only local orders and expenses once in remote mode', () => {
+        const start = source.indexOf('async _loadAnalyticsData()');
+        const end = source.indexOf('_getSettings()', start);
+        const section = source.slice(start, end);
+        assert.match(section, /lesoul_gh_remote_analytics_cleanup_v1/);
+        assert.match(section, /DB\.setOrders\(\[\]\)/);
+        assert.match(section, /DB\.setExpenses\(\[\]\)/);
+        assert.doesNotMatch(section, /DB\.setProducts\(\[\]\)/);
+        assert.doesNotMatch(section, /DB\.setCustomers\(\[\]\)/);
+        assert.doesNotMatch(section, /clearAllData/);
+    });
+
     it('counts only shipped or completed orders', () => {
         assert.match(source, /o\.status === 'SHIPPED' \|\| o\.status === 'COMPLETED'/);
     });
