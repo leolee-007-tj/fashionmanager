@@ -1000,6 +1000,10 @@ const SmartInventoryWorkbookImporter = {
 
                 // Build normalized rows for ExcelManager.importProducts
                 const normalizedRows = [];
+                const normalizeLoose = (value) => String(value || '')
+                    .normalize('NFKC')
+                    .toLowerCase()
+                    .replace(/[\s\p{P}\p{S}]+/gu, '');
                 for (const row of productRows) {
                     const tempProduct = {
                         brand: row.brand,
@@ -1012,9 +1016,11 @@ const SmartInventoryWorkbookImporter = {
                     };
                     const key = this._getProductIdentityKey(tempProduct);
 
+                    const rowBrandKey = normalizeLoose(row.brand);
+                    const rowTitleKey = normalizeLoose(row.title);
                     const zeroCostMatches = existingProducts.filter(p =>
-                        String(p.brand || '').trim().toLowerCase() === String(row.brand || '').trim().toLowerCase() &&
-                        String(p.original_title || '').trim().toLowerCase() === String(row.title || '').trim().toLowerCase() &&
+                        normalizeLoose(p.brand) === rowBrandKey &&
+                        normalizeLoose(p.original_title) === rowTitleKey &&
                         Number(p.korea_cost || 0) <= 0 && Number(row.cost || 0) > 0
                     );
                     if (zeroCostMatches.length > 0) {
@@ -1022,7 +1028,9 @@ const SmartInventoryWorkbookImporter = {
                         const client = window.LESOULSupabase && window.LESOULSupabase.getClient();
                         const storeId = window.LESOULAppBootstrap?.getContext?.()?.activeMembership?.storeId;
                         for (const zeroCostMatch of zeroCostMatches) {
-                            const productId = zeroCostMatch.remote_id;
+                            const productId = zeroCostMatch.remote_id ||
+                                (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(zeroCostMatch.id || ''))
+                                    ? zeroCostMatch.id : null);
                             if (!client || !storeId || !productId) {
                                 summary.productCostRepairFailed++;
                                 continue;
@@ -1188,7 +1196,7 @@ const SmartInventoryWorkbookImporter = {
                 summary.productCostRepairFailed > 0 ? 'warning' : 'success');
 
             // Reload relevant lists
-            if (target === 'products' || target === 'all') {
+            if (target === 'products' || target === 'all' || target === 'sales') {
                 if (typeof Products !== 'undefined') {
                     Products.state.loaded = false;
                     await Products.load();
