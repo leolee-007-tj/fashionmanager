@@ -1112,11 +1112,16 @@ const SmartInventoryWorkbookImporter = {
                     }));
 
                     if (isRemote && ExcelManager._importOrdersRemote) {
-                        await ExcelManager._importOrdersRemote(orderRows);
+                        const importResult = await ExcelManager._importOrdersRemote(orderRows);
+                        summary.ordersInserted = Number(importResult?.added) || 0;
+                        summary.ordersSkipped = Number(importResult?.skipped) || 0;
+                        if (summary.ordersSkipped > 0) {
+                            summary.warnings.push(`${summary.ordersSkipped}건의 판매가 상품 연결 또는 저장 오류로 건너뛰어졌습니다.`);
+                        }
                     } else if (ExcelManager._importOrdersLocal) {
                         ExcelManager._importOrdersLocal(orderRows);
+                        summary.ordersInserted = salesRows.length;
                     }
-                    summary.ordersInserted = salesRows.length;
                 }
             }
 

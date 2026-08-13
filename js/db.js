@@ -488,18 +488,33 @@ const DB = {
              */
             listProducts() {
                 _validateWriteContext('listProducts');
-                return client.from('products')
+                const pageSize = 1000;
+                const buildQuery = () => client.from('products')
                     .select('*')
                     .eq('store_id', context.storeId)
-                    .is('deleted_at', null)
-                    .then(response => {
+                    .is('deleted_at', null);
+                // Preserve the existing synchronous query-construction error contract.
+                const firstQuery = buildQuery();
+                const fetchAll = async () => {
+                    const rows = [];
+                    for (let from = 0; ; from += pageSize) {
+                        let query = from === 0 ? firstQuery : buildQuery();
+                        if (typeof query.order === 'function') {
+                            query = query.order('id', { ascending: true });
+                        }
+                        const supportsRange = typeof query.range === 'function';
+                        if (supportsRange) query = query.range(from, from + pageSize - 1);
+                        const response = await query;
                         if (response.error) {
                             throw new Error('SupabaseProductsDataSource.listProducts query failed');
                         }
-                        const rows = response.data || [];
-                        return rows.map(row => db.mapSupabaseRowToLegacyProduct(row));
-                    })
-                    .catch(err => _wrapWriteError('listProducts', err));
+                        const page = response.data || [];
+                        rows.push(...page);
+                        if (!supportsRange || page.length < pageSize) break;
+                    }
+                    return rows.map(row => db.mapSupabaseRowToLegacyProduct(row));
+                };
+                return fetchAll().catch(err => _wrapWriteError('listProducts', err));
             },
 
             setProducts(products) {
@@ -1580,10 +1595,14 @@ const DB = {
              * orders table에서 store_id 기반 read-only select 수행.
              * deleted_at IS NULL 조건으로 활성 주문만 조회.
              */
-            listOrders(filters) {
+            async listOrders(filters) {
                 _validateReadContext('listOrders');
-                let query = client.from('orders')
-                    .select([
+                const pageSize = 1000;
+                const rows = [];
+                try {
+                    for (let from = 0; ; from += pageSize) {
+                        let query = client.from('orders')
+                            .select([
                         'id, legacy_id, store_id, order_number',
                         'customer_id, product_id, legacy_customer_id, legacy_product_id',
                         'customer_name_snapshot, product_title_snapshot, brand_snapshot, category_snapshot, color_snapshot, size_snapshot',
@@ -1591,32 +1610,31 @@ const DB = {
                         'actual_converted_cost_at_sale, china_cost_at_sale',
                         'status, order_date, ship_date, shipping_company, tracking_number, notes',
                         'created_at, updated_at, deleted_at, version'
-                    ].join(', '))
-                    .eq('store_id', context.storeId)
-                    .is('deleted_at', null)
-                    .order('order_date', { ascending: false });
+                            ].join(', '))
+                            .eq('store_id', context.storeId)
+                            .is('deleted_at', null)
+                            .order('order_date', { ascending: false })
+                            .order('id', { ascending: true })
+                            .range(from, from + pageSize - 1);
 
-                if (filters) {
-                    if (filters.status) {
-                        query = query.eq('status', filters.status);
-                    }
-                    if (filters.customerId) {
-                        query = query.eq('customer_id', filters.customerId);
-                    }
-                    if (filters.productId) {
-                        query = query.eq('product_id', filters.productId);
-                    }
-                }
+                        if (filters) {
+                            if (filters.status) query = query.eq('status', filters.status);
+                            if (filters.customerId) query = query.eq('customer_id', filters.customerId);
+                            if (filters.productId) query = query.eq('product_id', filters.productId);
+                        }
 
-                return query
-                    .then(response => {
+                        const response = await query;
                         if (response.error) {
                             throw new Error('SupabaseOrdersDataSource.listOrders query failed');
                         }
-                        const rows = response.data || [];
-                        return rows.map(row => db.mapSupabaseRowToLegacyOrder(row));
-                    })
-                    .catch(err => _wrapReadError('listOrders', err));
+                        const page = response.data || [];
+                        rows.push(...page);
+                        if (page.length < pageSize) break;
+                    }
+                    return rows.map(row => db.mapSupabaseRowToLegacyOrder(row));
+                } catch (err) {
+                    return _wrapReadError('listOrders', err);
+                }
             },
 
             /**

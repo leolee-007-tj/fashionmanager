@@ -1180,6 +1180,7 @@ const ExcelManager = {
         let msg = `${added}건 등록 완료!`;
         if (skipped > 0) msg += ` (${skipped}건 스킵 - 콘솔에서 사유 확인)`;
         App.flash(msg, 'success');
+        return { added, skipped, skippedDetails };
     },
 
     async importCustomers(data) {
