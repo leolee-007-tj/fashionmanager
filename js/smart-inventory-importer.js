@@ -352,7 +352,8 @@ const SmartInventoryWorkbookImporter = {
             // 부분 일치로 추정한 모호한 이름에서는 헤더를 우선한다.
             const role = headerRole || nameRole;
             // 제품목록/현재재고처럼 명시적인 표준 시트명은 헤더보다 우선한다.
-            const resolvedRole = exactNameRole || role;
+            // 입고 시트는 사용하지 않는다. 재고의 유일한 기준은 현재재고 시트다.
+            const resolvedRole = exactNameRole === 'inbound' ? null : (exactNameRole || role);
 
             const fieldMap = this._buildFieldMap(headers);
             const analysis = this._analyzeSheetRows(json.slice(headerInfo.index + 1), fieldMap, resolvedRole, headers);
@@ -374,9 +375,6 @@ const SmartInventoryWorkbookImporter = {
             switch (resolvedRole) {
                 case 'product':
                     extractedData.productRows.push(...analysis.extractedRows);
-                    break;
-                case 'inbound':
-                    extractedData.inboundRows.push(...analysis.extractedRows);
                     break;
                 case 'sales':
                     extractedData.salesRows.push(...analysis.extractedRows);
@@ -401,9 +399,6 @@ const SmartInventoryWorkbookImporter = {
             extractedData.productRows.forEach(row => { row.stockYear = inferredDate.year; });
             extractedData.salesRows.forEach(row => {
                 row.orderDate = this._applyFilenameYear(row.orderDate, inferredDate.year);
-            });
-            extractedData.inboundRows.forEach(row => {
-                row.receivedDate = this._applyFilenameYear(row.receivedDate, inferredDate.year);
             });
         }
 
@@ -526,7 +521,6 @@ const SmartInventoryWorkbookImporter = {
     _buildPreview(detectedSheets, sheetRoles, extractedData, inferredDate, filename) {
         const productSheets = detectedSheets.filter(s => s.role === 'product');
         const salesSheets = detectedSheets.filter(s => s.role === 'sales');
-        const inboundSheets = detectedSheets.filter(s => s.role === 'inbound');
         const inventorySheets = detectedSheets.filter(s => s.role === 'inventory');
         const salesSummarySheets = detectedSheets.filter(s => s.role === 'salesSummary');
         const customerSummarySheets = detectedSheets.filter(s => s.role === 'customerSummary');
@@ -647,27 +641,7 @@ const SmartInventoryWorkbookImporter = {
             }
         }
 
-        // Inbound analysis
-        const inboundRows = extractedData.inboundRows;
-        const validInboundRows = inboundRows.length;
-        const unmatchedInboundProducts = [];
-
-        for (const row of inboundRows) {
-            if (row.title && row.brand) {
-                let found = false;
-                for (const [key, prod] of existingIdentityMap) {
-                    if (prod.original_title === row.title && prod.brand === row.brand) {
-                        found = true;
-                        break;
-                    }
-                }
-                if (!found) {
-                    unmatchedInboundProducts.push(row);
-                }
-            }
-        }
-
-        const reviewNeededCount = unmatchedSalesProducts.length + unmatchedInboundProducts.length;
+        const reviewNeededCount = unmatchedSalesProducts.length;
 
         const warnings = [];
         if (formulaErrorCount > 0) {
@@ -675,9 +649,6 @@ const SmartInventoryWorkbookImporter = {
         }
         if (unmatchedSalesProducts.length > 0) {
             warnings.push(`판매 ${unmatchedSalesProducts.length}건의 상품이 기존 목록에서 발견되지 않았습니다. 검토가 필요합니다.`);
-        }
-        if (unmatchedInboundProducts.length > 0) {
-            warnings.push(`입고 ${unmatchedInboundProducts.length}건의 상품이 기존 목록에서 발견되지 않았습니다. 검토가 필요합니다.`);
         }
         if (duplicateProductIdentities.length > 0) {
             warnings.push(`파일 내 중복 상품 ${duplicateProductIdentities.length}건은 병합됩니다.`);
@@ -701,8 +672,6 @@ const SmartInventoryWorkbookImporter = {
             inferredMonth: inferredDate.month,
             productRows: productRows.length,
             validProductRows,
-            inboundRows: inboundRows.length,
-            validInboundRows,
             salesRows: salesRows.length,
             validSalesRows,
             detectedCustomers: [...detectedCustomers],
@@ -714,7 +683,6 @@ const SmartInventoryWorkbookImporter = {
             existingCustomerMatches: existingCustomerMatches.length,
             salesCreateCandidates: salesCreateCandidates.length,
             unmatchedSalesProducts: unmatchedSalesProducts.length,
-            unmatchedInboundProducts: unmatchedInboundProducts.length,
             formulaErrorCount,
             inventoryVerificationCount: inventorySheets.length,
             salesSummaryVerificationCount: salesSummarySheets.length,
@@ -842,10 +810,6 @@ const SmartInventoryWorkbookImporter = {
                     <div class="stat-card">
                         <div class="stat-label">${t('excel', 'sales_candidates') || '판매 후보'}</div>
                         <div class="stat-value">${preview.validSalesRows}</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-label">${t('excel', 'inbound_candidates') || '입고 후보'}</div>
-                        <div class="stat-value">${preview.validInboundRows}</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-label">${t('excel', 'formula_errors') || '계산식 오류'}</div>
