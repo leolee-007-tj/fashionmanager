@@ -266,16 +266,9 @@ const App = {
         const totalSales = thisMonthCompleted.reduce((s, o) => s + (o.selling_price || 0) * (o.quantity || 0), 0);
         const totalProfit = thisMonthCompleted.reduce((s, o) => s + (o.actual_profit || 0), 0);
         const totalStock = products.reduce((s, p) => s + (p.current_stock || 0), 0);
-        const lowStock = products.filter(p => {
-            const avail = (p.current_stock || 0) - (p.reserved_stock || 0);
-            return avail <= 5 && avail > 0;
-        });
-        const outOfStock = products.filter(p => {
-            const avail = (p.current_stock || 0) - (p.reserved_stock || 0);
-            return avail <= 0;
-        });
-        const pendingOrders = orders.filter(o => o.status === 'PENDING');
-        const recentOrders = [...orders].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5);
+        const recentOrders = [...orders].sort((a, b) =>
+            new Date(b.order_date || b.created_at) - new Date(a.order_date || a.created_at)
+        ).slice(0, 5);
 
         let html = `
             <div class="card mb-4">
@@ -332,73 +325,10 @@ const App = {
                     ? 'Supabase (remote)'
                     : 'localStorage'}
             </div>
-            <div class="form-row" style="gap:1rem; flex-wrap:wrap;">
-                <div class="card" style="flex:1; min-width:300px;">
-                    <div class="action-bar">
-                        <div class="action-bar-left">
-                            <h3><i class="fas fa-clock"></i> <span data-i18n="orders.pending">${t('orders', 'pending')}</span> (${pendingOrders.length})</h3>
-                        </div>
-                        <div class="action-bar-right">
-                            <a href="#/orders" class="btn btn-sm btn-secondary"><span data-i18n="dashboard.view_all">${t('dashboard', 'view_all')}</span> <i class="fas fa-arrow-right"></i></a>
-                        </div>
-                    </div>
-        `;
-        if (pendingOrders.length === 0) {
-            html += `<p class="text-muted" data-i18n="common.no_data">${t('common', 'no_data')}</p>`;
-        } else {
-            const productNames = {};
-            products.forEach(p => productNames[p.id] = p.original_title);
-            html += `<div style="overflow-x:auto;"><table class="table"><thead><tr><th data-i18n="orders.order_number">${t('orders', 'order_number')}</th><th data-i18n="orders.product">${t('orders', 'product')}</th><th data-i18n="orders.quantity">${t('orders', 'quantity')}</th><th data-i18n="common.action">${t('common', 'action')}</th></tr></thead><tbody>`;
-            pendingOrders.slice(0, 5).forEach(o => {
-                html += `
-                    <tr>
-                        <td><strong>#${o.order_number || o.id}</strong></td>
-                        <td>${productNames[o.product_id] || '-'}</td>
-                        <td>${o.quantity}</td>
-                        <td><a href="#/orders/${o.id}/ship" class="btn btn-sm btn-success"><i class="fas fa-truck"></i> <span data-i18n="orders.ship">${t('orders', 'ship')}</span></a></td>
-                    </tr>
-                `;
-            });
-            html += '</tbody></table></div>';
-        }
-        html += `
-                </div>
-                <div class="card" style="flex:1; min-width:300px;">
-                    <div class="action-bar">
-                        <div class="action-bar-left">
-                            <h3><i class="fas fa-exclamation-triangle text-warning"></i> <span data-i18n="dashboard.low_stock">${t('dashboard', 'low_stock')}</span></h3>
-                        </div>
-                        <div class="action-bar-right">
-                            <a href="#/products" class="btn btn-sm btn-secondary"><span data-i18n="dashboard.view_all">${t('dashboard', 'view_all')}</span> <i class="fas fa-arrow-right"></i></a>
-                        </div>
-                    </div>
-                    <p class="text-warning"><span data-i18n="dashboard.low_stock">${t('dashboard', 'low_stock')}</span>: <strong>${lowStock.length}</strong></p>
-        `;
-        const alerts = [...lowStock, ...outOfStock].slice(0, 5);
-        if (alerts.length === 0) {
-            html += `<p class="text-muted" data-i18n="dashboard.no_low_stock">${t('dashboard', 'no_low_stock')}</p>`;
-        } else {
-            html += `<table class="table"><thead><tr><th data-i18n="products.title">${t('products', 'title')}</th><th data-i18n="inventory.stock">${t('inventory', 'stock')}</th><th data-i18n="common.status">${t('common', 'status')}</th></tr></thead><tbody>`;
-            alerts.forEach(p => {
-                const avail = (p.current_stock || 0) - (p.reserved_stock || 0);
-                const statusText = avail <= 0 ? t('common', 'out_of_stock') : t('dashboard', 'low_stock');
-                html += `
-                    <tr>
-                        <td>${p.original_title || '-'}</td>
-                        <td>${avail} / ${p.current_stock || 0}</td>
-                        <td><span class="badge ${avail <= 0 ? 'badge-cancelled' : 'badge-pending'}">${statusText}</span></td>
-                    </tr>
-                `;
-            });
-            html += '</tbody></table>';
-        }
-        html += `
-                </div>
-            </div>
             <div class="card mt-4">
                 <div class="action-bar">
                     <div class="action-bar-left">
-                        <h3><i class="fas fa-history"></i> <span data-i18n="dashboard.recent_orders">${t('dashboard', 'recent_orders')}</span></h3>
+                        <h3><i class="fas fa-history"></i> 최근판매</h3>
                     </div>
                     <div class="action-bar-right">
                         <a href="#/orders" class="btn btn-sm btn-secondary"><span data-i18n="dashboard.view_all">${t('dashboard', 'view_all')}</span> <i class="fas fa-arrow-right"></i></a>
@@ -408,21 +338,13 @@ const App = {
         if (recentOrders.length === 0) {
             html += `<p class="text-muted" data-i18n="common.no_data">${t('common', 'no_data')}</p>`;
         } else {
-            const productNames = {};
-            const customerNames = {};
-            products.forEach(p => productNames[p.id] = p.original_title);
-            customers.forEach(c => customerNames[c.id] = c.name);
-            const statusLabels = { PENDING: 'badge-pending', SHIPPED: 'badge-shipped', COMPLETED: 'badge-completed', CANCELLED: 'badge-cancelled' };
-            html += `<div style="overflow-x:auto;"><table class="table"><thead><tr><th data-i18n="orders.order_number">${t('orders', 'order_number')}</th><th data-i18n="orders.customer">${t('orders', 'customer')}</th><th data-i18n="orders.product">${t('orders', 'product')}</th><th data-i18n="orders.selling_price">${t('orders', 'selling_price')}</th><th data-i18n="orders.status">${t('orders', 'status')}</th></tr></thead><tbody>`;
+            html += `<div style="overflow-x:auto;"><table class="table"><thead><tr><th>고객이름</th><th>브랜드</th><th>상품</th></tr></thead><tbody>`;
             recentOrders.forEach(o => {
-                const statusKey = (o.status || 'PENDING').toLowerCase();
                 html += `
                     <tr>
-                        <td><strong>#${o.order_number || o.id}</strong></td>
-                        <td>${customerNames[o.customer_id] || '-'}</td>
-                        <td>${productNames[o.product_id] || '-'}</td>
-                        <td class="font-bold">${((o.selling_price || 0) * (o.quantity || 0)).toLocaleString()} <span data-i18n="common.currency">${t('common', 'currency')}</span></td>
-                        <td><span class="badge ${statusLabels[o.status] || 'badge-pending'}">${t('orders', statusKey)}</span></td>
+                        <td>${o.customer_name || o.customer_name_snapshot || '-'}</td>
+                        <td>${o.brand || o.brand_snapshot || '-'}</td>
+                        <td>${o.product_name || o.product_title || o.product_title_snapshot || '-'}</td>
                     </tr>
                 `;
             });

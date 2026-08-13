@@ -389,7 +389,7 @@ const Customers = {
                 <table class="table">
                     <thead>
                         <tr>
-                            <th style="width:40px;"><input type="checkbox" class="select-all-cb" data-target="customers" ${list.length > 0 && list.every(c => this.state.selected.has(Number(c.id))) ? 'checked' : ''}></th>
+                            <th style="width:40px;"><input type="checkbox" class="select-all-cb" data-target="customers" ${list.length > 0 && list.every(c => this.state.selected.has(String(c.id))) ? 'checked' : ''}></th>
                             <th>${t('customers', 'avatar') || ''}</th>
                             <th onclick="Customers.sort('name')" class="${this.state.sortBy === 'name' ? 'sort-active' : ''}">
                                 ${t('customers', 'name')}
@@ -414,7 +414,7 @@ const Customers = {
                 const isEditing = String(this.state.editingCustomerId) === String(c.id);
                 html += `
                     <tr ${isEditing ? 'style="background:#eef3ff;"' : ''}>
-                        <td><input type="checkbox" class="row-checkbox" data-id="${c.id}" data-target="customers" ${this.state.selected.has(Number(c.id)) ? 'checked' : ''}></td>
+                        <td><input type="checkbox" class="row-checkbox" data-id="${c.id}" data-target="customers" ${this.state.selected.has(String(c.id)) ? 'checked' : ''}></td>
                         <td>
                             <div style="width:36px; height:36px; border-radius:50%; background:#667eea; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:bold; overflow:hidden;">
                                 ${c.avatar_url ? `<img src="${c.avatar_url}" style="width:100%; height:100%; object-fit:cover;">` : (c.name || '?').charAt(0)}
@@ -568,23 +568,23 @@ const Customers = {
     },
 
     toggleSelect(id) {
-        const numId = Number(id);
-        if (this.state.selected.has(numId)) {
-            this.state.selected.delete(numId);
+        const customerId = String(id);
+        if (this.state.selected.has(customerId)) {
+            this.state.selected.delete(customerId);
         } else {
-            this.state.selected.add(numId);
+            this.state.selected.add(customerId);
         }
         App.renderPage();
     },
 
     toggleSelectAll() {
         const total = this.state.filtered.length;
-        const selectedCount = this.state.filtered.filter(c => this.state.selected.has(Number(c.id))).length;
+        const selectedCount = this.state.filtered.filter(c => this.state.selected.has(String(c.id))).length;
         if (selectedCount === total) {
             this.state.selected.clear();
         } else {
             this.state.selected.clear();
-            this.state.filtered.forEach(c => this.state.selected.add(Number(c.id)));
+            this.state.filtered.forEach(c => this.state.selected.add(String(c.id)));
         }
         App.renderPage();
     },
@@ -595,7 +595,7 @@ const Customers = {
             return;
         }
         if (!confirm(this.state.selected.size + t('common', 'confirm_delete_items'))) return;
-        const customers = DB.getCustomers().filter(c => !this.state.selected.has(c.id));
+        const customers = DB.getCustomers().filter(c => !this.state.selected.has(String(c.id)));
         DB.setCustomers(customers);
         this.state.selected.clear();
         App.flash(t('common', 'delete') + '!', 'success');
