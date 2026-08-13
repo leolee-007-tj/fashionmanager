@@ -192,6 +192,15 @@ const SmartInventoryWorkbookImporter = {
         return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     },
 
+    _applyFilenameYear(date, filenameYear) {
+        if (!date || !filenameYear) return date;
+        const source = date instanceof Date ? date : new Date(date);
+        if (isNaN(source.getTime())) return date;
+        const adjusted = new Date(source.getTime());
+        adjusted.setFullYear(filenameYear);
+        return adjusted;
+    },
+
     _inferYearMonthFromFilename(filename) {
         if (!filename) return { year: null, month: null };
         const name = String(filename).replace(/\.xlsx?$/i, '');
@@ -367,6 +376,17 @@ const SmartInventoryWorkbookImporter = {
             }
         }
 
+        // Filename is authoritative. Keep cell month/day, override cell year.
+        if (inferredDate.year) {
+            extractedData.productRows.forEach(row => { row.stockYear = inferredDate.year; });
+            extractedData.salesRows.forEach(row => {
+                row.orderDate = this._applyFilenameYear(row.orderDate, inferredDate.year);
+            });
+            extractedData.inboundRows.forEach(row => {
+                row.receivedDate = this._applyFilenameYear(row.receivedDate, inferredDate.year);
+            });
+        }
+
         // Build preview
         const preview = this._buildPreview(detectedSheets, sheetRoles, extractedData, inferredDate, filename);
         window.__LAST_SMART_EXCEL_IMPORT_PREVIEW = preview;
@@ -503,7 +523,7 @@ const SmartInventoryWorkbookImporter = {
                 color: row.color,
                 size: row.size,
                 korea_cost: row.cost,
-                stock_year: row.stockYear || inferredDate.year || new Date().getFullYear(),
+                stock_year: inferredDate.year || row.stockYear || new Date().getFullYear(),
                 stock_month: row.stockMonth || inferredDate.month || (new Date().getMonth() + 1)
             };
             const key = this._getProductIdentityKey(tempProduct);
@@ -899,6 +919,10 @@ const SmartInventoryWorkbookImporter = {
             ? ExcelManager._isRemoteProductsMode()
             : false;
 
+        if (!isRemote) {
+            throw new Error('스마트 엑셀 가져오기는 Supabase 원격 모드에서만 저장할 수 있습니다. 로그인과 매장 연결을 확인하세요.');
+        }
+
         const extractedData = preview._extractedData || {};
         const summary = {
             mode: isRemote ? 'remote' : 'local',
@@ -950,7 +974,7 @@ const SmartInventoryWorkbookImporter = {
                         color: row.color,
                         size: row.size,
                         korea_cost: row.cost,
-                        stock_year: row.stockYear || preview.inferredYear || new Date().getFullYear(),
+                        stock_year: preview.inferredYear || row.stockYear || new Date().getFullYear(),
                         stock_month: row.stockMonth || preview.inferredMonth || (new Date().getMonth() + 1)
                     };
                     const key = this._getProductIdentityKey(tempProduct);
