@@ -296,6 +296,19 @@ describe('Smart Excel Import Replacement Contract', () => {
                 'should handle multiple selling price aliases'
             );
         });
+
+        it('prioritizes exact 원가 header over fuzzy 중국원가 matches', () => {
+            const importer = readSource('js/smart-inventory-importer.js');
+            assert.match(importer, /Exact labels must win/);
+            assert.match(importer, /normalizedAliases\.includes\(normalize\(header\)\)/);
+        });
+
+        it('repairs existing zero-cost products during re-import', () => {
+            const importer = readSource('js/smart-inventory-importer.js');
+            assert.match(importer, /const zeroCostMatch = existingProducts\.find/);
+            assert.match(importer, /Number\(p\.korea_cost \|\| 0\) <= 0/);
+            assert.match(importer, /await DB\.updateProductAsync/);
+        });
     });
 
     // ========== 6. Date parsing ==========

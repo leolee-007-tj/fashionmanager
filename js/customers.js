@@ -651,14 +651,12 @@ const Customers = {
                 const client = window.LESOULSupabase && window.LESOULSupabase.getClient();
                 const storeId = window.LESOULAppBootstrap?.getContext?.()?.activeMembership?.storeId;
                 if (!client || !storeId) throw new Error('고객 원격 연결 정보가 없습니다.');
-                const response = await client.from('customers')
-                    .update({ deleted_at: new Date().toISOString() })
-                    .eq('store_id', storeId)
-                    .eq('id', id)
-                    .is('deleted_at', null)
-                    .select('id');
+                const response = await client.rpc('soft_delete_customer', {
+                    p_store_id: storeId,
+                    p_customer_id: id
+                });
                 if (response.error) throw new Error(response.error.message || '고객 삭제 실패');
-                if (!response.data || response.data.length !== 1) {
+                if (response.data !== true) {
                     throw new Error('삭제할 고객을 찾지 못했거나 삭제 권한이 없습니다.');
                 }
                 this.state.customers = this.state.customers.filter(c => String(c.id) !== String(id));

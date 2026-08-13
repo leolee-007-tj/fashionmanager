@@ -142,6 +142,15 @@ const SmartInventoryWorkbookImporter = {
 
     _findHeaderColumn(headers, fieldName) {
         const aliases = this.FIELD_ALIASES[fieldName] || [];
+        const normalize = value => String(value || '').trim().toLowerCase()
+            .replace(/\s+/g, '')
+            .replace(/[\(\)（）]/g, '');
+        const normalizedAliases = aliases.map(normalize);
+        // Exact labels must win over a fuzzy substring match. For example,
+        // "원가" must not be shadowed by an earlier "중국원가" column.
+        for (const header of headers) {
+            if (normalizedAliases.includes(normalize(header))) return header;
+        }
         for (const header of headers) {
             if (this._fuzzyMatchHeader(header, aliases)) return header;
         }
@@ -994,6 +1003,27 @@ const SmartInventoryWorkbookImporter = {
                         stock_month: row.stockMonth || preview.inferredMonth || (new Date().getMonth() + 1)
                     };
                     const key = this._getProductIdentityKey(tempProduct);
+
+                    const zeroCostMatch = existingProducts.find(p =>
+                        String(p.brand || '').trim().toLowerCase() === String(row.brand || '').trim().toLowerCase() &&
+                        String(p.original_title || '').trim().toLowerCase() === String(row.title || '').trim().toLowerCase() &&
+                        String(p.color || '').trim().toLowerCase() === String(row.color || '').trim().toLowerCase() &&
+                        String(p.size || '').trim().toLowerCase() === String(row.size || '').trim().toLowerCase() &&
+                        Number(p.stock_year || 0) === Number(tempProduct.stock_year || 0) &&
+                        Number(p.stock_month || 0) === Number(tempProduct.stock_month || 0) &&
+                        Number(p.korea_cost || 0) <= 0 && Number(row.cost || 0) > 0
+                    );
+                    if (zeroCostMatch) {
+                        const repairedPrice = PriceCalculator.calculate(row.cost);
+                        await DB.updateProductAsync(zeroCostMatch.remote_id || zeroCostMatch.id, {
+                            legacy_id: zeroCostMatch.legacy_id || zeroCostMatch.id,
+                            korea_cost: row.cost,
+                            actual_converted_cost: repairedPrice.actual_converted_cost,
+                            china_base_price: repairedPrice.china_base_price
+                        });
+                        summary.productsMatched++;
+                        continue;
+                    }
 
                     if (seenIdentities.has(key)) continue;
                     seenIdentities.add(key);
