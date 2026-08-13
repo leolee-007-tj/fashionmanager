@@ -335,6 +335,8 @@ const SmartInventoryWorkbookImporter = {
         };
 
         for (const sheetName of sheetNames) {
+            // 입고 시트는 기능과 UI 모두에서 완전히 제외한다.
+            if (this._classifySheetByExactName(sheetName) === 'inbound') continue;
             const ws = wb.Sheets[sheetName];
             const json = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true });
             if (json.length < 2) {
@@ -352,8 +354,7 @@ const SmartInventoryWorkbookImporter = {
             // 부분 일치로 추정한 모호한 이름에서는 헤더를 우선한다.
             const role = headerRole || nameRole;
             // 제품목록/현재재고처럼 명시적인 표준 시트명은 헤더보다 우선한다.
-            // 입고 시트는 사용하지 않는다. 재고의 유일한 기준은 현재재고 시트다.
-            const resolvedRole = exactNameRole === 'inbound' ? null : (exactNameRole || role);
+            const resolvedRole = exactNameRole || role;
 
             const fieldMap = this._buildFieldMap(headers);
             const analysis = this._analyzeSheetRows(json.slice(headerInfo.index + 1), fieldMap, resolvedRole, headers);
