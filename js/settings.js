@@ -89,6 +89,13 @@ const Settings = {
                     </label>
                 </div>
                 <p class="text-warning mt-2">${t('settings', 'restore_warning')}</p>
+                <hr>
+                <h4><i class="fas fa-broom"></i> 중복 데이터 자동 정리</h4>
+                <p class="text-muted">중복 고객·상품을 하나로 병합하고 중복 판매를 삭제한 뒤 통계를 다시 계산합니다.</p>
+                <button class="btn btn-warning" id="cleanupDuplicatesButton" onclick="Settings.cleanupAllDuplicates()">
+                    <i class="fas fa-broom"></i> 중복 고객·상품·판매 정리
+                </button>
+                <div id="duplicateCleanupResult" class="mt-2"></div>
             </div>
             <div class="card mt-4">
                 <h3><i class="fas fa-info-circle"></i> ${t('settings', 'current_settings')}</h3>
@@ -185,6 +192,28 @@ const Settings = {
         DB.setProducts(products);
         App.flash(t('settings', 'save_success'), 'success');
         App.render();
+    },
+
+    async cleanupAllDuplicates() {
+        if (!confirm('중복 고객·상품을 병합하고 중복 판매를 삭제합니다. 계속하시겠습니까?')) return;
+        const button = document.getElementById('cleanupDuplicatesButton');
+        if (button) button.disabled = true;
+        try {
+            const client = window.LESOULSupabase && window.LESOULSupabase.getClient();
+            const storeId = window.LESOULAppBootstrap?.getContext?.()?.activeMembership?.storeId;
+            if (!client || !storeId) throw new Error('Supabase 로그인과 매장 연결이 필요합니다.');
+            const result = await client.rpc('cleanup_all_duplicates', { p_store_id: storeId });
+            if (result.error) throw new Error(result.error.message || '중복 정리 실패');
+            const data = result.data || {};
+            const message = `정리 완료: 고객 ${data.customers_deleted || 0}명, 상품 ${data.products_deleted || 0}개, 판매 ${data.sales_deleted || 0}건 삭제`;
+            const output = document.getElementById('duplicateCleanupResult');
+            if (output) output.textContent = message;
+            App.flash(message, 'success');
+        } catch (e) {
+            App.flash(e.message || '중복 정리 실패', 'error');
+        } finally {
+            if (button) button.disabled = false;
+        }
     },
 
     exportData() {
