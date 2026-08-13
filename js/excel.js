@@ -1156,7 +1156,7 @@ const ExcelManager = {
             if (isZiLiu) sellingPrice = sellingPrice || 0;
 
             try {
-                await ds.createOrder({
+                const createdOrder = await ds.createOrder({
                     customer_uuid: customer.remote_id || customer.id,
                     product_uuid: product.remote_id || product.id,
                     quantity: 1,
@@ -1165,6 +1165,13 @@ const ExcelManager = {
                     color: '',
                     size: '',
                     notes: ''
+                });
+                const createdRemoteId = createdOrder && (createdOrder.remote_id || createdOrder.id);
+                if (!createdRemoteId) throw new Error('CREATED_ORDER_REMOTE_ID_MISSING');
+                await ds.shipOrder(createdRemoteId, {
+                    ship_date: orderDateStr || new Date().toISOString().slice(0, 10),
+                    shipping_company: '',
+                    tracking_number: ''
                 });
                 added++;
             } catch (e) {

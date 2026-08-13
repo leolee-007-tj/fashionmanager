@@ -5,7 +5,7 @@ const Customers = {
         search: '',
         sortBy: 'total_amount',
         sortOrder: 'desc',
-        year: 2025,
+        year: new Date().getFullYear(),
         month: null,
         selected: new Set(),
         editingCustomerId: null,
@@ -20,6 +20,32 @@ const Customers = {
         this.recalculateAll();
         this.applyFilters();
         this.state.loaded = true;
+    },
+
+    async loadAsync() {
+        try {
+            const ordersSource = DB.getOrdersDataSource();
+            const isRemote = ordersSource && ordersSource.name === 'SupabaseOrdersDataSource';
+            if (isRemote) {
+                const client = window.LESOULSupabase && window.LESOULSupabase.getClient();
+                const storeId = window.LESOULAppBootstrap?.getContext?.()?.activeMembership?.storeId;
+                if (!client || !storeId) throw new Error('고객 원격 연결 정보가 없습니다.');
+                const response = await client.from('customers')
+                    .select('*')
+                    .eq('store_id', storeId)
+                    .is('deleted_at', null)
+                    .order('name', { ascending: true });
+                if (response.error) throw new Error(response.error.message || '고객 조회 실패');
+                this.state.customers = response.data || [];
+                this.applyFilters();
+                this.state.loaded = true;
+                return;
+            }
+        } catch (e) {
+            console.error('Customers.loadAsync failed:', (e.message || '').slice(0, 120));
+            throw e;
+        }
+        this.load();
     },
 
     recalculateAll() {
@@ -449,6 +475,11 @@ const Customers = {
         }
         html += '</div>';
         return html;
+    },
+
+    async renderListAsync() {
+        await this.loadAsync();
+        return this.renderList();
     },
 
     _renderQuarterCard(startMonth, endMonth, topList, rankBadge, fmtCN, fmtKR, currency, currencyKR) {

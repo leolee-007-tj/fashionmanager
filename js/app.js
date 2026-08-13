@@ -152,7 +152,7 @@ const App = {
                     if (args[0] === 'add') content = Customers.renderAdd();
                     else if (args[1] === 'edit') content = Customers.renderEdit(args[0]);
                     else if (args[0]) content = Customers.renderDetail(args[0]);
-                    else content = Customers.renderList();
+                    else content = await Customers.renderListAsync();
                     break;
                 case 'analytics':
                     content = await Analytics.renderAsync();

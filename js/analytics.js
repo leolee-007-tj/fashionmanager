@@ -1,6 +1,6 @@
 const Analytics = {
     state: {
-        year: 2025,
+        year: new Date().getFullYear(),
         liveExchangeRate: null,
         liveRateUpdatedAt: null,
         orders: null,
