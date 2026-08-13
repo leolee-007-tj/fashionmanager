@@ -959,6 +959,8 @@ const SmartInventoryWorkbookImporter = {
             productsInserted: 0,
             productsMatched: 0,
             productsSkipped: 0,
+            productCostsRepaired: 0,
+            productCostRepairFailed: 0,
             customersInserted: 0,
             customersMatched: 0,
             ordersInserted: 0,
@@ -1015,14 +1017,27 @@ const SmartInventoryWorkbookImporter = {
                     );
                     if (zeroCostMatches.length > 0) {
                         const repairedPrice = PriceCalculator.calculate(row.cost);
+                        const client = window.LESOULSupabase && window.LESOULSupabase.getClient();
+                        const storeId = window.LESOULAppBootstrap?.getContext?.()?.activeMembership?.storeId;
                         for (const zeroCostMatch of zeroCostMatches) {
-                            await DB.updateProductAsync(zeroCostMatch.remote_id || zeroCostMatch.id, {
-                                legacy_id: zeroCostMatch.legacy_id || zeroCostMatch.id,
-                                korea_cost: row.cost,
-                                actual_converted_cost: repairedPrice.actual_converted_cost,
-                                china_base_price: repairedPrice.china_base_price
+                            const productId = zeroCostMatch.remote_id;
+                            if (!client || !storeId || !productId) {
+                                summary.productCostRepairFailed++;
+                                continue;
+                            }
+                            const repairResult = await client.rpc('repair_product_cost', {
+                                p_store_id: storeId,
+                                p_product_id: productId,
+                                p_korea_cost: row.cost,
+                                p_actual_converted_cost: repairedPrice.actual_converted_cost,
+                                p_china_base_price: repairedPrice.china_base_price
                             });
+                            if (repairResult.error || repairResult.data !== true) {
+                                summary.productCostRepairFailed++;
+                                continue;
+                            }
                             zeroCostMatch.korea_cost = row.cost;
+                            summary.productCostsRepaired++;
                             summary.productsMatched++;
                         }
                         continue;
@@ -1159,7 +1174,14 @@ const SmartInventoryWorkbookImporter = {
             }
 
             window.__LAST_SMART_EXCEL_IMPORT_EXECUTION_SUMMARY = summary;
-            App.flash(t('common', 'save') + ' ' + t('common', 'complete') + '!', 'success');
+            const repairMessage = summary.productCostsRepaired > 0
+                ? ` 한국원가 ${summary.productCostsRepaired}건 복구.`
+                : '';
+            const repairFailureMessage = summary.productCostRepairFailed > 0
+                ? ` 한국원가 ${summary.productCostRepairFailed}건 실패.`
+                : '';
+            App.flash(t('common', 'save') + ' ' + t('common', 'complete') + '!' + repairMessage + repairFailureMessage,
+                summary.productCostRepairFailed > 0 ? 'warning' : 'success');
 
             // Reload relevant lists
             if (target === 'products' || target === 'all') {

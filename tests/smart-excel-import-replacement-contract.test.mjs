@@ -307,7 +307,16 @@ describe('Smart Excel Import Replacement Contract', () => {
             const importer = readSource('js/smart-inventory-importer.js');
             assert.match(importer, /const zeroCostMatches = existingProducts\.filter/);
             assert.match(importer, /Number\(p\.korea_cost \|\| 0\) <= 0/);
-            assert.match(importer, /await DB\.updateProductAsync/);
+            assert.match(importer, /client\.rpc\('repair_product_cost'/);
+            assert.match(importer, /productCostsRepaired/);
+        });
+
+        it('repairs costs by remote product UUID through an authenticated RPC', () => {
+            const migration = readSource('supabase/migrations/20260813040000_repair_product_cost.sql');
+            assert.match(migration, /p_product_id uuid/);
+            assert.match(migration, /WHERE id = p_product_id/);
+            assert.match(migration, /private\.has_store_role/);
+            assert.match(migration, /GRANT EXECUTE[\s\S]*TO authenticated/);
         });
 
         it('uses product-list column D as the authoritative Korea purchase cost', () => {
