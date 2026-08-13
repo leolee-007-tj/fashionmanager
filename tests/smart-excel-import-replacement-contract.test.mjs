@@ -305,9 +305,15 @@ describe('Smart Excel Import Replacement Contract', () => {
 
         it('repairs existing zero-cost products during re-import', () => {
             const importer = readSource('js/smart-inventory-importer.js');
-            assert.match(importer, /const zeroCostMatch = existingProducts\.find/);
+            assert.match(importer, /const zeroCostMatches = existingProducts\.filter/);
             assert.match(importer, /Number\(p\.korea_cost \|\| 0\) <= 0/);
             assert.match(importer, /await DB\.updateProductAsync/);
+        });
+
+        it('uses product-list column D as the authoritative Korea purchase cost', () => {
+            const importer = readSource('js/smart-inventory-importer.js');
+            assert.match(importer, /const dColumnCost = this\._safeParseInt\(row\[3\]\)/);
+            assert.match(importer, /const cost = dColumnCost > 0 \? dColumnCost : mappedCost/);
         });
     });
 

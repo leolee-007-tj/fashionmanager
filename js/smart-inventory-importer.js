@@ -423,13 +423,17 @@ const SmartInventoryWorkbookImporter = {
             if (role === 'product') {
                 const brand = this._getFieldValue(rowObj, fieldMap, 'brand');
                 const title = this._getFieldValue(rowObj, fieldMap, 'title');
-                const cost = this._getFieldValue(rowObj, fieldMap, 'cost');
+                // 제품목록 D열은 사용자가 지정한 한국매입원가의 권위 원본이다.
+                // D열이 숫자가 아닐 때만 헤더 기반 원가 열로 fallback한다.
+                const dColumnCost = this._safeParseInt(row[3]);
+                const mappedCost = this._safeParseInt(this._getFieldValue(rowObj, fieldMap, 'cost'));
+                const cost = dColumnCost > 0 ? dColumnCost : mappedCost;
                 if (brand || title || cost) {
                     validRows++;
                     extractedRows.push({
                         brand: String(brand || '').trim(),
                         title: String(title || '').trim(),
-                        cost: this._safeParseInt(cost),
+                        cost: cost,
                         stock: this._safeParseInt(this._getFieldValue(rowObj, fieldMap, 'stock')),
                         stockYear: this._safeParseInt(this._getFieldValue(rowObj, fieldMap, 'stockYear')),
                         stockMonth: this._safeParseInt(this._getFieldValue(rowObj, fieldMap, 'stockMonth')),
@@ -1004,24 +1008,23 @@ const SmartInventoryWorkbookImporter = {
                     };
                     const key = this._getProductIdentityKey(tempProduct);
 
-                    const zeroCostMatch = existingProducts.find(p =>
+                    const zeroCostMatches = existingProducts.filter(p =>
                         String(p.brand || '').trim().toLowerCase() === String(row.brand || '').trim().toLowerCase() &&
                         String(p.original_title || '').trim().toLowerCase() === String(row.title || '').trim().toLowerCase() &&
-                        String(p.color || '').trim().toLowerCase() === String(row.color || '').trim().toLowerCase() &&
-                        String(p.size || '').trim().toLowerCase() === String(row.size || '').trim().toLowerCase() &&
-                        Number(p.stock_year || 0) === Number(tempProduct.stock_year || 0) &&
-                        Number(p.stock_month || 0) === Number(tempProduct.stock_month || 0) &&
                         Number(p.korea_cost || 0) <= 0 && Number(row.cost || 0) > 0
                     );
-                    if (zeroCostMatch) {
+                    if (zeroCostMatches.length > 0) {
                         const repairedPrice = PriceCalculator.calculate(row.cost);
-                        await DB.updateProductAsync(zeroCostMatch.remote_id || zeroCostMatch.id, {
-                            legacy_id: zeroCostMatch.legacy_id || zeroCostMatch.id,
-                            korea_cost: row.cost,
-                            actual_converted_cost: repairedPrice.actual_converted_cost,
-                            china_base_price: repairedPrice.china_base_price
-                        });
-                        summary.productsMatched++;
+                        for (const zeroCostMatch of zeroCostMatches) {
+                            await DB.updateProductAsync(zeroCostMatch.remote_id || zeroCostMatch.id, {
+                                legacy_id: zeroCostMatch.legacy_id || zeroCostMatch.id,
+                                korea_cost: row.cost,
+                                actual_converted_cost: repairedPrice.actual_converted_cost,
+                                china_base_price: repairedPrice.china_base_price
+                            });
+                            zeroCostMatch.korea_cost = row.cost;
+                            summary.productsMatched++;
+                        }
                         continue;
                     }
 
