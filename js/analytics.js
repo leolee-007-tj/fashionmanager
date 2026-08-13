@@ -19,14 +19,14 @@ const Analytics = {
 
     async _loadAnalyticsData() {
         if (this._isRemoteMode()) {
-            const cleanupKey = 'lesoul_gh_remote_analytics_cleanup_v1';
-            if (localStorage.getItem(cleanupKey) !== 'done') {
-                // Explicitly user-approved one-time cleanup. Preserve products,
-                // customers, settings, authentication, and every unrelated key.
-                DB.setOrders([]);
-                DB.setExpenses([]);
-                localStorage.setItem(cleanupKey, 'done');
-            }
+            // Remote analytics must never inherit stale browser sales/expenses.
+            // Keep clearing these two legacy stores because older cached builds or
+            // imports can recreate them after the original one-time cleanup ran.
+            // Preserve products, customers, settings, authentication and all
+            // unrelated keys.
+            DB.setOrders([]);
+            DB.setExpenses([]);
+            localStorage.setItem('lesoul_gh_remote_analytics_cleanup_v2', 'done');
             const [orders, products] = await Promise.all([
                 DB.getOrdersAsync(),
                 DB.getProductsAsync()

@@ -241,7 +241,17 @@ const App = {
         const products = typeof DB.getProductsAsync === 'function'
             ? await DB.getProductsAsync()
             : DB.getProducts();
-        const orders = DB.getOrders();
+        const ordersSource = typeof DB.getOrdersDataSource === 'function'
+            ? DB.getOrdersDataSource()
+            : null;
+        const isRemoteOrders = ordersSource && ordersSource.name === 'SupabaseOrdersDataSource';
+        const orders = isRemoteOrders && typeof DB.getOrdersAsync === 'function'
+            ? await DB.getOrdersAsync()
+            : DB.getOrders();
+        if (isRemoteOrders) {
+            // Never allow stale browser orders to reappear in dashboard totals.
+            DB.setOrders([]);
+        }
         const customers = DB.getCustomers();
         const now = new Date();
         const thisMonthOrders = orders.filter(o => {
