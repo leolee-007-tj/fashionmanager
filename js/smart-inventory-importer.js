@@ -597,12 +597,8 @@ const SmartInventoryWorkbookImporter = {
             const custName = row.customerName;
             if (custName) {
                 detectedCustomers.add(custName);
-                // Check if source-like
-                if (this._isSourceLikeCustomerName(custName)) {
-                    const src = this._classifySource(custName);
-                    if (src) detectedSources.add(src);
-                    continue;
-                }
+                // Values in the explicit customer-name column are customers,
+                // even when the text resembles a sales channel (e.g. 发货/手机).
                 const nameLower = custName.toLowerCase().trim();
                 if (existingCustomerNames.has(nameLower)) {
                     existingCustomerMatches.push(custName);
@@ -1139,7 +1135,6 @@ const SmartInventoryWorkbookImporter = {
                 } catch (e) { /* ignore */ }
 
                 const newCustomers = [...new Set(newCustomerNames)]
-                    .filter(name => !this._isSourceLikeCustomerName(name))
                     .filter(name => !existingNames.has(name.toLowerCase().trim()));
 
                 if (newCustomers.length > 0 && typeof ExcelManager !== 'undefined') {
@@ -1155,11 +1150,7 @@ const SmartInventoryWorkbookImporter = {
 
             // Save sales
             if ((target === 'sales' || target === 'all') && extractedData.salesRows && extractedData.salesRows.length > 0) {
-                const salesRows = extractedData.salesRows.filter(r => {
-                    // Filter out source-like customer names
-                    if (r.customerName && this._isSourceLikeCustomerName(r.customerName)) return false;
-                    return r.title && r.brand && r.customerName;
-                });
+                const salesRows = extractedData.salesRows.filter(r => r.title && r.brand && r.customerName);
 
                 if (salesRows.length > 0 && typeof ExcelManager !== 'undefined') {
                     const orderRows = salesRows.map(r => ({
