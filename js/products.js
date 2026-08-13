@@ -121,6 +121,23 @@ const Products = {
         return { type: 'invalid', value: null, reason: 'MISSING_LOCAL_ID' };
     },
 
+    /** UUID 삭제 RPC가 아직 배포되지 않은 환경에서는 legacy_id로 안전하게 재시도한다. */
+    async _deleteProductWithFallback(product) {
+        const target = this._getProductDeleteTarget(product);
+        if (target.type === 'invalid') throw new Error(target.reason || 'MISSING_DELETE_ID');
+        try {
+            await DB.deleteProductAsync(target.value);
+            return target.type;
+        } catch (primaryError) {
+            const legacyId = product && Number(product.legacy_id);
+            if (target.type === 'remote_id' && Number.isFinite(legacyId) && legacyId > 0) {
+                await DB.deleteProductAsync(legacyId);
+                return 'legacy_id';
+            }
+            throw primaryError;
+        }
+    },
+
     // 모든 상품에 대해 분류키워드 자동 적용
     // - DB에 저장된 분류값이 있으면 그대로 사용
     // - 없으면 original_title로 실시간 분류하여 DB에 저장
@@ -591,7 +608,7 @@ const Products = {
             }
             // BLOCKER-FIX-6: remote_id (uuid) 또는 legacy_id 모두 지원
             try {
-                await DB.deleteProductAsync(deleteTarget.value);
+                await this._deleteProductWithFallback(product);
                 successCount++;
             } catch (e) {
                 failCount++;
@@ -689,10 +706,10 @@ const Products = {
             }
             // BLOCKER-FIX-6: remote_id (uuid) 또는 legacy_id 모두 지원
             try {
-                await DB.deleteProductAsync(deleteTarget.value);
+                const usedTargetType = await this._deleteProductWithFallback(product);
                 deleteSummary.successCount = 1;
-                if (deleteTarget.type === 'remote_id') deleteSummary.usedRemoteIdCount = 1;
-                if (deleteTarget.type === 'legacy_id') deleteSummary.usedLegacyIdCount = 1;
+                if (usedTargetType === 'remote_id') deleteSummary.usedRemoteIdCount = 1;
+                if (usedTargetType === 'legacy_id') deleteSummary.usedLegacyIdCount = 1;
             } catch (e) {
                 deleteSummary.failCount = 1;
                 deleteSummary.failReasons.push(e.message || 'unknown error');

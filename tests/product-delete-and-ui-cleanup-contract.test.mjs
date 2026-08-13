@@ -186,6 +186,13 @@ describe('Product Delete & UI Cleanup Contract', function () {
         assert.match(dpSection, /response\.error\.message/, 'should preserve error.message');
     });
 
+    it('PD19b: UUID delete failure retries a valid legacy_id', function () {
+        assert.match(PRODUCTS_JS, /_deleteProductWithFallback\(product\)/,
+            'products should centralize remote delete fallback');
+        assert.match(PRODUCTS_JS, /target\.type === 'remote_id'[\s\S]*?DB\.deleteProductAsync\(legacyId\)/,
+            'UUID deletion should retry legacy_id when the UUID RPC is not deployed');
+    });
+
     it('PD20: product hard delete is not used', function () {
         const supabaseMarker = DB_JS.indexOf('SupabaseProductsDataSource Connected to Write RPCs');
         const dpStart = DB_JS.indexOf('deleteProduct(id) {', supabaseMarker);

@@ -206,6 +206,25 @@ describe('Smart Excel Import Replacement Contract', () => {
     // ========== 5. Fuzzy header resolver ==========
 
     describe('Fuzzy header resolver', () => {
+        it('blank headers never fuzzy-match a field', () => {
+            const smartJs = readSource('js/smart-inventory-importer.js');
+            assert.match(smartJs, /if \(!h\) return false/,
+                'blank header cells must not be treated as every logical field');
+        });
+
+        it('finds a real header row below workbook title rows', () => {
+            const smartJs = readSource('js/smart-inventory-importer.js');
+            assert.match(smartJs, /_findHeaderRow\(rows\)/,
+                'smart importer should scan for the actual header row');
+            assert.match(smartJs, /json\.slice\(headerInfo\.index \+ 1\)/,
+                'data extraction should begin after the detected header row');
+        });
+
+        it('prefers detected header role over an ambiguous sheet name', () => {
+            const smartJs = readSource('js/smart-inventory-importer.js');
+            assert.match(smartJs, /const role = headerRole \|\| nameRole/,
+                'recognized columns should override an ambiguous sheet name');
+        });
         it('handles 제품명/상품명 as title', () => {
             const importer = readSource('js/smart-inventory-importer.js');
             assert.ok(

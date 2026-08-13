@@ -42,12 +42,19 @@ const SmartInventoryWorkbookImporter = {
      */
     _classifySheetByName(sheetName) {
         const name = String(sheetName || '').trim().toLowerCase();
+        let bestMatch = null;
         for (const [role, patterns] of Object.entries(this.SHEET_ROLE_PATTERNS)) {
             for (const pattern of patterns) {
-                if (name.includes(pattern.toLowerCase())) return role;
+                const normalizedPattern = pattern.toLowerCase();
+                if (name === normalizedPattern) return role;
+                if (normalizedPattern.length >= 3 && name.includes(normalizedPattern)) {
+                    if (!bestMatch || normalizedPattern.length > bestMatch.length) {
+                        bestMatch = { role, length: normalizedPattern.length };
+                    }
+                }
             }
         }
-        return null;
+        return bestMatch ? bestMatch.role : null;
     },
 
     /**
@@ -80,10 +87,29 @@ const SmartInventoryWorkbookImporter = {
         const h = String(headerName || '').trim().toLowerCase()
             .replace(/\s+/g, '')
             .replace(/[\(\)（）]/g, '');
+        if (!h) return false;
         return aliases.some(a => {
             const alias = a.toLowerCase().replace(/\s+/g, '').replace(/[\(\)（）]/g, '');
-            return h === alias || h.includes(alias) || alias.includes(h);
+            if (!alias) return false;
+            return h === alias || (alias.length >= 2 && h.includes(alias)) || (h.length >= 2 && alias.includes(h));
         });
+    },
+
+    /** 제목/설명 행이 위에 있어도 실제 컬럼 헤더를 찾는다. */
+    _findHeaderRow(rows) {
+        let best = { index: 0, headers: (rows[0] || []).map(v => String(v || '').trim()), score: -1 };
+        const limit = Math.min(rows.length, 20);
+        for (let i = 0; i < limit; i++) {
+            const headers = (rows[i] || []).map(v => String(v || '').trim());
+            const nonEmpty = headers.filter(Boolean).length;
+            if (nonEmpty < 2) continue;
+            const fieldMap = this._buildFieldMap(headers);
+            const matchedFields = Object.keys(fieldMap);
+            const role = this._classifySheetByHeaders(headers);
+            const score = matchedFields.length * 10 + (role ? 20 : 0) + Math.min(nonEmpty, 10);
+            if (score > best.score) best = { index: i, headers, score };
+        }
+        return best;
     },
 
     FIELD_ALIASES: {
@@ -289,14 +315,17 @@ const SmartInventoryWorkbookImporter = {
                 continue;
             }
 
-            const headers = json[0].map(h => String(h || '').trim());
-            const rowCount = json.length - 1;
+            const headerInfo = this._findHeaderRow(json);
+            const headers = headerInfo.headers;
+            const rowCount = Math.max(0, json.length - headerInfo.index - 1);
 
-            let role = this._classifySheetByName(sheetName);
-            if (!role) role = this._classifySheetByHeaders(headers);
+            const nameRole = this._classifySheetByName(sheetName);
+            const headerRole = this._classifySheetByHeaders(headers);
+            // 실제 컬럼 구성이 확인되면 모호한 시트명보다 헤더를 신뢰한다.
+            const role = headerRole || nameRole;
 
             const fieldMap = this._buildFieldMap(headers);
-            const analysis = this._analyzeSheetRows(json.slice(1), fieldMap, role, headers);
+            const analysis = this._analyzeSheetRows(json.slice(headerInfo.index + 1), fieldMap, role, headers);
             sheetRoles[sheetName] = role;
 
             detectedSheets.push({
@@ -304,6 +333,7 @@ const SmartInventoryWorkbookImporter = {
                 role,
                 headers,
                 fieldMap,
+                headerRowNumber: headerInfo.index + 1,
                 rowCount,
                 validRowCount: analysis.validRows,
                 formulaErrorCount: analysis.formulaErrorCount,
