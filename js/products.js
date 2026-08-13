@@ -354,7 +354,7 @@ const Products = {
                 const sizeClass = p.size ? 'classification-badge size' : 'classification-badge unclassified';
                 const tooltipInfo = classified._source === 'computed' ? ` (${t('common', 'auto_classified')})` : '';
                 const actionKey = Products._getProductActionKey(p);
-                const actionArg = actionKey.replace(/'/g, "\\'");
+                const actionArg = JSON.stringify(actionKey);
                 const deleteTarget = Products._getProductDeleteTarget(p);
                 const canDelete = deleteTarget.type === 'legacy_id' || deleteTarget.type === 'remote_id';
                 const deleteDisabledAttr = canDelete ? '' : 'disabled title="삭제 불가: ' + deleteTarget.reason + '"';
@@ -371,13 +371,13 @@ const Products = {
                         <td>${(p.korea_cost || 0).toLocaleString()} ${t('common', 'currency_kr')}</td>
                     <td class="${stockStatus}">${available} / ${displayStock}</td>
                         <td>
-                            <button class="btn btn-sm btn-info" onclick="Products.reclassify('${actionArg}')" title="${t('common', 'reclassify')}">
+                            <button class="btn btn-sm btn-info" onclick='Products.reclassify(${actionArg})' title="${t('common', 'reclassify')}">
                                 <i class="fas fa-magic"></i>
                             </button>
-                            <button type="button" class="btn btn-sm btn-secondary" onclick="Products.editProduct('${actionArg}')" title="${t('products', 'edit')}">
+                            <button type="button" class="btn btn-sm btn-secondary" onclick='Products.editProduct(${actionArg})' title="${t('products', 'edit')}">
                                 <i class="fas fa-edit"></i>
                             </button>
-                            <button class="btn btn-sm btn-danger" onclick="Products.delete('${actionArg}')" ${deleteDisabledAttr}>
+                            <button class="btn btn-sm btn-danger" onclick='Products.delete(${actionArg})' ${deleteDisabledAttr}>
                                 <i class="fas fa-trash"></i>
                             </button>
                         </td>
