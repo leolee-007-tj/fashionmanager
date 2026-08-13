@@ -209,13 +209,9 @@ const SmartInventoryWorkbookImporter = {
         return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     },
 
-    _applyFilenameYear(date, filenameYear) {
-        if (!date || !filenameYear) return date;
-        const source = date instanceof Date ? date : new Date(date);
-        if (isNaN(source.getTime())) return date;
-        const adjusted = new Date(source.getTime());
-        adjusted.setFullYear(filenameYear);
-        return adjusted;
+    _dateFromFilenameFallback(inferredDate) {
+        if (!inferredDate?.year) return null;
+        return new Date(inferredDate.year, Math.max(0, Number(inferredDate.month || 1) - 1), 1);
     },
 
     _inferYearMonthFromFilename(filename) {
@@ -395,11 +391,12 @@ const SmartInventoryWorkbookImporter = {
             }
         }
 
-        // Filename is authoritative. Keep cell month/day, override cell year.
+        // Cell dates are authoritative. Filename is only a fallback when a sale
+        // row has no usable date.
         if (inferredDate.year) {
             extractedData.productRows.forEach(row => { row.stockYear = inferredDate.year; });
             extractedData.salesRows.forEach(row => {
-                row.orderDate = this._applyFilenameYear(row.orderDate, inferredDate.year);
+                if (!row.orderDate) row.orderDate = this._dateFromFilenameFallback(inferredDate);
             });
         }
 
