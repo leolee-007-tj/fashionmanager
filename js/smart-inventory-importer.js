@@ -1066,6 +1066,7 @@ const SmartInventoryWorkbookImporter = {
                         '고객명': r.customerName,
                         '브랜드': r.brand,
                         '상품명': r.title,
+                        '수량': r.quantity || 1,
                         '판매금액': r.sellingPrice || 0,
                         '판매일': r.orderDate ? this._formatDate(r.orderDate) : ''
                     }));

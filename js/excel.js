@@ -1156,23 +1156,16 @@ const ExcelManager = {
             if (isZiLiu) sellingPrice = sellingPrice || 0;
 
             try {
-                const createdOrder = await ds.createOrder({
-                    customer_uuid: customer.remote_id || customer.id,
-                    product_uuid: product.remote_id || product.id,
-                    quantity: 1,
-                    selling_price: sellingPrice,
-                    order_date: orderDateStr || new Date().toISOString().slice(0, 10),
-                    color: '',
-                    size: '',
-                    notes: ''
+                const quantity = Math.max(1, parseInt(row['수량'] || row['판매수량'] || row['quantity'] || 1, 10) || 1);
+                const importResult = await client.rpc('import_historical_sale', {
+                    p_store_id: storeId,
+                    p_customer_id: customer.remote_id || customer.id,
+                    p_product_id: product.remote_id || product.id,
+                    p_quantity: quantity,
+                    p_selling_price: sellingPrice,
+                    p_order_date: orderDateStr || new Date().toISOString().slice(0, 10)
                 });
-                const createdRemoteId = createdOrder && (createdOrder.remote_id || createdOrder.id);
-                if (!createdRemoteId) throw new Error('CREATED_ORDER_REMOTE_ID_MISSING');
-                await ds.shipOrder(createdRemoteId, {
-                    ship_date: orderDateStr || new Date().toISOString().slice(0, 10),
-                    shipping_company: '',
-                    tracking_number: ''
-                });
+                if (importResult.error) throw new Error(importResult.error.message || 'HISTORICAL_SALE_IMPORT_FAILED');
                 added++;
             } catch (e) {
                 skipped++;
