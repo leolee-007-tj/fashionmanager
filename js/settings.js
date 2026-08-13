@@ -132,7 +132,7 @@ const Settings = {
         });
     },
 
-    save() {
+    async save() {
         const fd = new FormData(document.getElementById('settingsForm'));
         const settings = DB.getSettings();
         settings.exchange_divisor = parseFloat(fd.get('exchange_divisor')) || 10;
@@ -145,6 +145,28 @@ const Settings = {
         settings.store_subtitle = storeSubtitle;
         DB.setSettings(settings);
         DB.setBrandName(brandName);
+        try {
+            const ds = DB.getOrdersDataSource();
+            const isRemote = ds && ds.name === 'SupabaseOrdersDataSource';
+            if (isRemote) {
+                const client = window.LESOULSupabase && window.LESOULSupabase.getClient();
+                const storeId = window.LESOULAppBootstrap?.getContext?.()?.activeMembership?.storeId;
+                if (!client || !storeId) throw new Error('설정 원격 연결 정보가 없습니다.');
+                const result = await client.from('store_settings').upsert({
+                    store_id: storeId,
+                    store_name: storeName,
+                    store_subtitle: { ko: storeSubtitle },
+                    exchange_divisor: settings.exchange_divisor,
+                    price_multiplier: settings.price_multiplier,
+                    fixed_addition: settings.fixed_addition,
+                    base_discount_rate: settings.base_discount_rate || 20
+                }, { onConflict: 'store_id' });
+                if (result.error) throw new Error(result.error.message || '설정 저장 실패');
+            }
+        } catch (e) {
+            App.flash(e.message || '설정 저장 실패', 'error');
+            return false;
+        }
         App.updateHeader();
         App.flash(t('settings', 'save_success'), 'success');
         setTimeout(() => location.reload(), 500);

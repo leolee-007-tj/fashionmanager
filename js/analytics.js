@@ -5,7 +5,8 @@ const Analytics = {
         liveRateUpdatedAt: null,
         orders: null,
         products: null,
-        expenses: null
+        expenses: null,
+        settings: null
     },
 
     _isRemoteMode() {
@@ -27,25 +28,31 @@ const Analytics = {
             DB.setOrders([]);
             DB.setExpenses([]);
             localStorage.setItem('lesoul_gh_remote_analytics_cleanup_v2', 'done');
-            const [orders, products] = await Promise.all([
+            const client = window.LESOULSupabase && window.LESOULSupabase.getClient();
+            const storeId = window.LESOULAppBootstrap?.getContext?.()?.activeMembership?.storeId;
+            const [orders, products, expenseResult, settingsResult] = await Promise.all([
                 DB.getOrdersAsync(),
-                DB.getProductsAsync()
+                DB.getProductsAsync(),
+                client && storeId ? client.from('expenses').select('*').eq('store_id', storeId).is('deleted_at', null) : Promise.resolve({ data: [] }),
+                client && storeId ? client.from('store_settings').select('*').eq('store_id', storeId).limit(1) : Promise.resolve({ data: [] })
             ]);
             this.state.orders = Array.isArray(orders) ? orders : [];
             this.state.products = Array.isArray(products) ? products : [];
-            // Expenses have no remote datasource yet. Do not mix legacy browser
-            // records into Supabase-backed analytics.
-            this.state.expenses = [];
+            if (expenseResult.error) throw new Error(expenseResult.error.message || '경비 조회 실패');
+            if (settingsResult.error) throw new Error(settingsResult.error.message || '설정 조회 실패');
+            this.state.expenses = expenseResult.data || [];
+            this.state.settings = settingsResult.data?.[0] || null;
             return;
         }
         this.state.orders = DB.getOrders();
         this.state.products = DB.getProducts();
         this.state.expenses = DB.getExpenses();
+        this.state.settings = DB.getSettings();
     },
 
     _getSettings() {
         try {
-            return DB.getSettings() || { exchange_divisor: 165, price_multiplier: 3, fixed_addition: 40 };
+            return this.state.settings || DB.getSettings() || { exchange_divisor: 165, price_multiplier: 3, fixed_addition: 40 };
         } catch (e) {
             return { exchange_divisor: 165, price_multiplier: 3, fixed_addition: 40 };
         }
@@ -105,16 +112,24 @@ const Analytics = {
         return order.ship_date || order.order_date || order.created_at;
     },
 
-    _getOrderCost(order, products) {
+    _getOrderCost(order, products, exchangeDivisor) {
+        const product = products.find(p =>
+            String(p.remote_id || '') === String(order.product_uuid || '') ||
+            String(p.id || '') === String(order.product_id || '') ||
+            String(p.legacy_id || '') === String(order.product_id || '')
+        );
+        const divisor = Number(exchangeDivisor) > 0 ? Number(exchangeDivisor) : 165;
+        if (product && Number(product.korea_cost) > 0) {
+            return Number(product.korea_cost) / divisor;
+        }
         if (order.actual_converted_cost_at_sale !== undefined && order.actual_converted_cost_at_sale !== null && order.actual_converted_cost_at_sale !== '') {
             return order.actual_converted_cost_at_sale;
         }
         if (order.china_cost_at_sale !== undefined && order.china_cost_at_sale !== null && order.china_cost_at_sale !== '') {
             return order.china_cost_at_sale;
         }
-        const p = products.find(x => x.id === order.product_id || x.id === Number(order.product_id));
-        if (p) {
-            return (p.actual_converted_cost != null) ? p.actual_converted_cost : 0;
+        if (product) {
+            return (product.actual_converted_cost != null) ? product.actual_converted_cost : 0;
         }
         return 0;
     },
@@ -128,6 +143,7 @@ const Analytics = {
         const allOrders = this._getShippedOrders();
         const products = Array.isArray(this.state.products) ? this.state.products : DB.getProducts();
         const expenses = Array.isArray(this.state.expenses) ? this.state.expenses : DB.getExpenses();
+        const exchangeDivisor = Number(this._getSettings().exchange_divisor) || 165;
         const stats = [];
 
         for (let month = 1; month <= 12; month++) {
@@ -139,7 +155,7 @@ const Analytics = {
 
             const totalQuantity = orders.reduce((s, o) => s + (o.quantity || 0), 0);
             const totalRevenue = orders.reduce((s, o) => s + (o.selling_price || 0) * (o.quantity || 0), 0);
-            const totalCost = orders.reduce((s, o) => s + this._getOrderCost(o, products) * (o.quantity || 0), 0);
+            const totalCost = orders.reduce((s, o) => s + this._getOrderCost(o, products, exchangeDivisor) * (o.quantity || 0), 0);
             const profit = totalRevenue - totalCost;
             const costRatio = totalRevenue > 0 ? (totalCost / totalRevenue * 100) : 0;
             const profitMargin = totalRevenue > 0 ? (profit / totalRevenue * 100) : 0;
@@ -151,7 +167,7 @@ const Analytics = {
             });
             const totalExpense = monthExpenses.reduce((s, e) => {
                 // Flask MonthlyExpense.total_expense 와 동일한 계산
-                if (typeof e.amount === 'number') return s + e.amount;
+                if (e.amount !== null && e.amount !== undefined && e.amount !== '') return s + (Number(e.amount) || 0);
                 const sum = (e.logistics_cost || e.logistics || 0) + 
                             (e.flight_cost || e.flight || 0) + 
                             (e.hotel_cost || e.hotel || 0) + 
@@ -163,6 +179,7 @@ const Analytics = {
             }, 0);
 
             const netProfit = profit - totalExpense;
+            const netProfitMargin = totalRevenue > 0 ? (netProfit / totalRevenue * 100) : 0;
 
             stats.push({
                 month: month,
@@ -175,7 +192,8 @@ const Analytics = {
                 cost_ratio: costRatio,
                 profit_margin: profitMargin,
                 total_expense: totalExpense,
-                net_profit: netProfit
+                net_profit: netProfit,
+                net_profit_margin: netProfitMargin
             });
         }
 
@@ -192,7 +210,8 @@ const Analytics = {
             total_expense: 0,
             net_profit: 0,
             cost_ratio: 0,
-            profit_margin: 0
+            profit_margin: 0,
+            net_profit_margin: 0
         };
         monthlyStats.forEach(m => {
             annual.order_count += m.order_count;
@@ -205,6 +224,7 @@ const Analytics = {
         annual.net_profit = annual.profit - annual.total_expense;
         annual.cost_ratio = annual.total_revenue > 0 ? (annual.total_cost / annual.total_revenue * 100) : 0;
         annual.profit_margin = annual.total_revenue > 0 ? (annual.profit / annual.total_revenue * 100) : 0;
+        annual.net_profit_margin = annual.total_revenue > 0 ? (annual.net_profit / annual.total_revenue * 100) : 0;
         return annual;
     },
 
@@ -345,7 +365,7 @@ const Analytics = {
                                 <span style="color:#888;">${t('analytics', 'korea_price')}: </span>
                                 <strong style="color:${annualStats.net_profit >= 0 ? '#2e7d32' : '#c62828'};">${fmtKR(annualStats.net_profit)} ${currencyKR}</strong>
                             </p>
-                            <p style="color:#666; margin:0.25rem 0 0; font-size:12px;">${t('analytics', 'profit')} - ${t('analytics', 'expense')}</p>
+                            <p style="color:#666; margin:0.25rem 0 0; font-size:12px;">${t('analytics', 'net_profit_margin')}: ${fmtPct(annualStats.net_profit_margin)}%</p>
                         </div>
                     </div>
                 </div>
@@ -387,7 +407,7 @@ const Analytics = {
 
                 <!-- 그래프: 월별 이익률 -->
                 <div class="card mt-4" style="box-shadow:none; border:1px solid #e9ecef;">
-                    <h3 class="mb-3"><i class="fas fa-chart-line"></i> ${t('analytics', 'monthly')} ${t('analytics', 'profit_margin')}</h3>
+                    <h3 class="mb-3"><i class="fas fa-chart-line"></i> ${t('analytics', 'monthly')} ${t('analytics', 'net_profit_margin')}</h3>
                     <canvas id="profitMarginChart" height="100"></canvas>
                 </div>
 
@@ -407,7 +427,7 @@ const Analytics = {
                                 <th class="text-right">${t('analytics', 'expense')}</th>
                                 <th class="text-right"><strong>${t('analytics', 'net_profit')}</strong></th>
                                 <th class="text-right">${t('analytics', 'cost_ratio')}</th>
-                                <th class="text-right">${t('analytics', 'profit_margin')}</th>
+                                <th class="text-right">${t('analytics', 'net_profit_margin')}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -428,8 +448,8 @@ const Analytics = {
                                     </strong>
                                 </td>
                                 <td class="text-right">${fmtPct(stat.cost_ratio)}%</td>
-                                <td class="text-right" style="color:${stat.profit_margin > 0 ? '#28a745' : '#dc3545'};">
-                                    ${fmtPct(stat.profit_margin)}%
+                                <td class="text-right" style="color:${stat.net_profit_margin > 0 ? '#28a745' : '#dc3545'};">
+                                    ${fmtPct(stat.net_profit_margin)}%
                                 </td>
                             </tr>
                             `).join('')}
@@ -449,7 +469,7 @@ const Analytics = {
                                     </strong>
                                 </td>
                                 <td class="text-right">${fmtPct(annualStats.cost_ratio)}%</td>
-                                <td class="text-right" style="color:#28a745;">${fmtPct(annualStats.profit_margin)}%</td>
+                                <td class="text-right" style="color:#28a745;">${fmtPct(annualStats.net_profit_margin)}%</td>
                             </tr>
                         </tfoot>
                     </table>
@@ -584,7 +604,7 @@ const Analytics = {
         const months = monthlyStats.map(m => m.month_name);
         const revenues = monthlyStats.map(m => Math.round(m.total_revenue));
         const profits = monthlyStats.map(m => Math.round(m.profit));
-        const profitMargins = monthlyStats.map(m => parseFloat(m.profit_margin.toFixed(1)));
+        const profitMargins = monthlyStats.map(m => parseFloat(m.net_profit_margin.toFixed(1)));
 
         // 두 축의 max를 동일하게 설정 (매출이익이 매출액 위로 그려지지 않도록)
         const maxValue = Math.max(...revenues, ...profits, 0);
@@ -660,7 +680,7 @@ const Analytics = {
                 data: {
                     labels: months,
                     datasets: [{
-                        label: t('analytics', 'profit_margin') + ' (%)',
+                        label: t('analytics', 'net_profit_margin') + ' (%)',
                         data: profitMargins,
                         borderColor: 'rgba(156, 39, 176, 1)',
                         backgroundColor: 'rgba(156, 39, 176, 0.2)',

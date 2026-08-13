@@ -186,6 +186,7 @@ const TRANSLATIONS = {
         cost_ratio: { ko: '원가비율', zh: '原价比率', en: 'Cost Ratio', ja: '原価比率' },
         expense: { ko: '경비', zh: '费用', en: 'Expense', ja: '経費' },
         net_profit: { ko: '순이익', zh: '净利润', en: 'Net Profit', ja: '純利益' },
+        net_profit_margin: { ko: '순이익률', zh: '净利润率', en: 'Net Profit Margin', ja: '純利益率' },
         monthly: { ko: '월별', zh: '月度', en: 'Monthly', ja: '月別' },
         annual: { ko: '연간', zh: '年度', en: 'Annual', ja: '年間' },
         monthly_trend: { ko: '월별 추이', zh: '月度趋势', en: 'Monthly Trend', ja: '月別推移' },
