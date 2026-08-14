@@ -319,10 +319,10 @@ describe('Smart Excel Import Replacement Contract', () => {
             assert.match(migration, /GRANT EXECUTE[\s\S]*TO authenticated/);
         });
 
-        it('uses product-list column D as the authoritative Korea purchase cost', () => {
+        it('uses the authoritative Korea purchase cost header regardless of used-range origin', () => {
             const importer = readSource('js/smart-inventory-importer.js');
-            assert.match(importer, /const dColumnCost = this\._safeParseInt\(row\[3\]\)/);
-            assert.match(importer, /const cost = dColumnCost > 0 \? dColumnCost : mappedCost/);
+            assert.match(importer, /const cost = this\._safeParseInt\(this\._getFieldValue\(rowObj, fieldMap, 'cost'\)\)/);
+            assert.doesNotMatch(importer, /dColumnCost|row\[3\].*cost/i);
         });
     });
 

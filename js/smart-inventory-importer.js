@@ -427,11 +427,11 @@ const SmartInventoryWorkbookImporter = {
             if (role === 'product') {
                 const brand = this._getFieldValue(rowObj, fieldMap, 'brand');
                 const title = this._getFieldValue(rowObj, fieldMap, 'title');
-                // 제품목록 D열은 사용자가 지정한 한국매입원가의 권위 원본이다.
-                // D열이 숫자가 아닐 때만 헤더 기반 원가 열로 fallback한다.
-                const dColumnCost = this._safeParseInt(row[3]);
-                const mappedCost = this._safeParseInt(this._getFieldValue(rowObj, fieldMap, 'cost'));
-                const cost = dColumnCost > 0 ? dColumnCost : mappedCost;
+                // The workbook's visible D column is the Korea-cost column, but
+                // SheetJS arrays start at the worksheet's used-range origin. If
+                // column A is empty, row[3] is visible column E (selling price),
+                // not D. Always resolve the authoritative cost by its header.
+                const cost = this._safeParseInt(this._getFieldValue(rowObj, fieldMap, 'cost'));
                 if (brand || title || cost) {
                     validRows++;
                     extractedRows.push({

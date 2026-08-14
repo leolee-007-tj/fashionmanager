@@ -90,12 +90,18 @@ const Settings = {
                 </div>
                 <p class="text-warning mt-2">${t('settings', 'restore_warning')}</p>
                 <hr>
-                <h4><i class="fas fa-broom"></i> 중복 데이터 자동 정리</h4>
-                <p class="text-muted">중복 고객·상품을 하나로 병합하고 중복 판매를 삭제한 뒤 통계를 다시 계산합니다.</p>
-                <button class="btn btn-warning" id="cleanupDuplicatesButton" onclick="Settings.cleanupAllDuplicates()">
-                    <i class="fas fa-broom"></i> 중복 고객·상품·판매 정리
-                </button>
+                <h4><i class="fas fa-broom"></i> 중복 데이터 관리</h4>
+                <p class="text-muted">엄격한 기준으로 같은 고객·상품·판매만 찾습니다. 목록을 검토해 선택 삭제하거나, 대표 기록 하나만 남기고 바로 정리할 수 있습니다.</p>
+                <div class="d-flex flex-wrap gap-2">
+                    <button class="btn btn-primary" id="viewDuplicatesButton" onclick="Settings.loadDuplicateReview()">
+                        <i class="fas fa-search"></i> 중복자료 보기
+                    </button>
+                    <button class="btn btn-warning" id="cleanupDuplicatesButton" onclick="Settings.cleanupAllDuplicates()">
+                        <i class="fas fa-broom"></i> 보지 않고 바로 정리
+                    </button>
+                </div>
                 <div id="duplicateCleanupResult" class="mt-2"></div>
+                <div id="duplicateReviewPanel" class="mt-3"></div>
             </div>
             <div class="card mt-4">
                 <h3><i class="fas fa-info-circle"></i> ${t('settings', 'current_settings')}</h3>
@@ -194,21 +200,124 @@ const Settings = {
         App.render();
     },
 
+    _escapeDuplicateText(value) {
+        return String(value ?? '').replace(/[&<>"']/g, ch => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[ch]);
+    },
+
+    async _getDuplicateContext() {
+        const client = window.LESOULSupabase && window.LESOULSupabase.getClient();
+        const storeId = window.LESOULAppBootstrap?.getContext?.()?.activeMembership?.storeId;
+        if (!client || !storeId) throw new Error('Supabase 로그인과 매장 연결이 필요합니다.');
+        return { client, storeId };
+    },
+
+    async loadDuplicateReview() {
+        const button = document.getElementById('viewDuplicatesButton');
+        if (button) button.disabled = true;
+        try {
+            const { client, storeId } = await this._getDuplicateContext();
+            const result = await client.rpc('list_strict_duplicates', { p_store_id: storeId });
+            if (result.error) throw new Error(result.error.message || '중복 조회 실패');
+            this._duplicateRows = result.data || [];
+            this.renderDuplicateReview();
+        } catch (e) {
+            App.flash(e.message || '중복 조회 실패', 'error');
+        } finally {
+            if (button) button.disabled = false;
+        }
+    },
+
+    renderDuplicateReview() {
+        const panel = document.getElementById('duplicateReviewPanel');
+        if (!panel) return;
+        const rows = this._duplicateRows || [];
+        if (rows.length === 0) {
+            panel.innerHTML = '<div class="info-box">현재 엄격한 기준의 중복자료가 없습니다.</div>';
+            return;
+        }
+        const labels = { customer: '고객', product: '상품', sale: '판매' };
+        const htmlRows = rows.map(row => {
+            const details = row.details || {};
+            const detailText = row.entity_type === 'product'
+                ? `원가 ${Number(details.korea_cost || 0).toLocaleString()}원 · ${details.stock_year || '-'}년 ${details.stock_month || '-'}월`
+                : row.entity_type === 'sale'
+                    ? `${details.date || '-'} · ${details.quantity || 0}개 · ${Number(details.selling_price || 0).toLocaleString()}위안`
+                    : `등록 ${details.created_at ? String(details.created_at).slice(0, 10) : '-'}`;
+            const checked = row.is_keeper ? '' : ' checked';
+            const disabled = row.is_keeper ? ' disabled' : '';
+            return `<tr>
+                <td><input type="checkbox" class="strict-duplicate-checkbox" data-entity="${this._escapeDuplicateText(row.entity_type)}" data-id="${this._escapeDuplicateText(row.record_id)}"${checked}${disabled}></td>
+                <td>${labels[row.entity_type] || row.entity_type}</td>
+                <td>${this._escapeDuplicateText(row.label)}</td>
+                <td>${this._escapeDuplicateText(detailText)}</td>
+                <td>${row.is_keeper ? '<span class="badge badge-success">남길 대표</span>' : '<span class="badge badge-warning">삭제 후보</span>'}</td>
+            </tr>`;
+        }).join('');
+        panel.innerHTML = `
+            <div class="d-flex flex-wrap gap-2 mb-2">
+                <button class="btn btn-secondary" onclick="Settings.selectAllDuplicateCandidates(true)"><i class="fas fa-check-square"></i> 중복 전체 선택</button>
+                <button class="btn btn-secondary" onclick="Settings.selectAllDuplicateCandidates(false)"><i class="fas fa-square"></i> 선택 해제</button>
+                <button class="btn btn-danger" id="deleteSelectedDuplicatesButton" onclick="Settings.deleteSelectedDuplicates()"><i class="fas fa-trash"></i> 선택 삭제</button>
+            </div>
+            <p class="text-muted">각 중복 묶음에서 가장 먼저 등록된 대표 1개는 보호되며 선택할 수 없습니다.</p>
+            <div style="overflow-x:auto;"><table class="table"><thead><tr><th>선택</th><th>종류</th><th>자료</th><th>엄격 비교 기준</th><th>처리</th></tr></thead><tbody>${htmlRows}</tbody></table></div>`;
+    },
+
+    selectAllDuplicateCandidates(checked) {
+        document.querySelectorAll('.strict-duplicate-checkbox:not(:disabled)').forEach(box => {
+            box.checked = Boolean(checked);
+        });
+    },
+
+    async deleteSelectedDuplicates() {
+        const selected = [...document.querySelectorAll('.strict-duplicate-checkbox:checked:not(:disabled)')];
+        if (selected.length === 0) {
+            App.flash('삭제할 중복자료를 선택하세요.', 'warning');
+            return;
+        }
+        if (!confirm(`선택한 중복자료 ${selected.length}건을 삭제하고 대표 기록에 연결하시겠습니까?`)) return;
+        const ids = { customer: [], product: [], sale: [] };
+        selected.forEach(box => ids[box.dataset.entity]?.push(box.dataset.id));
+        const button = document.getElementById('deleteSelectedDuplicatesButton');
+        if (button) button.disabled = true;
+        try {
+            const { client, storeId } = await this._getDuplicateContext();
+            const result = await client.rpc('delete_strict_duplicates', {
+                p_store_id: storeId,
+                p_customer_ids: ids.customer,
+                p_product_ids: ids.product,
+                p_order_ids: ids.sale
+            });
+            if (result.error) throw new Error(result.error.message || '선택 삭제 실패');
+            this._showDuplicateResult(result.data || {});
+            await this.loadDuplicateReview();
+        } catch (e) {
+            App.flash(e.message || '선택 삭제 실패', 'error');
+        } finally {
+            if (button) button.disabled = false;
+        }
+    },
+
+    _showDuplicateResult(data) {
+        const message = `정리 완료: 고객 ${data.customers_deleted || 0}명, 상품 ${data.products_deleted || 0}개, 판매 ${data.sales_deleted || 0}건 삭제`;
+        const output = document.getElementById('duplicateCleanupResult');
+        if (output) output.textContent = message;
+        App.flash(message, 'success');
+    },
+
     async cleanupAllDuplicates() {
-        if (!confirm('중복 고객·상품을 병합하고 중복 판매를 삭제합니다. 계속하시겠습니까?')) return;
+        if (!confirm('엄격한 중복 기준으로 각 묶음의 대표 1개만 남기고 나머지를 모두 삭제합니다. 계속하시겠습니까?')) return;
         const button = document.getElementById('cleanupDuplicatesButton');
         if (button) button.disabled = true;
         try {
-            const client = window.LESOULSupabase && window.LESOULSupabase.getClient();
-            const storeId = window.LESOULAppBootstrap?.getContext?.()?.activeMembership?.storeId;
-            if (!client || !storeId) throw new Error('Supabase 로그인과 매장 연결이 필요합니다.');
-            const result = await client.rpc('cleanup_all_duplicates', { p_store_id: storeId });
+            const { client, storeId } = await this._getDuplicateContext();
+            const result = await client.rpc('cleanup_strict_duplicates', { p_store_id: storeId });
             if (result.error) throw new Error(result.error.message || '중복 정리 실패');
-            const data = result.data || {};
-            const message = `정리 완료: 고객 ${data.customers_deleted || 0}명, 상품 ${data.products_deleted || 0}개, 판매 ${data.sales_deleted || 0}건 삭제`;
-            const output = document.getElementById('duplicateCleanupResult');
-            if (output) output.textContent = message;
-            App.flash(message, 'success');
+            this._showDuplicateResult(result.data || {});
+            this._duplicateRows = [];
+            this.renderDuplicateReview();
         } catch (e) {
             App.flash(e.message || '중복 정리 실패', 'error');
         } finally {
