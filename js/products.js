@@ -171,10 +171,10 @@ const Products = {
     applyFilters() {
         let list = [...this.state.products];
         if (this.state.stockYear) {
-            list = list.filter(p => p.stock_year === this.state.stockYear);
+            list = list.filter(p => Number(p.stock_year) === Number(this.state.stockYear));
         }
         if (this.state.stockMonth) {
-            list = list.filter(p => p.stock_month === this.state.stockMonth);
+            list = list.filter(p => Number(p.stock_month) === Number(this.state.stockMonth));
         }
         if (this.state.search) {
             const s = this.state.search.toLowerCase();
@@ -408,37 +408,40 @@ const Products = {
     },
 
     yearOptions() {
-        let html = '<option value="0">전체</option>';
+        let html = `<option value="0" ${Number(this.state.stockYear) === 0 ? 'selected' : ''}>전체</option>`;
         // 데이터 기반 year 옵션
         const dataYears = new Set();
         this.state.products.forEach(p => {
-            if (p.stock_year) dataYears.add(p.stock_year);
+            const year = Number(p.stock_year);
+            if (Number.isInteger(year) && year > 0) dataYears.add(year);
         });
         // 2025~2030 고정 범위와 데이터 year 병합
         const years = new Set([2025, 2026, 2027, ...dataYears]);
         const sorted = [...years].filter(y => y >= 2025).sort((a, b) => b - a);
         sorted.forEach(y => {
-            html += `<option value="${y}" ${this.state.stockYear === y ? 'selected' : ''}>${y}${t('common', 'year_suffix')}</option>`;
+            html += `<option value="${y}" ${Number(this.state.stockYear) === y ? 'selected' : ''}>${y}${t('common', 'year_suffix')}</option>`;
         });
         return html;
     },
 
     monthOptions() {
-        let html = `<option value="0" ${this.state.stockMonth === 0 ? 'selected' : ''}>${t('common', 'all') || '전체'}</option>`;
+        let html = `<option value="0" ${Number(this.state.stockMonth) === 0 ? 'selected' : ''}>${t('common', 'all') || '전체'}</option>`;
         for (let m = 1; m <= 12; m++) {
-            html += `<option value="${m}" ${this.state.stockMonth === m ? 'selected' : ''}>${m}${t('common', 'month_suffix')}</option>`;
+            html += `<option value="${m}" ${Number(this.state.stockMonth) === m ? 'selected' : ''}>${m}${t('common', 'month_suffix')}</option>`;
         }
         return html;
     },
 
     setYear(val) {
-        this.state.stockYear = parseInt(val) || 0;
+        const year = Number.parseInt(val, 10);
+        this.state.stockYear = Number.isInteger(year) && year > 0 ? year : 0;
         this.applyFilters();
         App.renderPage();
     },
 
     setMonth(val) {
-        this.state.stockMonth = parseInt(val) || 0;
+        const month = Number.parseInt(val, 10);
+        this.state.stockMonth = Number.isInteger(month) && month >= 1 && month <= 12 ? month : 0;
         this.applyFilters();
         App.renderPage();
     },
