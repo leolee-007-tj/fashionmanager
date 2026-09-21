@@ -590,17 +590,48 @@ const DB = {
                 _validateWriteContext('updateProduct');
                 const upd = updates || {};
 
-                // id 또는 updates.legacy_id 중 안전한 정수 값 추출
+                // legacy_id가 없는 원격 상품은 products.id(UUID)로 수정한다.
                 const idSource = (upd.legacy_id !== undefined && upd.legacy_id !== null)
                     ? upd.legacy_id
                     : id;
                 const numericId = Number(idSource);
-                if (!idSource || !Number.isFinite(numericId) || numericId <= 0) {
-                    throw new Error('SupabaseProductsDataSource.updateProduct requires valid legacy_id (positive integer)');
+                const remoteId = String(upd.remote_id || id || '');
+                const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(remoteId);
+                const isNumeric = !!idSource && Number.isFinite(numericId) && numericId > 0;
+                if (!isNumeric && !isUuid) {
+                    throw new Error('SupabaseProductsDataSource.updateProduct requires valid legacy_id (positive integer) or product_id (uuid)');
                 }
 
-                // RPC payload 구성 (p_ 접두사 파라미터)
-                const payload = {
+                const updateFields = {
+                    product_code: upd.product_code,
+                    original_title: upd.original_title,
+                    normalized_title: upd.normalized_title,
+                    title_language: upd.title_language,
+                    brand: upd.brand,
+                    category: upd.category,
+                    color: upd.color,
+                    size: upd.size,
+                    material: upd.material,
+                    season: upd.season,
+                    fit: upd.fit,
+                    style: upd.style,
+                    classification_status: upd.classification_status,
+                    korea_cost: upd.korea_cost,
+                    actual_converted_cost: upd.actual_converted_cost,
+                    china_base_price: upd.china_base_price,
+                    current_stock: upd.current_stock,
+                    reserved_stock: upd.reserved_stock,
+                    stock_year: upd.stock_year,
+                    stock_month: upd.stock_month,
+                    image: upd.image,
+                    notes: upd.notes
+                };
+                Object.keys(updateFields).forEach(key => {
+                    if (updateFields[key] === undefined) delete updateFields[key];
+                });
+
+                const rpcName = isNumeric ? 'update_product' : 'update_product_by_id';
+                const payload = isNumeric ? {
                     p_store_id: context.storeId,
                     p_legacy_id: numericId,
                     p_product_code: upd.product_code || null,
@@ -619,15 +650,19 @@ const DB = {
                     p_korea_cost: upd.korea_cost || null,
                     p_actual_converted_cost: upd.actual_converted_cost || null,
                     p_china_base_price: upd.china_base_price || null,
-                    p_current_stock: upd.current_stock || null,
-                    p_reserved_stock: upd.reserved_stock || null,
+                    p_current_stock: upd.current_stock ?? null,
+                    p_reserved_stock: upd.reserved_stock ?? null,
                     p_stock_year: upd.stock_year || null,
                     p_stock_month: upd.stock_month || null,
                     p_image: upd.image || null,
                     p_notes: upd.notes || null
+                } : {
+                    p_store_id: context.storeId,
+                    p_product_id: remoteId,
+                    p_updates: updateFields
                 };
 
-                return client.rpc('update_product', payload)
+                return client.rpc(rpcName, payload)
                     .then(response => {
                         if (response.error) {
                             const err = new Error('SupabaseProductsDataSource.updateProduct RPC failed');

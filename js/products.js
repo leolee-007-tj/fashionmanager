@@ -1018,6 +1018,9 @@ const Products = {
         const title = fd.get('original_title').trim();
         const brand = fd.get('brand').trim();
         const koreaCost = parseFloat(fd.get('korea_cost')) || 0;
+        const currentProduct = editId !== null && editId !== undefined
+            ? this._findProductByActionKey(String(editId))
+            : null;
         if (!title || !brand || koreaCost <= 0) {
             App.flash(t('common', 'add_required_fields'), 'error');
             return false;
@@ -1034,32 +1037,37 @@ const Products = {
             actual_converted_cost: priceResult.actual_converted_cost,
             china_base_price: priceResult.china_base_price,
             current_stock: parseInt(fd.get('current_stock')) || 0,
-            reserved_stock: 0,
+            reserved_stock: editId && currentProduct ? (Number(currentProduct.reserved_stock) || 0) : 0,
             stock_year: parseInt(fd.get('stock_year')) || new Date().getFullYear(),
             stock_month: parseInt(fd.get('stock_month')) || new Date().getMonth() + 1,
-            image: this.tempImage || (editId ? ((this.state.products || []).find(p => p.id === Number(editId) || p.legacy_id === Number(editId)) || {}).image : null) || null,
+            image: this.tempImage || (currentProduct ? currentProduct.image : null) || null,
             notes: '',
             title_language: ClassificationService.detectLanguage(title),
             normalized_title: title
         };
         if (editId) {
-            // 3-5V: editId 또는 현재 상품 객체의 legacy_id에서 안전한 정수 추출.
-            // productData에 legacy_id를 보존해 updateProductAsync가 우선 사용하도록 한다.
-            const currentProduct = (this.state.products || []).find(p => p.id === Number(editId) || p.legacy_id === Number(editId)) || null;
-            const candidateId = (currentProduct && currentProduct.legacy_id !== undefined && currentProduct.legacy_id !== null)
-                ? currentProduct.legacy_id
-                : editId;
-            const numericId = Number(candidateId);
-            if (!Number.isFinite(numericId) || numericId <= 0) {
+            // Supabase 상품은 legacy_id가 없을 수 있으므로 remote_id(UUID)도 수정 키로 허용한다.
+            // 숫자 legacy_id가 있으면 기존 RPC를, 없으면 UUID 전용 RPC를 사용한다.
+            const legacyCandidates = currentProduct
+                ? [currentProduct.legacy_id, currentProduct.id]
+                : [editId];
+            const legacyId = legacyCandidates
+                .map(value => Number(value))
+                .find(value => Number.isFinite(value) && value > 0);
+            const remoteId = String((currentProduct && currentProduct.remote_id) || editId || '');
+            const hasRemoteId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(remoteId);
+            const updateId = legacyId || (hasRemoteId ? remoteId : null);
+            if (!currentProduct || !updateId) {
                 App.flash('상품 식별값이 없어 수정할 수 없습니다. 새로고침 후 다시 시도해 주세요.', 'error');
                 return false;
             }
-            productData.legacy_id = numericId;
+            if (legacyId) productData.legacy_id = legacyId;
+            if (hasRemoteId) productData.remote_id = remoteId;
             try {
                 if (typeof DB.updateProductAsync === 'function') {
-                    await DB.updateProductAsync(numericId, productData);
+                    await DB.updateProductAsync(updateId, productData);
                 } else {
-                    DB.updateProduct(numericId, productData);
+                    DB.updateProduct(updateId, productData);
                 }
                 App.flash(t('common', 'save') + '!', 'success');
             } catch (e) {
