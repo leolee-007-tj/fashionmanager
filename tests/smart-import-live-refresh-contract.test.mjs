@@ -35,5 +35,5 @@ test('save result exposes inserted duplicate and skipped sales counts', () => {
 test('save is single-flight and browser cache version is bumped', () => {
     assert.match(source, /if \(this\._saving\)/);
     assert.match(source, /await this\._executeSave\(preview, target\)/);
-    assert.match(index, /smart-inventory-importer\.js\?v=20260921a/);
+    assert.match(index, /smart-inventory-importer\.js\?v=20260921c/);
 });

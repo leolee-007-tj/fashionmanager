@@ -37,6 +37,15 @@ const SmartInventoryWorkbookImporter = {
         ]
     },
 
+    IGNORED_SHEET_NAMES: [
+        'readme', '안내', '설명', '사진', 'photo', 'photos', '비용관리', '비용', 'expenses'
+    ],
+
+    _isIgnoredSheetName(sheetName) {
+        const normalized = String(sheetName || '').normalize('NFKC').trim().toLowerCase();
+        return this.IGNORED_SHEET_NAMES.some(name => normalized === name);
+    },
+
     /**
      * 시트명을 보고 역할을 분류한다.
      */
@@ -188,18 +197,56 @@ const SmartInventoryWorkbookImporter = {
 
     _parseDate(val) {
         if (val === null || val === undefined || val === '') return null;
-        if (val instanceof Date) return val;
+        if (val instanceof Date) {
+            return isNaN(val.getTime()) ? null : new Date(val.getFullYear(), val.getMonth(), val.getDate());
+        }
         if (typeof val === 'number') {
             const utcDays = Math.floor(val - 25569);
             const d = new Date(utcDays * 86400 * 1000);
-            if (!isNaN(d.getTime())) return d;
+            if (!isNaN(d.getTime())) {
+                return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+            }
         }
-        const str = String(val).trim();
-        const d = new Date(str);
-        if (!isNaN(d.getTime())) return d;
-        const m = str.match(/(\d{4})[\.\-\/年](\d{1,2})[\.\-\/月](\d{1,2})/);
-        if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+
+        // Parse the date text users can actually see. Do not depend on the
+        // browser's locale-sensitive Date parser: 2026/1/1, 2026-1-1,
+        // 2026-01-01, and Korean/Chinese date labels are the same day.
+        const str = String(val).normalize('NFKC').trim().replace(/^['’]+/, '');
+        const separated = str.match(/(?:^|\D)(\d{4})\s*(?:년|年|[.\-/])\s*(\d{1,2})\s*(?:월|月|[.\-/])\s*(\d{1,2})\s*(?:일|日)?(?:\D|$)/);
+        const compact = separated ? null : str.match(/(?:^|\D)(\d{4})(\d{2})(\d{2})(?:\D|$)/);
+        const parts = separated || compact;
+        if (parts) {
+            const year = Number(parts[1]);
+            const month = Number(parts[2]);
+            const day = Number(parts[3]);
+            const parsed = new Date(year, month - 1, day);
+            if (parsed.getFullYear() === year && parsed.getMonth() === month - 1 && parsed.getDate() === day) {
+                return parsed;
+            }
+            return null;
+        }
+
+        // Keep a final fallback for ISO timestamps produced by spreadsheet tools.
+        const fallback = new Date(str);
+        if (!isNaN(fallback.getTime())) {
+            return new Date(fallback.getFullYear(), fallback.getMonth(), fallback.getDate());
+        }
         return null;
+    },
+
+    _reconcileDateYearWithFilename(date, inferredDate) {
+        if (!(date instanceof Date) || isNaN(date.getTime()) || !inferredDate?.year) {
+            return { date, corrected: false };
+        }
+        const filenameYear = Number(inferredDate.year);
+        const cellYear = date.getFullYear();
+        // A one-year-back value inside a year-named workbook is treated as the
+        // user's stated year typo (for example 2025 -> 2026 in a 2026 file).
+        if (cellYear === filenameYear - 1) {
+            const correctedDate = new Date(filenameYear, date.getMonth(), date.getDate());
+            return { date: correctedDate, corrected: true };
+        }
+        return { date, corrected: false };
     },
 
     _formatDate(date) {
@@ -304,6 +351,31 @@ const SmartInventoryWorkbookImporter = {
         ].join('|');
     },
 
+    _sheetToMeaningfulRows(ws) {
+        if (!ws || typeof XLSX === 'undefined') return [];
+        let lastRow = -1;
+        let lastColumn = -1;
+        for (const address of Object.keys(ws)) {
+            if (!address || address.startsWith('!')) continue;
+            const cell = ws[address];
+            const hasVisibleValue = cell && (
+                (cell.v !== null && cell.v !== undefined && cell.v !== '') ||
+                (typeof cell.f === 'string' && cell.f.trim() !== '')
+            );
+            if (!hasVisibleValue) continue;
+            const position = XLSX.utils.decode_cell(address);
+            lastRow = Math.max(lastRow, position.r);
+            lastColumn = Math.max(lastColumn, position.c);
+        }
+        if (lastRow < 0 || lastColumn < 0) return [];
+        return XLSX.utils.sheet_to_json(ws, {
+            header: 1,
+            raw: true,
+            blankrows: false,
+            range: { s: { r: 0, c: 0 }, e: { r: lastRow, c: lastColumn } }
+        });
+    },
+
     // ==================== Main Import Flow ====================
 
     /**
@@ -331,10 +403,13 @@ const SmartInventoryWorkbookImporter = {
         };
 
         for (const sheetName of sheetNames) {
+            if (this._isIgnoredSheetName(sheetName)) continue;
             // 입고 시트는 기능과 UI 모두에서 완전히 제외한다.
             if (this._classifySheetByExactName(sheetName) === 'inbound') continue;
             const ws = wb.Sheets[sheetName];
-            const json = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true });
+            // Ignore style-only and otherwise empty cells outside the visible
+            // data area. Some workbooks format all 1,048,576 rows.
+            const json = this._sheetToMeaningfulRows(ws);
             if (json.length < 2) {
                 detectedSheets.push({ name: sheetName, role: null, reason: 'empty_or_header_only', rowCount: json.length });
                 continue;
@@ -391,17 +466,28 @@ const SmartInventoryWorkbookImporter = {
             }
         }
 
-        // Cell dates are authoritative. Filename is only a fallback when a sale
-        // row has no usable date.
+        // Read the visible cell date first. The filename supplies a missing date
+        // and corrects the explicit one-year-back typo requested by the user.
+        let dateYearCorrectionCount = 0;
         if (inferredDate.year) {
             extractedData.productRows.forEach(row => { row.stockYear = inferredDate.year; });
             extractedData.salesRows.forEach(row => {
-                if (!row.orderDate) row.orderDate = this._dateFromFilenameFallback(inferredDate);
+                if (!row.orderDate) {
+                    row.orderDate = this._dateFromFilenameFallback(inferredDate);
+                    return;
+                }
+                const reconciled = this._reconcileDateYearWithFilename(row.orderDate, inferredDate);
+                row.orderDate = reconciled.date;
+                if (reconciled.corrected) dateYearCorrectionCount++;
             });
         }
 
         // Build preview
         const preview = this._buildPreview(detectedSheets, sheetRoles, extractedData, inferredDate, filename);
+        preview.dateYearCorrectionCount = dateYearCorrectionCount;
+        if (dateYearCorrectionCount > 0) {
+            preview.warnings.push(`파일명 연도에 맞춰 이전 연도 날짜 ${dateYearCorrectionCount}건을 ${inferredDate.year}년으로 보정했습니다.`);
+        }
         window.__LAST_SMART_EXCEL_IMPORT_PREVIEW = preview;
         return preview;
     },
@@ -432,7 +518,9 @@ const SmartInventoryWorkbookImporter = {
                 // column A is empty, row[3] is visible column E (selling price),
                 // not D. Always resolve the authoritative cost by its header.
                 const cost = this._safeParseInt(this._getFieldValue(rowObj, fieldMap, 'cost'));
-                if (brand || title || cost) {
+                // A product row needs the two visible identity fields. Ignore
+                // trailing formulas, totals, and decorative rows.
+                if (brand && title) {
                     validRows++;
                     extractedRows.push({
                         brand: String(brand || '').trim(),
