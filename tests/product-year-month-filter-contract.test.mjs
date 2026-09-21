@@ -28,3 +28,14 @@ test('products source normalizes filter comparisons and selected options', () =>
     assert.match(source, /Number\(this\.state\.stockYear\) === 0 \? 'selected'/);
     assert.match(source, /Number\(this\.state\.stockMonth\) === m \? 'selected'/);
 });
+
+test('Korea cost editor accepts any non-negative whole-won amount', () => {
+    assert.match(
+        source,
+        /name="korea_cost"[^>]*[\s\S]*?min="0" step="1"/
+    );
+    assert.doesNotMatch(
+        source,
+        /name="korea_cost"[^>]*[\s\S]*?step="100"/
+    );
+});

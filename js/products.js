@@ -854,7 +854,7 @@ const Products = {
                         <div class="form-group">
                             <label>${t('products', 'korea_cost')} *</label>
                             <input type="number" name="korea_cost" id="korea_cost" required class="form-control"
-                                value="${p.korea_cost}" oninput="Products.calcPrice()" step="100">
+                                value="${p.korea_cost}" oninput="Products.calcPrice()" min="0" step="1">
                         </div>
                         <div class="form-group">
                             <label>${t('products', 'converted_cost')} (${t('common', 'currency')})</label>
