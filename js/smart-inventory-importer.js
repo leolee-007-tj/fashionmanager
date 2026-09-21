@@ -741,10 +741,11 @@ const SmartInventoryWorkbookImporter = {
         }
         const file = fileInput.files[0];
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = async (e) => {
             try {
                 const data = new Uint8Array(e.target.result);
                 const preview = this.analyze(data, file.name);
+                await this._hydrateRemotePreview(preview);
                 this._renderPreview(preview, target);
             } catch (err) {
                 console.error('Smart import analysis failed:', (err.message || '').slice(0, 100));
@@ -752,6 +753,97 @@ const SmartInventoryWorkbookImporter = {
             }
         };
         reader.readAsArrayBuffer(file);
+    },
+
+    /**
+     * 미리보기의 기존 상품/고객 매칭을 브라우저 캐시가 아닌 현재 Supabase 값으로 보정한다.
+     * 저장 직전 미리보기와 실제 저장 결과가 달라지는 문제를 줄인다.
+     */
+    async _hydrateRemotePreview(preview) {
+        if (!preview || !this._isRemoteMode()) return preview;
+
+        const extractedData = preview._extractedData || {};
+        const productRows = extractedData.productRows || [];
+        const salesRows = extractedData.salesRows || [];
+        const normalizeLoose = value => String(value || '')
+            .normalize('NFKC')
+            .toLowerCase()
+            .replace(/[\s\p{P}\p{S}]+/gu, '');
+
+        try {
+            const client = window.LESOULSupabase && window.LESOULSupabase.getClient();
+            const storeId = window.LESOULAppBootstrap?.getContext?.()?.activeMembership?.storeId;
+            const [products, customerResult] = await Promise.all([
+                DB.getProductsAsync(),
+                client && storeId
+                    ? client.from('customers').select('id,name').eq('store_id', storeId).is('deleted_at', null)
+                    : Promise.resolve({ data: [], error: null })
+            ]);
+            if (customerResult && customerResult.error) throw new Error(customerResult.error.message || 'CUSTOMER_PREVIEW_LOAD_FAILED');
+
+            const existingProducts = Array.isArray(products) ? products : [];
+            const existingIdentityMap = new Map();
+            existingProducts.forEach(product => {
+                existingIdentityMap.set(this._getProductIdentityKey(product), product);
+            });
+            preview._existingIdentityMap = existingIdentityMap;
+
+            const seenProductKeys = new Set();
+            let existingProductMatches = 0;
+            let newProductCandidates = 0;
+            let duplicateProductIdentities = 0;
+            productRows.forEach(row => {
+                const key = this._getProductIdentityKey({
+                    brand: row.brand,
+                    original_title: row.title,
+                    color: row.color,
+                    size: row.size,
+                    korea_cost: row.cost,
+                    stock_year: row.stockYear || preview.inferredYear || new Date().getFullYear(),
+                    stock_month: row.stockMonth || preview.inferredMonth || (new Date().getMonth() + 1)
+                });
+                if (seenProductKeys.has(key)) {
+                    duplicateProductIdentities++;
+                    return;
+                }
+                seenProductKeys.add(key);
+                if (existingIdentityMap.has(key)) existingProductMatches++;
+                else newProductCandidates++;
+            });
+            preview.existingProductMatches = existingProductMatches;
+            preview.newProductCandidates = newProductCandidates;
+            preview.duplicateProductIdentities = duplicateProductIdentities;
+
+            const existingCustomerNames = new Set((customerResult?.data || [])
+                .map(customer => String(customer.name || '').trim().toLowerCase())
+                .filter(Boolean));
+            const detectedCustomerNames = [...new Set(salesRows
+                .map(row => String(row.customerName || '').trim())
+                .filter(Boolean))];
+            preview.existingCustomerMatches = detectedCustomerNames
+                .filter(name => existingCustomerNames.has(name.toLowerCase())).length;
+            preview.newCustomerCandidates = detectedCustomerNames
+                .filter(name => !existingCustomerNames.has(name.toLowerCase())).length;
+
+            const savableSalesRows = salesRows.filter(row => row.title && row.customerName);
+            const matchedSalesRows = savableSalesRows.filter(row => existingProducts.some(product =>
+                normalizeLoose(product.original_title) === normalizeLoose(row.title) &&
+                (!row.brand || normalizeLoose(product.brand) === normalizeLoose(row.brand))
+            ));
+            preview.validSalesRows = savableSalesRows.length;
+            preview.salesCreateCandidates = matchedSalesRows.length;
+            preview.unmatchedSalesProducts = savableSalesRows.length - matchedSalesRows.length;
+            preview.reviewNeededCount = preview.unmatchedSalesProducts;
+            preview.warnings = (preview.warnings || [])
+                .filter(message => !String(message).startsWith('판매 '));
+            if (preview.unmatchedSalesProducts > 0) {
+                preview.warnings.push(`판매 ${preview.unmatchedSalesProducts}건의 상품이 기존 목록에서 발견되지 않았습니다. 검토가 필요합니다.`);
+            }
+        } catch (error) {
+            preview.warnings = preview.warnings || [];
+            preview.warnings.push('최신 서버 데이터와 미리보기를 맞추지 못했습니다. 저장 시 서버에서 다시 확인합니다.');
+        }
+        return preview;
     },
 
     _renderPreview(preview, target) {
@@ -887,7 +979,7 @@ const SmartInventoryWorkbookImporter = {
 
     // ==================== Save Gate ====================
 
-    savePreview(target) {
+    async savePreview(target) {
         const preview = window.__LAST_SMART_EXCEL_IMPORT_PREVIEW;
         if (!preview) {
             App.flash(t('excel', 'no_preview') || '미리보기가 없습니다. 먼저 분석을 실행하세요.', 'warning');
@@ -907,7 +999,90 @@ const SmartInventoryWorkbookImporter = {
             if (!confirm('전체 저장은 상품/판매/고객 데이터를 모두 생성합니다. 계속하시겠습니까?')) return;
         }
 
-        this._executeSave(preview, target);
+        if (this._saving) {
+            App.flash('이미 저장 중입니다. 잠시만 기다려 주세요.', 'info');
+            return;
+        }
+
+        this._saving = true;
+        this._setSaveButtonsDisabled(true);
+        try {
+            await this._executeSave(preview, target);
+        } finally {
+            this._saving = false;
+            this._setSaveButtonsDisabled(false);
+        }
+    },
+
+    _setSaveButtonsDisabled(disabled) {
+        document.querySelectorAll('#smartImportPreview button').forEach(button => {
+            button.disabled = !!disabled;
+        });
+    },
+
+    async _refreshLiveDataAfterSave(target, summary) {
+        const refreshTasks = [];
+        const refreshProducts = target === 'products' || target === 'sales' || target === 'all';
+        const refreshSales = target === 'sales' || target === 'all';
+        const refreshCustomers = target === 'customers' || refreshSales;
+
+        if (refreshProducts && typeof Products !== 'undefined') {
+            Products.state.loaded = false;
+            refreshTasks.push(Promise.resolve(Products.load()));
+        }
+        if (refreshSales && typeof Orders !== 'undefined') {
+            refreshTasks.push(typeof Orders._loadRemoteDataForRender === 'function'
+                ? Promise.resolve(Orders._loadRemoteDataForRender())
+                : Promise.resolve(Orders.load()));
+        }
+        if (refreshCustomers && typeof Customers !== 'undefined') {
+            Customers.state.loaded = false;
+            refreshTasks.push(typeof Customers.loadAsync === 'function'
+                ? Promise.resolve(Customers.loadAsync())
+                : Promise.resolve(Customers.load()));
+        }
+        if (refreshProducts && typeof Analytics !== 'undefined' && typeof Analytics._loadAnalyticsData === 'function') {
+            refreshTasks.push(Promise.resolve(Analytics._loadAnalyticsData()));
+        }
+
+        const results = await Promise.allSettled(refreshTasks);
+        const failedRefreshes = results.filter(result => result.status === 'rejected').length;
+        summary.liveRefreshCompleted = failedRefreshes === 0;
+        summary.liveRefreshFailures = failedRefreshes;
+        if (failedRefreshes > 0) {
+            summary.warnings.push(`화면 데이터 ${failedRefreshes}개를 즉시 갱신하지 못했습니다. 메뉴를 다시 열면 최신 데이터를 불러옵니다.`);
+        }
+
+        window.dispatchEvent(new CustomEvent('lesoul:data-updated', {
+            detail: { target, savedAt: new Date().toISOString() }
+        }));
+    },
+
+    _renderExecutionSummary(summary, target) {
+        const previewContainer = document.getElementById('smartImportPreview');
+        if (!previewContainer) return;
+        let resultBox = document.getElementById('smartImportExecutionResult');
+        if (!resultBox) {
+            resultBox = document.createElement('div');
+            resultBox.id = 'smartImportExecutionResult';
+            resultBox.className = 'card mt-4';
+            previewContainer.prepend(resultBox);
+        }
+        const resultHref = target === 'products' ? '#/products'
+            : target === 'customers' ? '#/customers'
+                : target === 'sales' ? '#/orders' : '#/analytics';
+        resultBox.innerHTML = `
+            <h3><i class="fas fa-check-circle"></i> 저장 결과</h3>
+            <div class="stats-grid">
+                <div class="stat-card"><div class="stat-label">신규 상품</div><div class="stat-value">${Number(summary.productsInserted) || 0}</div></div>
+                <div class="stat-card"><div class="stat-label">신규 판매</div><div class="stat-value">${Number(summary.ordersInserted) || 0}</div></div>
+                <div class="stat-card"><div class="stat-label">중복 판매 제외</div><div class="stat-value">${Number(summary.ordersDuplicates) || 0}</div></div>
+                <div class="stat-card"><div class="stat-label">판매 저장 실패</div><div class="stat-value">${Number(summary.ordersSkipped) || 0}</div></div>
+                <div class="stat-card"><div class="stat-label">신규 고객</div><div class="stat-value">${Number(summary.customersInserted) || 0}</div></div>
+            </div>
+            <p class="text-muted">${summary.liveRefreshCompleted ? '화면 데이터도 최신 상태로 갱신되었습니다.' : '일부 화면 갱신에 실패했습니다.'}</p>
+            <a class="btn btn-primary" href="${resultHref}">저장된 결과 바로 보기</a>
+        `;
     },
 
     async _executeSave(preview, target) {
@@ -933,6 +1108,7 @@ const SmartInventoryWorkbookImporter = {
             customersInserted: 0,
             customersMatched: 0,
             ordersInserted: 0,
+            ordersDuplicates: 0,
             ordersSkipped: 0,
             inboundApplied: 0,
             inboundSkipped: 0,
@@ -1150,7 +1326,8 @@ const SmartInventoryWorkbookImporter = {
 
             // Save sales
             if ((target === 'sales' || target === 'all') && extractedData.salesRows && extractedData.salesRows.length > 0) {
-                const salesRows = extractedData.salesRows.filter(r => r.title && r.brand && r.customerName);
+                // 브랜드가 비어 있어도 상품명으로 매칭할 수 있으므로 판매행을 버리지 않는다.
+                const salesRows = extractedData.salesRows.filter(r => r.title && r.customerName);
 
                 if (salesRows.length > 0 && typeof ExcelManager !== 'undefined') {
                     const orderRows = salesRows.map(r => ({
@@ -1165,6 +1342,7 @@ const SmartInventoryWorkbookImporter = {
                     if (isRemote && ExcelManager._importOrdersRemote) {
                         const importResult = await ExcelManager._importOrdersRemote(orderRows);
                         summary.ordersInserted = Number(importResult?.added) || 0;
+                        summary.ordersDuplicates = Number(importResult?.duplicates) || 0;
                         summary.ordersSkipped = Number(importResult?.skipped) || 0;
                         if (summary.ordersSkipped > 0) {
                             summary.warnings.push(`${summary.ordersSkipped}건의 판매가 상품 연결 또는 저장 오류로 건너뛰어졌습니다.`);
@@ -1176,6 +1354,7 @@ const SmartInventoryWorkbookImporter = {
                 }
             }
 
+            await this._refreshLiveDataAfterSave(target, summary);
             window.__LAST_SMART_EXCEL_IMPORT_EXECUTION_SUMMARY = summary;
             const repairMessage = summary.productCostsRepaired > 0
                 ? ` 한국원가 ${summary.productCostsRepaired}건 복구.`
@@ -1186,26 +1365,7 @@ const SmartInventoryWorkbookImporter = {
             App.flash(t('common', 'save') + ' ' + t('common', 'complete') + '!' + repairMessage + repairFailureMessage,
                 summary.productCostRepairFailed > 0 ? 'warning' : 'success');
 
-            // Reload relevant lists
-            if (target === 'products' || target === 'all' || target === 'sales') {
-                if (typeof Products !== 'undefined') {
-                    Products.state.loaded = false;
-                    await Products.load();
-                }
-            }
-            if (target === 'sales' || target === 'all') {
-                if (typeof Orders !== 'undefined') {
-                    await Orders._loadRemoteDataForRender ? Orders._loadRemoteDataForRender() : Orders.load();
-                }
-            }
-            if (target === 'customers' || target === 'all') {
-                if (typeof Customers !== 'undefined') {
-                    Customers.state.loaded = false;
-                    Customers.load();
-                }
-            }
-
-            App.render();
+            this._renderExecutionSummary(summary, target);
         } catch (e) {
             console.error('Smart import save failed:', (e.message || '').slice(0, 100));
             summary.errors.push('SAVE_FAILED: ' + (e.message || '').slice(0, 50));
