@@ -5,8 +5,7 @@
  * 시트명, 컬럼명, 순서, 표기가 달라도 자동 분석하여 상품/입고/출고/고객/재고를 분류한다.
  * 
  * 핵심 정책:
- * - preview-first: 저장 전 반드시 미리보기
- * - 사용자 확인 없이 실제 저장 금지
+ * - 파일 선택 즉시 자동 분석하고, 한 번의 확인으로 전체 저장
  * - hard-coded 숫자 금지
  * - UUID/민감정보 출력 금지
  */
@@ -345,7 +344,6 @@ const SmartInventoryWorkbookImporter = {
             normalize(product.original_title || product.title),
             normalize(product.color),
             normalize(product.size),
-            normalizeNumber(product.korea_cost),
             normalizeNumber(product.stock_year),
             normalizeNumber(product.stock_month)
         ].join('|');
@@ -545,7 +543,7 @@ const SmartInventoryWorkbookImporter = {
                 if (customer || date) {
                     validRows++;
                     extractedRows.push({
-                        customerName: String(customer || '').trim(),
+                        customerName: String(customer || '新客户').trim(),
                         brand: String(this._getFieldValue(rowObj, fieldMap, 'brand') || '').trim(),
                         title: String(this._getFieldValue(rowObj, fieldMap, 'title') || '').trim(),
                         orderDate: this._parseDate(date),
@@ -797,7 +795,8 @@ const SmartInventoryWorkbookImporter = {
                     <h3><i class="fas fa-upload"></i> ${t('excel', 'select_file') || '파일 선택'}</h3>
                     <div class="form-group">
                         <label>${t('excel', 'import_file') || 'Excel 파일'}</label>
-                        <input type="file" id="smartExcelFile" accept=".xlsx,.xls" class="form-control">
+                        <input type="file" id="smartExcelFile" accept=".xlsx,.xls" class="form-control"
+                               onchange="SmartInventoryWorkbookImporter.startAnalysis('${target || ''}')">
                     </div>
                     <button class="btn btn-primary" onclick="SmartInventoryWorkbookImporter.startAnalysis('${target || ''}')">
                         <i class="fas fa-search"></i> ${t('excel', 'start_analysis') || '분석 시작'}
@@ -914,10 +913,16 @@ const SmartInventoryWorkbookImporter = {
                 .filter(name => !existingCustomerNames.has(name.toLowerCase())).length;
 
             const savableSalesRows = salesRows.filter(row => row.title && row.customerName);
-            const matchedSalesRows = savableSalesRows.filter(row => existingProducts.some(product =>
-                normalizeLoose(product.original_title) === normalizeLoose(row.title) &&
-                (!row.brand || normalizeLoose(product.brand) === normalizeLoose(row.brand))
-            ));
+            const matchedSalesRows = savableSalesRows.filter(row => {
+                const saleYear = row.orderDate ? row.orderDate.getFullYear() : preview.inferredYear;
+                const saleMonth = row.orderDate ? row.orderDate.getMonth() + 1 : preview.inferredMonth;
+                return existingProducts.some(product =>
+                    normalizeLoose(product.original_title) === normalizeLoose(row.title) &&
+                    (!row.brand || normalizeLoose(product.brand) === normalizeLoose(row.brand)) &&
+                    Number(product.stock_year) === Number(saleYear) &&
+                    Number(product.stock_month) === Number(saleMonth)
+                );
+            });
             preview.validSalesRows = savableSalesRows.length;
             preview.salesCreateCandidates = matchedSalesRows.length;
             preview.unmatchedSalesProducts = savableSalesRows.length - matchedSalesRows.length;
@@ -1045,6 +1050,9 @@ const SmartInventoryWorkbookImporter = {
                 <h4><i class="fas fa-save"></i> ${t('excel', 'save_options') || '저장 옵션'}</h4>
                 <p class="text-muted" style="font-size:0.8rem;">${t('excel', 'save_warning') || '저장 전 미리보기를 확인하세요. 검토 필요 항목은 자동 저장되지 않습니다.'}</p>
                 <div class="d-flex flex-wrap gap-2">
+                    <button class="btn btn-success" onclick="SmartInventoryWorkbookImporter.savePreview('all')">
+                        <i class="fas fa-check-double"></i> 분석된 상품·재고·판매 전체 저장
+                    </button>
                     <button class="btn btn-primary" onclick="SmartInventoryWorkbookImporter.savePreview('products')">
                         <i class="fas fa-tshirt"></i> ${t('excel', 'save_products') || '상품만 저장'}
                     </button>
@@ -1053,9 +1061,6 @@ const SmartInventoryWorkbookImporter = {
                     </button>
                     <button class="btn btn-primary" onclick="SmartInventoryWorkbookImporter.savePreview('customers')">
                         <i class="fas fa-users"></i> ${t('excel', 'save_customers') || '고객만 저장'}
-                    </button>
-                    <button class="btn btn-success" onclick="SmartInventoryWorkbookImporter.savePreview('all')">
-                        <i class="fas fa-check-double"></i> ${t('excel', 'save_all') || '전체 저장'}
                     </button>
                 </div>
             </div>
@@ -1081,10 +1086,6 @@ const SmartInventoryWorkbookImporter = {
 
         if (!confirm(`"${targetLabel}" 데이터를 실제로 저장하시겠습니까?\n\n저장 전 미리보기를 확인하셨는지 확인해주세요.\n검토 필요 항목은 자동 저장되지 않습니다.`)) {
             return;
-        }
-
-        if (target === 'all') {
-            if (!confirm('전체 저장은 상품/판매/고객 데이터를 모두 생성합니다. 계속하시겠습니까?')) return;
         }
 
         if (this._saving) {
@@ -1176,6 +1177,11 @@ const SmartInventoryWorkbookImporter = {
     async _executeSave(preview, target) {
         App.flash(t('common', 'saving') || '저장 중...', 'info');
 
+        const normalizeLoose = (value) => String(value || '')
+            .normalize('NFKC')
+            .toLowerCase()
+            .replace(/[\s\p{P}\p{S}]+/gu, '');
+
         const isRemote = typeof ExcelManager !== 'undefined' && ExcelManager._isRemoteProductsMode
             ? ExcelManager._isRemoteProductsMode()
             : false;
@@ -1233,37 +1239,6 @@ const SmartInventoryWorkbookImporter = {
 
                 // Build normalized rows for ExcelManager.importProducts
                 const normalizedRows = [];
-                const normalizeLoose = (value) => String(value || '')
-                    .normalize('NFKC')
-                    .toLowerCase()
-                    .replace(/[\s\p{P}\p{S}]+/gu, '');
-
-                // Send workbook costs directly to the authenticated store in one
-                // transaction-like RPC. Values never enter source control.
-                if (isRemote) {
-                    const client = window.LESOULSupabase && window.LESOULSupabase.getClient();
-                    const storeId = window.LESOULAppBootstrap?.getContext?.()?.activeMembership?.storeId;
-                    const costRows = productRows
-                        .filter(row => Number(row.cost || 0) > 0 && row.brand && row.title)
-                        .map(row => ({ brand: row.brand, title: row.title, cost: Number(row.cost) }));
-                    if (client && storeId && costRows.length > 0) {
-                        const bulkResult = await client.rpc('bulk_repair_product_costs', {
-                            p_store_id: storeId,
-                            p_rows: costRows
-                        });
-                        if (bulkResult.error) throw new Error(`한국원가 강제 저장 실패: ${bulkResult.error.message || 'RPC_ERROR'}`);
-                        summary.productCostsRepaired = Number(bulkResult.data?.updated) || 0;
-                        summary.zeroCostProductsRemaining = Number(bulkResult.data?.zero_remaining) || 0;
-                        existingProducts.forEach(product => {
-                            const match = productRows.find(row =>
-                                normalizeLoose(product.brand) === normalizeLoose(row.brand) &&
-                                normalizeLoose(product.original_title) === normalizeLoose(row.title) &&
-                                Number(row.cost || 0) > 0
-                            );
-                            if (match) product.korea_cost = Number(match.cost);
-                        });
-                    }
-                }
                 for (const row of productRows) {
                     const tempProduct = {
                         brand: row.brand,
@@ -1278,38 +1253,43 @@ const SmartInventoryWorkbookImporter = {
 
                     const rowBrandKey = normalizeLoose(row.brand);
                     const rowTitleKey = normalizeLoose(row.title);
-                    const zeroCostMatches = existingProducts.filter(p =>
+                    const rowColorKey = normalizeLoose(row.color);
+                    const rowSizeKey = normalizeLoose(row.size);
+                    const monthProduct = existingProducts.find(p =>
                         normalizeLoose(p.brand) === rowBrandKey &&
                         normalizeLoose(p.original_title) === rowTitleKey &&
-                        Number(p.korea_cost || 0) <= 0 && Number(row.cost || 0) > 0
+                        normalizeLoose(p.color) === rowColorKey &&
+                        normalizeLoose(p.size) === rowSizeKey &&
+                        Number(p.stock_year) === Number(tempProduct.stock_year) &&
+                        Number(p.stock_month) === Number(tempProduct.stock_month)
                     );
-                    if (zeroCostMatches.length > 0) {
-                        const repairedPrice = PriceCalculator.calculate(row.cost);
+                    if (monthProduct) {
                         const client = window.LESOULSupabase && window.LESOULSupabase.getClient();
                         const storeId = window.LESOULAppBootstrap?.getContext?.()?.activeMembership?.storeId;
-                        for (const zeroCostMatch of zeroCostMatches) {
-                            const productId = zeroCostMatch.remote_id ||
-                                (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(zeroCostMatch.id || ''))
-                                    ? zeroCostMatch.id : null);
+                        const workbookCost = Number(row.cost || 0);
+                        if (workbookCost > 0 && Number(monthProduct.korea_cost || 0) !== workbookCost) {
+                            const repairedPrice = PriceCalculator.calculate(workbookCost);
+                            const productId = monthProduct.remote_id ||
+                                (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(monthProduct.id || ''))
+                                    ? monthProduct.id : null);
                             if (!client || !storeId || !productId) {
                                 summary.productCostRepairFailed++;
-                                continue;
+                            } else {
+                                const repairResult = await client.rpc('repair_product_cost', {
+                                    p_store_id: storeId,
+                                    p_product_id: productId,
+                                    p_korea_cost: workbookCost,
+                                    p_actual_converted_cost: repairedPrice.actual_converted_cost,
+                                    p_china_base_price: repairedPrice.china_base_price
+                                });
+                                if (repairResult.error || repairResult.data !== true) summary.productCostRepairFailed++;
+                                else {
+                                    monthProduct.korea_cost = workbookCost;
+                                    summary.productCostsRepaired++;
+                                }
                             }
-                            const repairResult = await client.rpc('repair_product_cost', {
-                                p_store_id: storeId,
-                                p_product_id: productId,
-                                p_korea_cost: row.cost,
-                                p_actual_converted_cost: repairedPrice.actual_converted_cost,
-                                p_china_base_price: repairedPrice.china_base_price
-                            });
-                            if (repairResult.error || repairResult.data !== true) {
-                                summary.productCostRepairFailed++;
-                                continue;
-                            }
-                            zeroCostMatch.korea_cost = row.cost;
-                            summary.productCostsRepaired++;
-                            summary.productsMatched++;
                         }
+                        summary.productsMatched++;
                         continue;
                     }
 
@@ -1372,9 +1352,17 @@ const SmartInventoryWorkbookImporter = {
                     const alignedProduct = extractedData.productRows.find(p => p.sourceIndex === row.sourceIndex);
                     const lookupTitle = row.title || alignedProduct?.title || '';
                     const lookupBrand = row.brand || alignedProduct?.brand || '';
+                    const lookupYear = Number(alignedProduct?.stockYear || preview.inferredYear || 0);
+                    const lookupMonth = Number(alignedProduct?.stockMonth || preview.inferredMonth || 0);
+                    const lookupColor = normalizeLoose(alignedProduct?.color);
+                    const lookupSize = normalizeLoose(alignedProduct?.size);
                     const product = products.find(p =>
                         String(p.original_title || '').trim() === lookupTitle &&
-                        (!lookupBrand || String(p.brand || '').trim() === lookupBrand)
+                        (!lookupBrand || String(p.brand || '').trim() === lookupBrand) &&
+                        Number(p.stock_year) === lookupYear &&
+                        Number(p.stock_month) === lookupMonth &&
+                        normalizeLoose(p.color) === lookupColor &&
+                        normalizeLoose(p.size) === lookupSize
                     );
                     const legacyId = Number(product?.legacy_id || product?.id);
                     if (!product || !Number.isFinite(legacyId) || legacyId <= 0) {
@@ -1424,7 +1412,9 @@ const SmartInventoryWorkbookImporter = {
                         '상품명': r.title,
                         '수량': r.quantity || 1,
                         '판매금액': r.sellingPrice || 0,
-                        '판매일': r.orderDate ? this._formatDate(r.orderDate) : ''
+                        '판매일': r.orderDate ? this._formatDate(r.orderDate) : '',
+                        '입고년도': r.orderDate ? r.orderDate.getFullYear() : preview.inferredYear,
+                        '입고월': r.orderDate ? r.orderDate.getMonth() + 1 : preview.inferredMonth
                     }));
 
                     if (isRemote && ExcelManager._importOrdersRemote) {

@@ -303,10 +303,11 @@ describe('Smart Excel Import Replacement Contract', () => {
             assert.match(importer, /normalizedAliases\.includes\(normalize\(header\)\)/);
         });
 
-        it('repairs existing zero-cost products during re-import', () => {
+        it('repairs an existing product cost only inside the same stock month', () => {
             const importer = readSource('js/smart-inventory-importer.js');
-            assert.match(importer, /const zeroCostMatches = existingProducts\.filter/);
-            assert.match(importer, /Number\(p\.korea_cost \|\| 0\) <= 0/);
+            assert.match(importer, /const monthProduct = existingProducts\.find/);
+            assert.match(importer, /Number\(p\.stock_year\) === Number\(tempProduct\.stock_year\)/);
+            assert.match(importer, /Number\(p\.stock_month\) === Number\(tempProduct\.stock_month\)/);
             assert.match(importer, /client\.rpc\('repair_product_cost'/);
             assert.match(importer, /productCostsRepaired/);
         });
@@ -449,15 +450,15 @@ describe('Smart Excel Import Replacement Contract', () => {
             );
         });
 
-        it('identity uses brand+title+color+size+cost+stockYear+stockMonth', () => {
+        it('identity uses brand+title+color+size+stockYear+stockMonth and treats cost as editable', () => {
             const importer = readSource('js/smart-inventory-importer.js');
             const identityFn = importer.split('_getProductIdentityKey')[1]?.split('},')[0] || '';
             assert.ok(
                 identityFn.includes('brand') && identityFn.includes('original_title') &&
                 identityFn.includes('color') && identityFn.includes('size') &&
-                identityFn.includes('korea_cost') && identityFn.includes('stock_year') &&
+                !identityFn.includes('korea_cost') && identityFn.includes('stock_year') &&
                 identityFn.includes('stock_month'),
-                'identity should use brand+title+color+size+cost+stockYear+stockMonth'
+                'identity should use brand+title+color+size+stockYear+stockMonth without cost'
             );
         });
     });

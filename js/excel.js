@@ -284,7 +284,7 @@ const ExcelManager = {
 
     /**
      * 상품 identity key를 생성한다.
-     * brand + original_title + color + size + korea_cost + stock_year + stock_month
+     * brand + original_title + color + size + stock_year + stock_month
      * @param {Object} product - 상품 객체
      * @returns {string} identity key
      */
@@ -299,7 +299,6 @@ const ExcelManager = {
             normalize(product.original_title),
             normalize(product.color),
             normalize(product.size),
-            normalizeNumber(product.korea_cost),
             normalizeNumber(product.stock_year),
             normalizeNumber(product.stock_month)
         ].join('|');
@@ -1135,22 +1134,31 @@ const ExcelManager = {
                 }
             }
 
-            // 상품 찾기
+            const rawDate = row['판매일'] || row['order_date'] || row['date'] || '';
+            const dateObj = this._parseExcelDate(rawDate) || new Date();
+            const orderDateStr = this._formatDate(dateObj);
+            const stockYear = parseInt(row['입고년도'] || row['stock_year'] || dateObj.getFullYear(), 10);
+            const stockMonth = parseInt(row['입고월'] || row['stock_month'] || (dateObj.getMonth() + 1), 10);
+
+            // 판매월과 같은 월의 상품만 연결한다. 다른 달의 같은 이름 상품은 재고와 원가가 독립적이다.
             let product = existingProducts.find(p =>
-                p.original_title === productName && (brand === '' || p.brand === brand)
+                p.original_title === productName &&
+                (brand === '' || p.brand === brand) &&
+                Number(p.stock_year) === stockYear &&
+                Number(p.stock_month) === stockMonth
             );
             if (!product) {
-                product = existingProducts.find(p => p.original_title === productName);
+                product = existingProducts.find(p =>
+                    p.original_title === productName &&
+                    Number(p.stock_year) === stockYear &&
+                    Number(p.stock_month) === stockMonth
+                );
             }
             if (!product) {
                 skipped++;
                 skippedDetails.push({ row: idx + 2, reason: 'PRODUCT_NOT_FOUND', productName, brand });
                 continue;
             }
-
-            const rawDate = row['판매일'] || row['order_date'] || row['date'] || '';
-            const dateObj = this._parseExcelDate(rawDate) || new Date();
-            const orderDateStr = this._formatDate(dateObj);
 
             const isZiLiu = /自留|자留|지留|자류|지류|自留款/i.test(customerName);
             let sellingPrice = parseFloat(row['최종흥정가(위안)'] || row['최종흥정가'] || row['판매가'] || row['selling_price'] || row['price'] || row['가격'] || row['판매금액'] || 0) || 0;
