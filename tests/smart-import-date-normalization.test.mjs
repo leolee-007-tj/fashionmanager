@@ -84,7 +84,7 @@ describe('smart import visible date normalization', () => {
     });
 
     it('ignores decorative and unrelated workbook sheets', () => {
-        for (const sheetName of ['README', '사진', '비용관리', 'photos']) {
+        for (const sheetName of ['README', '사진', '비용관리', 'photos', '누락검증', 'validation']) {
             assert.equal(importer._isIgnoredSheetName(sheetName), true, sheetName);
         }
         assert.equal(importer._isIgnoredSheetName('제품목록'), false);

@@ -37,7 +37,8 @@ const SmartInventoryWorkbookImporter = {
     },
 
     IGNORED_SHEET_NAMES: [
-        'readme', '안내', '설명', '사진', 'photo', 'photos', '비용관리', '비용', 'expenses'
+        'readme', '안내', '설명', '사진', 'photo', 'photos', '비용관리', '비용', 'expenses',
+        '누락검증', 'validation', 'missing check'
     ],
 
     _isIgnoredSheetName(sheetName) {
