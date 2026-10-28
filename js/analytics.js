@@ -30,6 +30,7 @@ const Analytics = {
             localStorage.setItem('lesoul_gh_remote_analytics_cleanup_v2', 'done');
             const client = window.LESOULSupabase && window.LESOULSupabase.getClient();
             const storeId = window.LESOULAppBootstrap?.getContext?.()?.activeMembership?.storeId;
+            if (typeof Expenses !== 'undefined') await Expenses.syncRecurring();
             const [orders, products, expenseResult, settingsResult] = await Promise.all([
                 DB.getOrdersAsync(),
                 DB.getProductsAsync(),

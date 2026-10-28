@@ -246,7 +246,7 @@ const App = {
             const editId = args[1] === 'edit' ? args[0] : null;
             expenseForm.onsubmit = (e) => {
                 e.preventDefault();
-                Expenses.submitForm(editId);
+                Promise.resolve(Expenses.submitForm(editId)).catch(err => App.flash(err.message || '경비 저장 실패', 'error'));
             };
         }
         const orderForm = document.getElementById('orderForm');
