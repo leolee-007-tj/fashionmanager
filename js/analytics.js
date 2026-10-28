@@ -113,13 +113,20 @@ const Analytics = {
         return order.ship_date || order.order_date || order.created_at;
     },
 
+    _findOrderProduct(order, products) {
+        const key = value => value === null || value === undefined ? '' : String(value).trim();
+        const uuid = key(order.product_uuid);
+        // A cloud UUID is authoritative; missing legacy IDs must never match.
+        if (uuid) return products.find(p => key(p.remote_id) === uuid || key(p.id) === uuid);
+        const id = key(order.product_id);
+        if (!id || id === '0') return undefined;
+        return products.find(p => key(p.remote_id) === id || key(p.id) === id || key(p.legacy_id) === id);
+    },
+
     _getOrderCost(order, products, exchangeDivisor) {
-        const product = products.find(p =>
-            String(p.remote_id || '') === String(order.product_uuid || '') ||
-            String(p.id || '') === String(order.product_id || '') ||
-            String(p.legacy_id || '') === String(order.product_id || '')
-        );
-        const divisor = Number(exchangeDivisor) > 0 ? Number(exchangeDivisor) : 165;
+        const product = this._findOrderProduct(order, products);
+        const configuredDivisor = exchangeDivisor ?? this._getSettings().exchange_divisor;
+        const divisor = Number(configuredDivisor) > 0 ? Number(configuredDivisor) : 165;
         if (product && Number(product.korea_cost) > 0) {
             return Number(product.korea_cost) / divisor;
         }
@@ -169,13 +176,10 @@ const Analytics = {
             const totalExpense = monthExpenses.reduce((s, e) => {
                 // Flask MonthlyExpense.total_expense 와 동일한 계산
                 if (e.amount !== null && e.amount !== undefined && e.amount !== '') return s + (Number(e.amount) || 0);
-                const sum = (e.logistics_cost || e.logistics || 0) + 
-                            (e.flight_cost || e.flight || 0) + 
-                            (e.hotel_cost || e.hotel || 0) + 
-                            (e.stay_cost || e.stay || 0) + 
-                            (e.electricity_cost || e.electricity || 0) + 
-                            (e.rent_cost || 0) + 
-                            (e.other_cost || e.other || 0);
+                const sum = [e.logistics_cost ?? e.logistics, e.flight_cost ?? e.flight,
+                    e.hotel_cost ?? e.hotel, e.stay_cost ?? e.stay,
+                    e.electricity_cost ?? e.electricity, e.rent_cost,
+                    e.other_cost ?? e.other].reduce((total, value) => total + (Number(value) || 0), 0);
                 return s + sum;
             }, 0);
 
@@ -258,12 +262,7 @@ const Analytics = {
         });
         const map = {};
         orders.forEach(o => {
-            const pid = o.product_id || 0;
-            const p = products.find(x =>
-                String(x.remote_id || '') === String(pid) ||
-                String(x.id || '') === String(pid) ||
-                String(x.legacy_id || '') === String(pid)
-            );
+            const p = this._findOrderProduct(o, products);
             const category = String(o.category || o.category_snapshot || p?.category || '미분류').trim() || '미분류';
             if (!map[category]) map[category] = { title: category, quantity: 0, revenue: 0 };
             map[category].quantity += o.quantity || 0;
