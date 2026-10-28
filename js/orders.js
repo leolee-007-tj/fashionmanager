@@ -569,6 +569,7 @@ const Orders = {
      * remote/local 모두 단일 폼으로 처리.
      */
     async renderEdit(id) {
+        const isCurrentPage = App.capturePageGuard?.() || (() => true);
         let order, product, customer;
         if (this.isRemoteOrdersMode()) {
             if (!this.state.orders || this.state.orders.length === 0) {
@@ -597,6 +598,7 @@ const Orders = {
             customer = customers.find(c => c.id === order?.customer_id);
         }
 
+        if (!isCurrentPage()) return '';
         if (!order) {
             App.flash(t('orders', 'order_not_found'), 'error');
             location.hash = '#/orders';
@@ -678,6 +680,7 @@ const Orders = {
      * 안전 필드(date/price/color/size/quantity)만 수정, customer/product 변경은 보류.
      */
     async _submitEditRemote(e, orderId) {
+        const isCurrentPage = App.capturePageGuard?.() || (() => true);
         const form = e.target;
         const order = (this.state.orders || []).find(o =>
             String(o.remote_id) === String(orderId) ||
@@ -724,7 +727,7 @@ const Orders = {
                 notes: undefined
             });
             App.flash(t('common', 'save') + '!', 'success');
-            location.hash = '#/orders';
+            if (isCurrentPage()) location.hash = '#/orders';
         } catch (e) {
             console.error('Remote update order failed:', (e.message || '').slice(0, 100));
             App.flash(t('common', 'save') + ' ' + t('common', 'fail'), 'error');
@@ -919,6 +922,7 @@ const Orders = {
      * text input 기반: customer_name, product_name으로 UUID 조회.
      */
     async _submitAddRemote() {
+        const isCurrentPage = App.capturePageGuard?.() || (() => true);
         const fd = new FormData(document.getElementById('orderForm'));
         const customerName = (fd.get('customer_name') || '').trim();
         const productName = (fd.get('product_name') || '').trim();
@@ -979,7 +983,7 @@ const Orders = {
                 notes: undefined
             });
             App.flash(t('common', 'register') + '!', 'success');
-            location.hash = '#/orders';
+            if (isCurrentPage()) location.hash = '#/orders';
         } catch (e) {
             console.error('Remote create order failed:', e);
             App.flash(t('common', 'register') + ' ' + t('common', 'fail') + ': ' + (e.message || ''), 'error');
@@ -1130,6 +1134,7 @@ const Orders = {
     },
 
     async renderShip(id) {
+        const isCurrentPage = App.capturePageGuard?.() || (() => true);
         let order, product, customer;
         if (this.isRemoteOrdersMode()) {
             // remote mode: load data first if not already loaded
@@ -1144,6 +1149,7 @@ const Orders = {
             product = DB.getProducts().find(p => p.id === order?.product_id);
             customer = DB.getCustomers().find(c => c.id === order?.customer_id);
         }
+        if (!isCurrentPage()) return '';
         if (!order) {
             App.flash(t('orders', 'order_not_found'), 'error');
             location.hash = '#/orders';
@@ -1227,6 +1233,7 @@ const Orders = {
      * PENDING 상태 주문만 출고 허용.
      */
     async _submitShipRemote(id) {
+        const isCurrentPage = App.capturePageGuard?.() || (() => true);
         const order = (this.state.orders || []).find(o => String(o.id) === String(id) || o.remote_id === String(id) || String(o.legacy_id) === String(id));
         if (!order) {
             App.flash(t('orders', 'order_not_found'), 'error');
@@ -1250,7 +1257,7 @@ const Orders = {
                 tracking_number: fd.get('tracking_number') || undefined
             });
             App.flash(t('orders', 'shipped') + '!', 'success');
-            location.hash = '#/orders';
+            if (isCurrentPage()) location.hash = '#/orders';
             await this._refreshOrdersAfterRemoteMutation();
         } catch (e) {
             console.error('Remote ship order failed:', e);

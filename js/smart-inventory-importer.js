@@ -822,6 +822,7 @@ const SmartInventoryWorkbookImporter = {
     },
 
     startAnalysis(target) {
+        const isCurrentPage = App.capturePageGuard?.() || (() => true);
         const fileInput = document.getElementById('smartExcelFile');
         if (!fileInput || !fileInput.files || !fileInput.files[0]) {
             App.flash(t('common', 'select_file') || '파일을 선택해주세요.', 'warning');
@@ -830,10 +831,12 @@ const SmartInventoryWorkbookImporter = {
         const file = fileInput.files[0];
         const reader = new FileReader();
         reader.onload = async (e) => {
+            if (!isCurrentPage()) return;
             try {
                 const data = new Uint8Array(e.target.result);
                 const preview = this.analyze(data, file.name);
                 await this._hydrateRemotePreview(preview);
+                if (!isCurrentPage()) return;
                 this._renderPreview(preview, target);
             } catch (err) {
                 console.error('Smart import analysis failed:', (err.message || '').slice(0, 100));
@@ -1180,6 +1183,7 @@ const SmartInventoryWorkbookImporter = {
     },
 
     async _executeSave(preview, target) {
+        const isCurrentPage = App.capturePageGuard?.() || (() => true);
         App.flash(t('common', 'saving') || '저장 중...', 'info');
 
         const normalizeLoose = (value) => String(value || '')
@@ -1448,7 +1452,7 @@ const SmartInventoryWorkbookImporter = {
             App.flash(t('common', 'save') + ' ' + t('common', 'complete') + '!' + repairMessage + repairFailureMessage,
                 summary.productCostRepairFailed > 0 ? 'warning' : 'success');
 
-            this._renderExecutionSummary(summary, target);
+            if (isCurrentPage()) this._renderExecutionSummary(summary, target);
         } catch (e) {
             console.error('Smart import save failed:', (e.message || '').slice(0, 100));
             summary.errors.push('SAVE_FAILED: ' + (e.message || '').slice(0, 50));

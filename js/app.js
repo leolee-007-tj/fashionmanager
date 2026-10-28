@@ -120,6 +120,21 @@ const App = {
         this.renderPage();
     },
 
+    capturePageGuard() {
+        const revision = this._renderRevision;
+        const page = this.currentPage;
+        const hash = typeof location === 'undefined' ? null : location.hash;
+        return () => revision === this._renderRevision && page === this.currentPage &&
+            (hash === null || hash === location.hash);
+    },
+
+    schedulePageTask(callback, delay) {
+        const isCurrentPage = this.capturePageGuard();
+        return setTimeout(() => {
+            if (isCurrentPage()) callback();
+        }, delay);
+    },
+
     /**
      * renderPage (3-5B).
      * Products.renderList()가 async일 수 있으므로, content가 Promise인 경우 await 후 렌더링한다.
@@ -129,7 +144,8 @@ const App = {
     async renderPage() {
         const main = document.getElementById('main-content');
         if (!main) return;
-        const renderRevision = ++this._renderRevision;
+        ++this._renderRevision;
+        const isCurrentPage = this.capturePageGuard();
         let content = '';
         const page = this.currentPage;
         const args = this.pageArgs;
@@ -177,25 +193,26 @@ const App = {
                 case 'members':
                     if (window.MemberManagement) {
                         content = MemberManagement.renderPage();
-                        setTimeout(function() { MemberManagement.init(); }, 50);
                     } else {
                         content = '<p>직원 관리 모듈을 불러올 수 없습니다.</p>';
                     }
                     break;
                 default:
-                    content = this.renderDashboard();
+                    content = await this.renderDashboard();
             }
+            content = await content;
         } catch (e) {
-            if (renderRevision !== this._renderRevision || page !== this.currentPage) return;
+            if (!isCurrentPage()) return;
             console.error(e);
             content = `<div class="card"><h2>Error</h2><p>${e.message}</p></div>`;
         }
         // A previous async page load must not replace the latest navigation.
-        if (renderRevision !== this._renderRevision || page !== this.currentPage) return;
+        if (!isCurrentPage()) return;
         main.innerHTML = content;
-        setTimeout(() => {
-            if (renderRevision === this._renderRevision) updateAllTranslations();
-        }, 50);
+        this.schedulePageTask(() => updateAllTranslations(), 50);
+        if (page === 'members' && window.MemberManagement) {
+            this.schedulePageTask(() => MemberManagement.init(), 50);
+        }
         this.bindPageForms();
     },
 

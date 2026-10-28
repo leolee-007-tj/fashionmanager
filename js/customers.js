@@ -549,9 +549,11 @@ const Customers = {
     searchTimer: null,
 
     setSearch(val) {
+        const isCurrentPage = App.capturePageGuard?.() || (() => true);
         this.state.search = val;
         if (this.searchTimer) clearTimeout(this.searchTimer);
         this.searchTimer = setTimeout(() => {
+            if (!isCurrentPage()) return;
             this.applyFilters();
             App.renderPage();
         }, 300);
@@ -1130,12 +1132,14 @@ const Customers = {
     },
 
     handleDetailAvatarChange(event, id) {
+        const isCurrentPage = App.capturePageGuard?.() || (() => true);
         const file = event.target.files[0];
         if (!file) return;
         const reader = new FileReader();
         reader.onload = (e) => {
             const dataUrl = e.target.result;
             DB.updateCustomer(Number(id), { avatar_url: dataUrl });
+            if (!isCurrentPage()) return;
             const avatarEl = document.getElementById('customerAvatarImg');
             if (avatarEl) {
                 if (avatarEl.tagName === 'IMG') {
@@ -1249,10 +1253,12 @@ const Customers = {
     },
 
     handleAvatarChange(event) {
+        const isCurrentPage = App.capturePageGuard?.() || (() => true);
         const file = event.target.files[0];
         if (!file) return;
         const reader = new FileReader();
         reader.onload = (e) => {
+            if (!isCurrentPage()) return;
             const dataUrl = e.target.result;
             document.getElementById('avatarUrl').value = dataUrl;
             const preview = document.getElementById('avatarPreview');

@@ -449,9 +449,11 @@ const Products = {
     searchTimer: null,
 
     setSearch(val) {
+        const isCurrentPage = App.capturePageGuard?.() || (() => true);
         this.state.search = val;
         if (this.searchTimer) clearTimeout(this.searchTimer);
         this.searchTimer = setTimeout(() => {
+            if (!isCurrentPage()) return;
             this.applyFilters();
             App.renderPage();
         }, 300);
@@ -744,6 +746,7 @@ const Products = {
     },
 
     async renderEdit(id) {
+        const isCurrentPage = App.capturePageGuard?.() || (() => true);
         // 3-5V: remote mode에서는 DB.getProducts() (localStorage)가 비어 있을 수 있으므로
         // this.state.products (이미 remote에서 로드됨)를 우선 사용하고,
         // 없으면 DB.getProductsAsync()로 비동기 조회한다.
@@ -765,6 +768,7 @@ const Products = {
                 console.error('renderEdit load failed:', e && e.message ? e.message : e);
             }
         }
+        if (!isCurrentPage()) return '';
         if (!product) {
             App.flash(t('common', 'product_not_found'), 'error');
             location.hash = '#/products';
@@ -935,9 +939,11 @@ const Products = {
     },
 
     handleImage(input) {
+        const isCurrentPage = App.capturePageGuard?.() || (() => true);
         if (input.files && input.files[0]) {
             const reader = new FileReader();
             reader.onload = e => {
+                if (!isCurrentPage()) return;
                 Products.tempImage = e.target.result;
             };
             reader.readAsDataURL(input.files[0]);
@@ -1013,6 +1019,7 @@ const Products = {
     },
 
     async submitForm(editId = null) {
+        const isCurrentPage = App.capturePageGuard?.() || (() => true);
         const form = document.getElementById('productForm');
         const fd = new FormData(form);
         const title = fd.get('original_title').trim();
@@ -1099,7 +1106,7 @@ const Products = {
             }
         }
         this.tempImage = null;
-        location.hash = '#/products';
+        if (isCurrentPage()) location.hash = '#/products';
         return false;
     }
 };

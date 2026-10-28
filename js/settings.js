@@ -115,7 +115,7 @@ const Settings = {
                 </table>
             </div>
         `;
-        setTimeout(() => this.bindCalcPreview(), 100);
+        App.schedulePageTask(() => this.bindCalcPreview(), 100);
         return html;
     },
 
@@ -146,6 +146,7 @@ const Settings = {
     },
 
     async save() {
+        const isCurrentPage = App.capturePageGuard?.() || (() => true);
         const fd = new FormData(document.getElementById('settingsForm'));
         const settings = DB.getSettings();
         settings.exchange_divisor = parseFloat(fd.get('exchange_divisor')) || 10;
@@ -182,7 +183,7 @@ const Settings = {
         }
         App.updateHeader();
         App.flash(t('settings', 'save_success'), 'success');
-        setTimeout(() => location.reload(), 500);
+        if (isCurrentPage()) App.schedulePageTask(() => location.reload(), 500);
         return false;
     },
 
@@ -214,12 +215,14 @@ const Settings = {
     },
 
     async loadDuplicateReview() {
+        const isCurrentPage = App.capturePageGuard?.() || (() => true);
         const button = document.getElementById('viewDuplicatesButton');
         if (button) button.disabled = true;
         try {
             const { client, storeId } = await this._getDuplicateContext();
             const result = await client.rpc('list_strict_duplicates', { p_store_id: storeId });
             if (result.error) throw new Error(result.error.message || '중복 조회 실패');
+            if (!isCurrentPage()) return;
             this._duplicateRows = result.data || [];
             this.renderDuplicateReview();
         } catch (e) {
@@ -272,6 +275,7 @@ const Settings = {
     },
 
     async deleteSelectedDuplicates() {
+        const isCurrentPage = App.capturePageGuard?.() || (() => true);
         const selected = [...document.querySelectorAll('.strict-duplicate-checkbox:checked:not(:disabled)')];
         if (selected.length === 0) {
             App.flash('삭제할 중복자료를 선택하세요.', 'warning');
@@ -291,6 +295,7 @@ const Settings = {
                 p_order_ids: ids.sale
             });
             if (result.error) throw new Error(result.error.message || '선택 삭제 실패');
+            if (!isCurrentPage()) return;
             this._showDuplicateResult(result.data || {});
             await this.loadDuplicateReview();
         } catch (e) {
@@ -308,6 +313,7 @@ const Settings = {
     },
 
     async cleanupAllDuplicates() {
+        const isCurrentPage = App.capturePageGuard?.() || (() => true);
         if (!confirm('엄격한 중복 기준으로 각 묶음의 대표 1개만 남기고 나머지를 모두 삭제합니다. 계속하시겠습니까?')) return;
         const button = document.getElementById('cleanupDuplicatesButton');
         if (button) button.disabled = true;
@@ -315,6 +321,7 @@ const Settings = {
             const { client, storeId } = await this._getDuplicateContext();
             const result = await client.rpc('cleanup_strict_duplicates', { p_store_id: storeId });
             if (result.error) throw new Error(result.error.message || '중복 정리 실패');
+            if (!isCurrentPage()) return;
             this._showDuplicateResult(result.data || {});
             this._duplicateRows = [];
             this.renderDuplicateReview();
@@ -338,6 +345,7 @@ const Settings = {
     },
 
     importData(input) {
+        const isCurrentPage = App.capturePageGuard?.() || (() => true);
         if (!input.files || !input.files[0]) return;
         if (!confirm(t('settings', 'restore_warning'))) {
             input.value = '';
@@ -346,11 +354,12 @@ const Settings = {
         const file = input.files[0];
         const reader = new FileReader();
         reader.onload = function(e) {
+            if (!isCurrentPage()) return;
             try {
                 const data = JSON.parse(e.target.result);
                 DB.importAllData(data);
                 App.flash(t('excel', 'import_success'), 'success');
-                setTimeout(() => location.reload(), 800);
+                App.schedulePageTask(() => location.reload(), 800);
             } catch (err) {
                 App.flash(err.message, 'error');
             }

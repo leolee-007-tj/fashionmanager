@@ -290,8 +290,11 @@ const Analytics = {
     },
 
     async renderAsync() {
+        const isCurrentPage = App.capturePageGuard?.() || (() => true);
         await this._loadAnalyticsData();
+        if (!isCurrentPage()) return '';
         await this._ensureRate();
+        if (!isCurrentPage()) return '';
         return this.render();
     },
 
@@ -581,7 +584,7 @@ const Analytics = {
                 </div>
             </div>
         `;
-        setTimeout(() => this.renderCharts(monthlyStats), 100);
+        App.schedulePageTask(() => this.renderCharts(monthlyStats), 100);
         return html;
     },
 

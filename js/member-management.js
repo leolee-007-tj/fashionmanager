@@ -215,6 +215,7 @@
         body.innerHTML = '<p class="muted-text">' + t('members', 'loading') + '</p>';
         try {
             var members = await listStoreMembers();
+            if (body !== document.getElementById('member-list-body')) return;
             if (members.length === 0) {
                 body.innerHTML = '<p class="muted-text">' + t('members', 'no_members') + '</p>';
                 return;
@@ -315,6 +316,7 @@
         body.innerHTML = '<p class="muted-text">' + t('members', 'loading') + '</p>';
         try {
             var invites = await listStoreInviteCodes();
+            if (body !== document.getElementById('invite-list-body')) return;
             if (invites.length === 0) {
                 body.innerHTML = '<p class="muted-text">' + t('members', 'no_invite_codes') + '</p>';
                 return;
