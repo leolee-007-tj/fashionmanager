@@ -118,6 +118,9 @@
     }
 
     function showSignedOut(handlers) {
+        // A session can end while another authentication request is pending.
+        // The newly rendered form must accept a fresh login attempt.
+        _busy = false;
         _clear();
         var panel = _panel();
 

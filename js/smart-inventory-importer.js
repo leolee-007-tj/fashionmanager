@@ -1098,6 +1098,10 @@ const SmartInventoryWorkbookImporter = {
         this._setSaveButtonsDisabled(true);
         try {
             await this._executeSave(preview, target);
+        } catch (error) {
+            App.flash(error && error.message
+                ? error.message
+                : '저장하지 못했습니다. 로그인과 연결 상태를 확인한 뒤 다시 시도하세요.', 'danger');
         } finally {
             this._saving = false;
             this._setSaveButtonsDisabled(false);

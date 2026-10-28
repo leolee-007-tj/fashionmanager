@@ -167,16 +167,22 @@
         }
 
         var client = _getClient();
+        var subscribed = true;
         var result = client.auth.onAuthStateChange(function (event, session) {
-            try {
-                callback({
-                    event: event,
-                    session: session,
-                    user: (session && session.user) || null
-                });
-            } catch (e) {
-                // prevent callback errors from breaking the listener
-            }
+            // Supabase delivers this event while holding its auth lock.
+            // Bootstrap reads the session again, so defer it to another task.
+            setTimeout(function () {
+                if (!subscribed) return;
+                try {
+                    callback({
+                        event: event,
+                        session: session,
+                        user: (session && session.user) || null
+                    });
+                } catch (e) {
+                    // prevent callback errors from breaking the listener
+                }
+            }, 0);
         });
 
         var authSubscription =
@@ -185,6 +191,7 @@
             result.data.subscription;
 
         return function unsubscribe() {
+            subscribed = false;
             if (authSubscription) {
                 try {
                     authSubscription.unsubscribe();

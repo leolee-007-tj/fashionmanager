@@ -189,12 +189,29 @@ test('T11: subscribe가 auth 이벤트 전달하고 unsubscribe 가능', async (
 
     const mockUser = { id: 'u1' };
     callback('SIGNED_IN', { user: mockUser });
+    assert.strictEqual(receivedEvent, null, 'auth listener must return before consumers run');
+    await new Promise(resolve => setTimeout(resolve, 5));
 
     assert.strictEqual(receivedEvent, 'SIGNED_IN');
     assert.deepStrictEqual(receivedUser, mockUser);
 
     unsub();
     assert.strictEqual(unsubscribeCalled, true);
+});
+
+test('queued auth events are cancelled when the listener unsubscribes', async () => {
+    resetGlobals();
+    let emit;
+    setupMockSupabase({ auth: { onAuthStateChange: cb => {
+        emit = cb;
+        return { data: { subscription: { unsubscribe() {} } } };
+    } } });
+    let received = 0;
+    const unsubscribe = globalThis.LESOULAuth.subscribe(() => { received++; });
+    emit('SIGNED_IN', { user: { id: 'u1' } });
+    unsubscribe();
+    await new Promise(resolve => setTimeout(resolve, 5));
+    assert.strictEqual(received, 0);
 });
 
 test('T12: ensureUserProfile이 정확한 RPC 이름과 인자 사용', async () => {

@@ -115,6 +115,32 @@ function teardownDoc() {
 
 // --- Tests ---
 
+test('login form accepts submissions after session loss during a pending request', () => {
+    const doc = setupDoc();
+    try {
+        const ui = global.LESOULAuthUI;
+        ui.init({ root: doc._root });
+        ui.setBusy(true);
+        let submitted = 0;
+        ui.showSignedOut({ onSignIn: () => { submitted++; } });
+        const panel = doc._root._children[0];
+        const form = panel._children.find(node => node.tagName === 'FORM');
+        const inputs = [];
+        function collect(node) {
+            if (node.tagName === 'INPUT') inputs.push(node);
+            node._children.forEach(collect);
+        }
+        collect(form);
+        inputs.find(node => node.type === 'email').value = 'test@example.com';
+        inputs.find(node => node.type === 'password').value = 'test-password';
+        form._listeners.submit[0]({ preventDefault() {} });
+        assert.strictEqual(submitted, 1);
+        ui.destroy();
+    } finally {
+        teardownDoc();
+    }
+});
+
 test('T44: showError가 오류 panel을 auth-root에 추가', () => {
     const doc = setupDoc();
     try {
