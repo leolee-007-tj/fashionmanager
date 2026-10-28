@@ -1,5 +1,6 @@
 const App = {
     currentPage: 'dashboard',
+    _renderRevision: 0,
     currentParams: {},
     pageArgs: [],
     sidebarCollapsed: false,
@@ -128,6 +129,7 @@ const App = {
     async renderPage() {
         const main = document.getElementById('main-content');
         if (!main) return;
+        const renderRevision = ++this._renderRevision;
         let content = '';
         const page = this.currentPage;
         const args = this.pageArgs;
@@ -184,11 +186,16 @@ const App = {
                     content = this.renderDashboard();
             }
         } catch (e) {
+            if (renderRevision !== this._renderRevision || page !== this.currentPage) return;
             console.error(e);
             content = `<div class="card"><h2>Error</h2><p>${e.message}</p></div>`;
         }
+        // A previous async page load must not replace the latest navigation.
+        if (renderRevision !== this._renderRevision || page !== this.currentPage) return;
         main.innerHTML = content;
-        setTimeout(() => updateAllTranslations(), 50);
+        setTimeout(() => {
+            if (renderRevision === this._renderRevision) updateAllTranslations();
+        }, 50);
         this.bindPageForms();
     },
 
