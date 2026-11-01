@@ -140,6 +140,26 @@ test('T9: getSession이 session/user 반환', async () => {
     assert.deepStrictEqual(user, mockUser);
 });
 
+test('login failure categories distinguish password, confirmation, throttling and connection without leaking provider data', async () => {
+    for (const [error, reason] of [
+        [{ code: 'invalid_credentials', status: 400 }, 'credentials'],
+        [{ code: 'email_not_confirmed', status: 400 }, 'email_confirmation'],
+        [{ status: 429 }, 'rate_limit'],
+        [{ status: 503 }, 'connection'],
+        [{ name: 'AuthRetryableFetchError' }, 'connection'],
+        [{ code: 'unexpected' }, 'unknown']
+    ]) {
+        resetGlobals();
+        setupMockSupabase({ auth: { signInWithPassword: async () => ({ error: { ...error, message: 'private-provider-detail' } }) } });
+        await assert.rejects(globalThis.LESOULAuth.signInWithPassword('test@example.com', 'test-password'), failure => {
+            assert.strictEqual(failure.code, 'AUTH_SIGN_IN_FAILED');
+            assert.strictEqual(failure.reason, reason);
+            assert.ok(!JSON.stringify(failure).includes('private-provider-detail'));
+            return true;
+        });
+    }
+});
+
 test('T10: signOut 호출 및 true 반환', async () => {
     resetGlobals();
     let signOutCalled = false;

@@ -577,10 +577,17 @@
                 if (ui) ui.setBusy(false);
                 return _runBootstrap();
             })
-            .catch(function () {
+            .catch(function (error) {
                 if (ui) ui.setBusy(false);
                 _renderSignIn();
-                _showUI('showError', ['로그인할 수 없습니다. 이메일과 비밀번호를 확인해 주세요.', {
+                var messages = {
+                    credentials: '이메일 또는 비밀번호가 일치하지 않습니다.',
+                    email_confirmation: '이메일 인증을 완료한 뒤 로그인해 주세요.',
+                    rate_limit: '로그인 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.',
+                    connection: 'Supabase 인증 서버에 연결하지 못했습니다. 비밀번호 오류로 확인된 것은 아닙니다. 잠시 후 다시 시도해 주세요.'
+                };
+                var message = messages[error && error.reason] || '로그인을 완료하지 못했습니다. 인증 서버 또는 세션 처리 오류일 수 있습니다. 다시 시도해 주세요.';
+                _showUI('showError', [message, {
                     onRetry: function () {
                         _renderSignIn();
                     }

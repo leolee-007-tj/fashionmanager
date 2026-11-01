@@ -90,7 +90,7 @@
                 password: password
             });
             if (result.error) {
-                throw _makeError('AUTH_SIGN_IN_FAILED', 'Sign in failed');
+                throw _signInError(result.error);
             }
             var session = (result.data && result.data.session) || null;
             var user = (result.data && result.data.user) || null;
@@ -99,8 +99,21 @@
             if (e && e.code === 'AUTH_SIGN_IN_FAILED') {
                 throw e;
             }
-            throw _makeError('AUTH_SIGN_IN_FAILED', 'Sign in failed');
+            throw _signInError(e);
         }
+    }
+
+    function _signInError(error) {
+        var failure = _makeError('AUTH_SIGN_IN_FAILED', 'Sign in failed');
+        var code = error && error.code;
+        var status = Number(error && error.status) || 0;
+        // Keep only safe categories; never retain provider messages or credentials.
+        if (code === 'invalid_credentials') failure.reason = 'credentials';
+        else if (code === 'email_not_confirmed') failure.reason = 'email_confirmation';
+        else if (status === 429 || code === 'over_request_rate_limit') failure.reason = 'rate_limit';
+        else if (status >= 500 || (error && (error.name === 'AuthRetryableFetchError' || error.name === 'TypeError'))) failure.reason = 'connection';
+        else failure.reason = 'unknown';
+        return failure;
     }
 
     async function signOut() {
