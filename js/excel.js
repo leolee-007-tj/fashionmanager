@@ -1060,6 +1060,17 @@ const ExcelManager = {
         App.flash(msg, 'success');
     },
 
+    _findMonthlyImportProduct(products, title, brand, year, month) {
+        const normalize = value => String(value || '').normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase();
+        const matches = products.filter(p =>
+            normalize(p.original_title) === normalize(title) &&
+            (!brand || normalize(p.brand) === normalize(brand)) &&
+            Number(p.stock_year) === Number(year) && Number(p.stock_month) === Number(month));
+        // Case and whitespace do not identify a different product, but punctuation,
+        // the stock month, brand and ambiguous variants must still be respected.
+        return matches.length === 1 ? matches[0] : null;
+    },
+
     async _importOrdersRemote(data) {
         const client = window.LESOULSupabase && window.LESOULSupabase.getClient();
         const storeId = window.LESOULAppBootstrap?.getContext?.()?.activeMembership?.storeId;
@@ -1141,19 +1152,7 @@ const ExcelManager = {
             const stockMonth = parseInt(row['입고월'] || row['stock_month'] || (dateObj.getMonth() + 1), 10);
 
             // 판매월과 같은 월의 상품만 연결한다. 다른 달의 같은 이름 상품은 재고와 원가가 독립적이다.
-            let product = existingProducts.find(p =>
-                p.original_title === productName &&
-                (brand === '' || p.brand === brand) &&
-                Number(p.stock_year) === stockYear &&
-                Number(p.stock_month) === stockMonth
-            );
-            if (!product) {
-                product = existingProducts.find(p =>
-                    p.original_title === productName &&
-                    Number(p.stock_year) === stockYear &&
-                    Number(p.stock_month) === stockMonth
-                );
-            }
+            const product = this._findMonthlyImportProduct(existingProducts, productName, brand, stockYear, stockMonth);
             if (!product) {
                 skipped++;
                 skippedDetails.push({ row: idx + 2, reason: 'PRODUCT_NOT_FOUND', productName, brand });
